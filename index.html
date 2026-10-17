@@ -1271,11 +1271,23 @@ window.closeAdmin=()=>{
 <div id="kill-tab" class="tab-pane">
  <div class="app" style="max-width:1050px">
   <header class="header"><div class="title-wrap"><h1>🎯 킬로그 커팅</h1><p>사진을 여러 장 올리고 킬로그를 터치해 선택하세요.</p></div></header>
-  <label class="upload" for="kl-files"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>킬로그 사진 여러 장 추가</strong><span>사진을 터치하면 해당 킬로그만 자동 추출합니다.</span></div></div></label>
+  <label class="upload" for="kl-files"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>사진 추가하기</strong><span>사진을 터치하면 해당 킬로그만 자동 추출합니다.</span></div></div></label>
   <input id="kl-files" type="file" accept="image/*" multiple>
   <div class="photo-panel"><div class="panel-head"><strong>사진 선택</strong><button class="photo-button" id="kl-clear" type="button">전체 삭제</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 킬로그를 터치하세요</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
-   <div style="position:relative;max-width:100%;overflow:hidden"><canvas id="kl-source" style="display:block;width:100%;height:auto;touch-action:manipulation;cursor:crosshair"></canvas><canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas></div>
+   <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
+    <button type="button" id="kl-zoom-out" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 축소">−</button>
+    <span id="kl-zoom-percent" style="font-size:13px;font-weight:800;min-width:50px;text-align:center;color:#cfe1ff">100%</span>
+    <button type="button" id="kl-zoom-in" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 확대">＋</button>
+    <button type="button" id="kl-zoom-reset" class="photo-button" style="min-width:85px">확대 초기화</button>
+    <span style="font-size:11px;color:#9fb2cc">사진만 1~4배 확대 · 두 손가락 확대 가능</span>
+   </div>
+   <div id="kl-viewport" style="position:relative;width:100%;max-height:70vh;overflow:auto;overscroll-behavior:contain;border-radius:12px;background:#091220;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch">
+    <div id="kl-stage" style="position:relative;width:100%;overflow:hidden">
+     <canvas id="kl-source" style="display:block;width:100%;height:auto;cursor:crosshair;touch-action:pan-x pan-y"></canvas>
+     <canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+    </div>
+   </div>
    <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">가능하면 파란색 동그라미가 없는 원본을 사용하세요. 글자가 있는 킬로그 막대 가운데를 터치해 주세요. 장식 종류와 원본 배경에 따라 자동 분리가 완벽하지 않을 수 있습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 (투명 PNG)</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div><button class="all-save" id="kl-save-all" disabled>선택한 킬로그 모두 저장</button></div>
@@ -4640,7 +4652,7 @@ saveBtn.addEventListener("click",async()=>{
 </script>
 
 <script>
-/* 킬로그 커팅 - 원본 추출 알고리즘 유지 / 임의 선택 차단 / 가로폭 정렬 */
+/* 킬로그 커팅 독립 기능 - 막대 내부는 보존, 바깥 장식만 분리 */
 (()=>{
  'use strict';
  const $=id=>document.getElementById(id);
@@ -4649,6 +4661,60 @@ saveBtn.addEventListener("click",async()=>{
  const view=$('kl-source'), ctx=view.getContext('2d',{willReadFrequently:true});
  const overlay=$('kl-selection-overlay'), mark=overlay.getContext('2d');
  const OUTPUT_W=760,MIN_OUTPUT_H=190;
+ const viewport=$('kl-viewport'), stage=$('kl-stage');
+ let zoom=1,pinch=null,suppressClickUntil=0;
+ const MIN_ZOOM=1,MAX_ZOOM=4;
+ // CSS로 사진과 표시선만 확대한다. 원본 캔버스 픽셀은 바뀌지 않는다.
+ function applyZoom(next,pointX,pointY){
+  const newZoom=clamp(Math.round(next*100)/100,MIN_ZOOM,MAX_ZOOM);
+  if(!Number.isFinite(newZoom))return;
+  const box=viewport.getBoundingClientRect();
+  const px=clamp(pointX??(box.left+box.width/2),box.left,box.right);
+  const py=clamp(pointY??(box.top+box.height/2),box.top,box.bottom);
+  const focusX=px-box.left,focusY=py-box.top;
+  const oldW=stage.getBoundingClientRect().width || box.width;
+  const oldH=stage.getBoundingClientRect().height || box.height;
+  const fractionX=(viewport.scrollLeft+focusX)/Math.max(1,oldW);
+  const fractionY=(viewport.scrollTop+focusY)/Math.max(1,oldH);
+  zoom=newZoom;
+  stage.style.width=Math.max(1,Math.round(viewport.clientWidth*zoom))+'px';
+  const newW=stage.getBoundingClientRect().width;
+  const newH=stage.getBoundingClientRect().height;
+  viewport.scrollLeft=Math.max(0,fractionX*newW-focusX);
+  viewport.scrollTop=Math.max(0,fractionY*newH-focusY);
+  $('kl-zoom-percent').textContent=Math.round(zoom*100)+'%';
+  $('kl-zoom-out').disabled=zoom<=MIN_ZOOM;
+  $('kl-zoom-in').disabled=zoom>=MAX_ZOOM;
+ }
+ $('kl-zoom-out').addEventListener('click',()=>applyZoom(zoom-.25));
+ $('kl-zoom-in').addEventListener('click',()=>applyZoom(zoom+.25));
+ $('kl-zoom-reset').addEventListener('click',()=>applyZoom(1));
+ const dist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+ viewport.addEventListener('touchstart',e=>{
+  if(e.touches.length===2){
+   pinch={initialDistance:Math.max(1,dist(e.touches[0],e.touches[1])),initialZoom:zoom};
+   suppressClickUntil=Date.now()+800;
+  }
+ },{passive:true});
+ viewport.addEventListener('touchmove',e=>{
+  if(e.touches.length!==2||!pinch)return;
+  e.preventDefault();
+  const one=e.touches[0],two=e.touches[1];
+  applyZoom(pinch.initialZoom*dist(one,two)/pinch.initialDistance,
+   (one.clientX+two.clientX)/2,(one.clientY+two.clientY)/2);
+  suppressClickUntil=Date.now()+800;
+ },{passive:false});
+ viewport.addEventListener('touchend',e=>{
+  if(e.touches.length<2)pinch=null;
+ },{passive:true});
+ viewport.addEventListener('touchcancel',()=>{pinch=null},{passive:true});
+ // Ctrl+휠 확대도 사진 영역만 변경한다.
+ viewport.addEventListener('wheel',e=>{
+  if(!e.ctrlKey&&!e.metaKey)return;
+  e.preventDefault();
+  applyZoom(zoom*(e.deltaY<0?1.15:1/1.15),e.clientX,e.clientY);
+ },{passive:false});
+ window.addEventListener('resize',()=>{if(view.width>1)applyZoom(zoom)});
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  const I=(x,y,w)=>y*w+x, P=(x,y,w)=>4*(y*w+x);
  const status=text=>{$('kl-status').textContent=text;};
@@ -4684,12 +4750,12 @@ saveBtn.addEventListener("click",async()=>{
   });
   if(active<0||!photos[active]){
    view.width=1;view.height=1;ctx.clearRect(0,0,1,1);
-   status('사진을 추가해 주세요.');drawSelections();return;
+   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();return;
   }
   const im=photos[active].image;
   view.width=im.naturalWidth;view.height=im.naturalHeight;
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
-  status('킬로그 본체의 글자 또는 막대를 터치하세요.');drawSelections();
+  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status('킬로그 본체의 글자 또는 막대를 터치하세요.');drawSelections();
  }
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
@@ -4699,7 +4765,7 @@ saveBtn.addEventListener("click",async()=>{
   results.forEach((r,i)=>{
    const card=document.createElement('div');card.className='card';
    const img=document.createElement('img');img.src=r.url;
-   img.style.cssText='height:125px;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
+   img.style.cssText='display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
    const info=document.createElement('div');info.className='card-info';
    info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${OUTPUT_W}×${r.outputH}`;
    const save=document.createElement('button');save.className='save';save.textContent='개별 저장';save.onclick=()=>saveFiles([r],i);
@@ -4755,8 +4821,7 @@ saveBtn.addEventListener("click",async()=>{
  async function extractKilllog(tx,ty){
   const W=view.width,H=view.height;
   // 배너 주변만 분석. 왼쪽/오른쪽 게임 화면을 배경 기준값으로 삼는다.
-  // 텍스트 부분을 눌러도 왼쪽 장식이 탐색 영역 밖으로 잘리지 않도록 좌우를 넓힌다.
-  const x0=clamp(Math.floor(tx-W*.34),0,W-1),x1=clamp(Math.ceil(tx+W*.36),1,W);
+  const x0=clamp(Math.floor(tx-W*.215),0,W-1),x1=clamp(Math.ceil(tx+W*.255),1,W);
   const y0=clamp(Math.floor(ty-H*.115),0,H-1),y1=clamp(Math.ceil(ty+H*.102),1,H);
   const w=x1-x0,h=y1-y0;
   if(w<100||h<70)return null;
@@ -4809,13 +4874,10 @@ saveBtn.addEventListener("click",async()=>{
   let top=center,bottom=center;
   while(top>0&&row[top-1]>rowThreshold)top--;
   while(bottom<h-1&&row[bottom+1]>rowThreshold)bottom++;
-  // 이전 코드의 '검출 실패 시 클릭 위치에 임의 막대를 생성' 동작을 제거한다.
-  // 실제 가로 띠로 보일 만한 신호가 부족하면 아무것도 추출하지 않는다.
-  if(best<18 || Math.abs(center-cy)>Math.max(28,H*.030))return null;
-  if(bottom-top<Math.max(10,H*.010)||bottom-top>Math.max(100,H*.12))return null;
-  let bodyTop=clamp(Math.max(top,cy-45),0,h-2);
-  let bodyBottom=clamp(Math.min(bottom,cy+48),bodyTop+1,h-1);
-  if(bodyBottom-bodyTop<Math.max(10,H*.010))return null;
+  if(bottom-top>95){top=cy-34;bottom=cy+37;}
+  let bodyTop=clamp(Math.max(top,cy-39),0,h-2);
+  let bodyBottom=clamp(Math.min(bottom,cy+44),bodyTop+1,h-1);
+  if(bodyBottom-bodyTop<48){bodyTop=clamp(cy-33,0,h-2);bodyBottom=clamp(cy+39,bodyTop+1,h-1);}
 
   // 배너를 이루는 가로 띠를 감지. 장식에 따라 달라지는 배너 길이를 각각 인식한다.
   for(let x=0;x<w;x++){
@@ -4828,12 +4890,10 @@ saveBtn.addEventListener("click",async()=>{
   const col=blur1D(colRaw,6);
   const colThreshold=Math.max(10,quantile55(col,cx-60,cx+60)*.16);
   let left=cx,right=cx,gap=0;
-  const gapLimit=clamp(Math.round(W*.025),24,60);
-  for(let x=cx;x>=0;x--){if(col[x]<colThreshold)gap++;else gap=0;if(gap>gapLimit)break;left=x;}
+  for(let x=cx;x>=0;x--){if(col[x]<colThreshold)gap++;else gap=0;if(gap>26)break;left=x;}
   gap=0;
-  for(let x=cx;x<w;x++){if(col[x]<colThreshold)gap++;else gap=0;if(gap>gapLimit)break;right=x;}
-  // 과거에는 여기서 폭을 620px로 강제 생성하여 빈 곳을 눌러도 인식됐다.
-  if(right-left<Math.max(95,W*.12))return null;
+  for(let x=cx;x<w;x++){if(col[x]<colThreshold)gap++;else gap=0;if(gap>26)break;right=x;}
+  if(right-left<200){left=clamp(cx-260,0,w-1);right=clamp(cx+360,left+1,w-1);}
 
   // 불꽃형은 바깥 장식이 크므로 별도로 색상 기반 마스크 처리한다.
   let warmCount=0,warmTotal=0,smallWarm=0,smallTotal=0,blueBody=0,blueTotal=0;
@@ -4847,79 +4907,6 @@ saveBtn.addEventListener("click",async()=>{
   const ornateBlue=!fire&&smallWarm/Math.max(1,smallTotal)>.024&&blueBody/Math.max(1,blueTotal)>.35;
   let bodyLeft=clamp(left+(fire?145:(ornateBlue?115:25)),0,w-2);
   const bodyRight=clamp(right,bodyLeft+1,w-1);
-
-  // 원본의 모양 추출 과정은 그대로 사용하되, 추출 확정 전에 별도로
-  // '실제 킬로그 가로 막대 + 떨어진 두 군데 이상의 밝은 무늬/글자'를 검증한다.
-  // 좌표를 바탕으로 만들어 낸 경계만으로는 절대 추출을 승인하지 않는다.
-  function hasActualBanner(){
-   const bw=bodyRight-bodyLeft+1,bh=bodyBottom-bodyTop+1;
-   if(bw<Math.max(105,W*.115)||bh<Math.max(11,H*.012))return false;
-   if(bw/Math.max(1,bh)<3.3)return false;
-   if(cx<left-Math.max(15,bh*.55)||cx>right+Math.max(15,bh*.55))return false;
-   if(cy<bodyTop-Math.max(12,bh*.30)||cy>bodyBottom+Math.max(12,bh*.30))return false;
-   if(bodyTop<2 || bodyBottom>=h-3)return false;
-
-   const bands=[0,0,0,0],sums=[0,0,0,0],samples=[0,0,0,0];
-   const palette=new Map();
-   let total=0,bright=0,flatSamples=0,warmPixels=0;
-   const stepX=Math.max(2,Math.round(bw/135));
-   const stepY=Math.max(2,Math.round(bh/24));
-   for(let y=bodyTop+2;y<bodyBottom-1;y+=stepY){
-    for(let x=bodyLeft;x<bodyRight;x+=stepX){
-     const p=P(x,y,w),R=src[p],G=src[p+1],B=src[p+2];
-     const lum=(R*3+G*6+B)/10;
-     const k=clamp(Math.floor(4*(x-bodyLeft)/Math.max(1,bw)),0,3);
-     total++;samples[k]++;
-     if(R>G*1.08&&R>B*.98&&R>34&&lum<190)warmPixels++;
-     if(R>175&&G>170&&B>156&&Math.max(R,G,B)-Math.min(R,G,B)<112){
-      bright++;bands[k]++;
-     }
-     // 총 그림·글자의 영향을 덜 받도록 어두운 막대 픽셀만 팔레트 검사.
-     if(lum<190){
-      flatSamples++;
-      const key=(R>>5)*64+(G>>5)*8+(B>>5);
-      palette.set(key,(palette.get(key)||0)+1);
-     }
-    }
-   }
-   if(total<150 || bright<Math.max(12,total*.012))return false;
-   // 킬로그 본체에 실제로 존재하는 따뜻한 보라/갈색 띠가 있는지 검사.
-   // 검푸른 메뉴/UI 바나 총 선택칸을 누르면 추출되지 않게 한다.
-   if(warmPixels/total<.29)return false;
-   let nearWarm=0,nearTotal=0;
-   for(let y=Math.max(0,cy-15);y<=Math.min(h-1,cy+15);y+=3){
-    for(let x=Math.max(0,cx-21);x<=Math.min(w-1,cx+21);x+=3){
-     const p=P(x,y,w),R=src[p],G=src[p+1],B=src[p+2];
-     nearTotal++;
-     if(R>G*1.08&&R>B*.98&&R>34&&(R+G+B)/3<190)nearWarm++;
-    }
-   }
-   if(nearWarm/Math.max(1,nearTotal)<.065)return false;
-   const lightBands=bands.filter((v,i)=>v>=Math.max(3,samples[i]*.009));
-   if(lightBands.length<2)return false;
-   let farApart=false;
-   for(let i=0;i<4;i++)for(let j=i+1;j<4;j++){
-    if(j-i>=2&&bands[i]>=Math.max(3,samples[i]*.009)&&bands[j]>=Math.max(3,samples[j]*.009))farApart=true;
-   }
-   if(!farApart)return false;
-   const common=Math.max(0,...palette.values());
-   if(flatSamples<total*.32 || common<flatSamples*.07)return false;
-
-   // 막대의 위/아래 양 끝이 단순한 게임 화면이 아니라 수평으로 분리된
-   // 직사각형인지 확인한다. 장식이 있는 왼쪽 끝은 검사 대상에서 뺀다.
-   let edges=0,edgeTotal=0;
-   const outerTop=Math.max(0,bodyTop-9),outerBottom=Math.min(h-1,bodyBottom+9);
-   for(let x=bodyLeft+Math.round(bw*.08);x<bodyRight-Math.round(bw*.07);x+=stepX*2){
-    for(const [ya,yb] of [[bodyTop+3,outerTop],[bodyBottom-3,outerBottom]]){
-     const p=P(x,clamp(ya,0,h-1),w),q=P(x,yb,w);
-     const delta=(Math.abs(src[p]-src[q])+Math.abs(src[p+1]-src[q+1])+Math.abs(src[p+2]-src[q+2]))/3;
-     edgeTotal++;if(delta>16)edges++;
-    }
-   }
-   if(edgeTotal<12||edges/edgeTotal<.19)return false;
-   return true;
-  }
-  if(!hasActualBanner())return null;
 
   const yStart=clamp(bodyTop-(fire?115:37),0,h-1),yEnd=clamp(bodyBottom+(fire?29:4),yStart,h-1);
   const xStart=clamp(left-(fire?95:24),0,w-1),xEnd=clamp(right+8,xStart,w-1);
@@ -5000,17 +4987,16 @@ saveBtn.addEventListener("click",async()=>{
    pixels.data[p+3]=alpha[I(x,y,w)];
   }
   tg.putImageData(pixels,0,0);
-  // 가로 길이를 기준으로 통일. 세로가 큰 장식은 결과 캔버스만 높여 보존한다.
-  // 한 장만 갑자기 짧아지도록 가로/세로의 작은 배율을 선택하지 않는다.
-  const scale=(OUTPUT_W-24)/cropW;
+  // 실제 내용이 가로폭을 채우게 맞춘다. 큰 장식 때문에 짧아지지 않는다.
+  // 세로가 더 필요하면 결과의 높이만 늘리고 이미지는 찌그러뜨리지 않는다.
+  const scale=(OUTPUT_W-12)/cropW;
   const dw=Math.max(1,Math.round(cropW*scale));
   const dh=Math.max(1,Math.round(cropH*scale));
-  const outputH=Math.max(MIN_OUTPUT_H,dh+24);
-  const canvas=document.createElement('canvas');
-  canvas.width=OUTPUT_W;canvas.height=outputH;
+  const outputH=Math.max(MIN_OUTPUT_H,dh+12);
+  const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outputH;
   const g=canvas.getContext('2d');
-  g.clearRect(0,0,OUTPUT_W,outputH);
   g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+  g.clearRect(0,0,OUTPUT_W,outputH);
   g.drawImage(temp,Math.round((OUTPUT_W-dw)/2),Math.round((outputH-dh)/2),dw,dh);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)return null;
@@ -5018,20 +5004,22 @@ saveBtn.addEventListener("click",async()=>{
   return {blob,url:URL.createObjectURL(blob),outputH,bounds:{x:x0+minX,y:y0+minY,w:cropW,h:cropH}};
  }
 
- view.addEventListener('click',async e=>{
+ stage.addEventListener('click',async e=>{
+  if(Date.now()<suppressClickUntil)return;
   if(active<0||busy)return;
   const rect=view.getBoundingClientRect(),W=view.width,H=view.height;
+  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;
   const tx=clamp(Math.round((e.clientX-rect.left)*W/rect.width),0,W-1);
   const ty=clamp(Math.round((e.clientY-rect.top)*H/rect.height),0,H-1);
   if(results.some(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h)){
    status('이미 선택한 킬로그입니다. 다시 선택하려면 결과를 삭제해 주세요.');return;
   }
-  busy=true;status('킬로그 인식 확인 및 배경 분리 중…');
+  busy=true;status('킬로그 배경 분리 중…');
   try{
    const picked=await extractKilllog(tx,ty);
-   if(!picked){status('킬로그 막대가 확인되지 않았습니다. 다른 곳은 추출하지 않으며, 킬로그의 글자나 총 그림을 눌러주세요.');return;}
+   if(!picked){status('킬로그를 찾지 못했습니다. 가운데를 다시 터치해 주세요.');return;}
    results.push({...picked,photo:active});resultView();drawSelections();
-   status('킬로그 추출 완료 · 실제 막대 확인 / 가로 길이 통일 / 장식 보존');
+   status('킬로그 추출 완료 · 원래 선택 방식 복원 / 가로 길이 보정 / PNG 저장');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
