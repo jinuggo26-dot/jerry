@@ -1288,9 +1288,34 @@ window.closeAdmin=()=>{
      <canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
     </div>
    </div>
-   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">가능하면 파란색 동그라미가 없는 원본을 사용하세요. 글자가 있는 킬로그 막대 가운데를 터치해 주세요. 장식 종류와 원본 배경에 따라 자동 분리가 완벽하지 않을 수 있습니다.</p>
+   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">가능하면 파란색 동그라미가 없는 원본을 사용하세요. 글자가 있는 킬로그 막대 가운데를 터치해 주세요. 결과가 잘못 나오면 추출 결과의 ‘배경/장식 수정’으로 지우거나 복원할 수 있습니다.</p>
   </div>
-  <div class="photo-panel"><div class="panel-head"><strong>추출 결과 (투명 PNG)</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div><button class="all-save" id="kl-save-all" disabled>선택한 킬로그 모두 저장</button></div>
+  <div class="photo-panel"><div class="panel-head"><strong>추출 결과 (투명 PNG)</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
+   <section id="kl-edit-panel" style="display:none;margin-top:18px;padding:14px;border:1px solid #6787ae;border-radius:16px;background:#101c30">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:9px"><strong>킬로그 결과 다듬기</strong><button id="kl-edit-close" type="button" class="photo-button">닫기</button></div>
+    <p style="font-size:12px;color:#b8c9e3;line-height:1.6;margin-bottom:10px">아래 배경이 붙으면 '막대 영역 밖 정리'를 누르세요. 장식이나 글자가 지워졌으면 '복원'으로 그 부분을 문질러 되살릴 수 있습니다. 사진 확대와 별개의 기능입니다.</p>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+     <button id="kl-edit-erase" type="button" class="photo-button active">지우개</button>
+     <button id="kl-edit-restore" type="button" class="photo-button">복원</button>
+     <button id="kl-edit-undo" type="button" class="photo-button">되돌리기</button>
+     <button id="kl-edit-reset" type="button" class="photo-button">원본 추출로</button>
+    </div>
+    <label for="kl-edit-brush" style="font-size:12px;color:#d4e2f7">붓 크기 <span id="kl-edit-brush-value">22</span></label>
+    <input id="kl-edit-brush" type="range" min="4" max="85" value="22" style="width:100%;accent-color:#9fb9ff;min-height:30px">
+    <div id="kl-edit-wrap" style="position:relative;width:100%;overflow:hidden;margin:8px auto 13px;border-radius:10px;background:repeating-conic-gradient(#d8d8d8 0% 25%,#fff 0% 50%) 50%/20px 20px">
+     <canvas id="kl-edit-canvas" style="width:100%;display:block;touch-action:none;cursor:crosshair"></canvas>
+     <canvas id="kl-edit-guides" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+    </div>
+    <div style="padding:10px;border:1px solid #364f73;border-radius:12px;background:#17273e">
+     <strong style="font-size:13px">막대 밖 배경 정리</strong>
+     <p style="font-size:11px;color:#b4c7e1;line-height:1.5;margin:7px 0">파란 선 사이가 막대입니다. 위아래 선을 조절한 뒤 정리하면 오른쪽 배경만 지워집니다. 왼쪽 장식은 보호됩니다.</p>
+     <label style="display:block;font-size:12px;margin-top:8px">막대 위쪽 <span id="kl-edit-top-v"></span></label><input id="kl-edit-top" type="range" min="0" max="100" value="25" style="width:100%;accent-color:#9fb9ff">
+     <label style="display:block;font-size:12px;margin-top:8px">막대 아래쪽 <span id="kl-edit-bottom-v"></span></label><input id="kl-edit-bottom" type="range" min="0" max="100" value="75" style="width:100%;accent-color:#9fb9ff">
+     <label style="display:block;font-size:12px;margin-top:8px">장식 보호 폭 <span id="kl-edit-protect-v"></span></label><input id="kl-edit-protect" type="range" min="0" max="60" value="28" style="width:100%;accent-color:#9fb9ff">
+     <button id="kl-edit-strip" type="button" class="photo-button" style="width:100%;margin-top:10px;background:#25426a;color:white">막대 영역 밖 정리</button>
+    </div>
+    <button id="kl-edit-apply" type="button" class="all-save" style="margin-top:12px">수정 적용 · PNG 갱신</button>
+   </section><button class="all-save" id="kl-save-all" disabled>선택한 킬로그 모두 저장</button></div>
  </div>
 </div>
 
@@ -4757,6 +4782,135 @@ saveBtn.addEventListener("click",async()=>{
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
   applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status('킬로그 본체의 글자 또는 막대를 터치하세요.');drawSelections();
  }
+ let editorIndex=-1,editUndo=[],editBase=null,editing=false,editMode='erase',lastXY=null;
+ const editPanel=$('kl-edit-panel'),editCanvas=$('kl-edit-canvas'),editCtx=editCanvas.getContext('2d',{willReadFrequently:true});
+ const guides=$('kl-edit-guides'),guideCtx=guides.getContext('2d');
+ const edited=()=>results[editorIndex];
+ function snapshotEdit(){
+  if(editorIndex<0)return;
+  editUndo.push(editCtx.getImageData(0,0,editCanvas.width,editCanvas.height));
+  if(editUndo.length>20)editUndo.shift();
+ }
+ function brushRadius(){return Number($('kl-edit-brush').value)||22;}
+ function editGuides(){
+  if(editorIndex<0)return;
+  guides.width=editCanvas.width;guides.height=editCanvas.height;
+  const w=editCanvas.width,h=editCanvas.height;
+  const t=Number($('kl-edit-top').value)/100*h;
+  const b=Number($('kl-edit-bottom').value)/100*h;
+  const protect=Number($('kl-edit-protect').value)/100*w;
+  $('kl-edit-top-v').textContent=Math.round(t)+'px';
+  $('kl-edit-bottom-v').textContent=Math.round(b)+'px';
+  $('kl-edit-protect-v').textContent=Math.round(protect)+'px';
+  guideCtx.clearRect(0,0,w,h);
+  guideCtx.save();guideCtx.strokeStyle='#68dcff';guideCtx.lineWidth=Math.max(2,w/280);guideCtx.setLineDash([10,8]);
+  for(const y of [t,b]){guideCtx.beginPath();guideCtx.moveTo(protect,y);guideCtx.lineTo(w,y);guideCtx.stroke();}
+  guideCtx.setLineDash([4,9]);guideCtx.beginPath();guideCtx.moveTo(protect,0);guideCtx.lineTo(protect,h);guideCtx.stroke();guideCtx.restore();
+ }
+ function setBrushMode(mode){
+  editMode=mode;$('kl-edit-erase').classList.toggle('active',mode==='erase');
+  $('kl-edit-restore').classList.toggle('active',mode==='restore');
+ }
+ function editPoint(e){
+  const r=editCanvas.getBoundingClientRect();
+  return {x:clamp((e.clientX-r.left)*editCanvas.width/r.width,0,editCanvas.width-1),y:clamp((e.clientY-r.top)*editCanvas.height/r.height,0,editCanvas.height-1)};
+ }
+ function paintAt(x,y){
+  const rad=brushRadius();
+  editCtx.save();editCtx.beginPath();editCtx.arc(x,y,rad,0,Math.PI*2);editCtx.clip();
+  if(editMode==='erase'){
+   editCtx.globalCompositeOperation='destination-out';editCtx.fillStyle='#000';editCtx.fillRect(x-rad-1,y-rad-1,2*rad+2,2*rad+2);
+  } else {
+   const r=edited();if(r?.rawCanvas){editCtx.globalCompositeOperation='source-over';editCtx.drawImage(r.rawCanvas,0,0);}
+  }
+  editCtx.restore();
+ }
+ function closeEditor(revert=true){
+  if(editorIndex>=0&&revert&&editBase){
+   const r=edited();if(r?.work){const g=r.work.getContext('2d');g.putImageData(editBase,0,0);}
+  }
+  editorIndex=-1;editUndo=[];editBase=null;editing=false;
+  editPanel.style.display='none';guideCtx.clearRect(0,0,guides.width,guides.height);
+ }
+ function openEditor(index){
+  if(!results[index]?.work)return;
+  if(editorIndex>=0)closeEditor(true);
+  editorIndex=index;editUndo=[];lastXY=null;
+  const r=edited();editCanvas.width=r.work.width;editCanvas.height=r.work.height;
+  editCtx.clearRect(0,0,editCanvas.width,editCanvas.height);editCtx.drawImage(r.work,0,0);
+  editBase=editCtx.getImageData(0,0,editCanvas.width,editCanvas.height);
+  const pct=n=>Math.round(clamp(n,0,1)*100);
+  $('kl-edit-top').value=pct(r.band.top/r.work.height);
+  $('kl-edit-bottom').value=pct(r.band.bottom/r.work.height);
+  $('kl-edit-protect').value=pct(r.band.protect/r.work.width);
+  $('kl-edit-brush').value=22;$('kl-edit-brush-value').textContent='22';setBrushMode('erase');
+  editPanel.style.display='block';editGuides();
+  editPanel.scrollIntoView({behavior:'smooth',block:'nearest'});
+ }
+ $('kl-edit-close').addEventListener('click',()=>closeEditor(true));
+ $('kl-edit-erase').addEventListener('click',()=>setBrushMode('erase'));
+ $('kl-edit-restore').addEventListener('click',()=>setBrushMode('restore'));
+ $('kl-edit-brush').addEventListener('input',e=>{$('kl-edit-brush-value').textContent=e.target.value;});
+ for(const id of ['kl-edit-top','kl-edit-bottom','kl-edit-protect'])$(id).addEventListener('input',editGuides);
+ $('kl-edit-undo').addEventListener('click',()=>{if(!editUndo.length)return;editCtx.putImageData(editUndo.pop(),0,0);editGuides();});
+ $('kl-edit-reset').addEventListener('click',()=>{if(!editBase)return;snapshotEdit();editCtx.putImageData(editBase,0,0);editGuides();});
+ editCanvas.addEventListener('pointerdown',e=>{
+  if(editorIndex<0)return;
+  e.preventDefault();editCanvas.setPointerCapture(e.pointerId);snapshotEdit();editing=true;
+  lastXY=editPoint(e);paintAt(lastXY.x,lastXY.y);
+ });
+ editCanvas.addEventListener('pointermove',e=>{
+  if(!editing||editorIndex<0)return;
+  e.preventDefault();const at=editPoint(e);
+  const d=Math.hypot(at.x-lastXY.x,at.y-lastXY.y),step=Math.max(1,brushRadius()/3),n=Math.max(1,Math.ceil(d/step));
+  for(let i=1;i<=n;i++)paintAt(lastXY.x+(at.x-lastXY.x)*i/n,lastXY.y+(at.y-lastXY.y)*i/n);
+  lastXY=at;
+ });
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])editCanvas.addEventListener(event,()=>{editing=false;lastXY=null;});
+ $('kl-edit-strip').addEventListener('click',()=>{
+  if(editorIndex<0)return;
+  const top=Number($('kl-edit-top').value)/100*editCanvas.height;
+  const bottom=Number($('kl-edit-bottom').value)/100*editCanvas.height;
+  if(bottom<=top+4){status('막대 아래쪽 선은 위쪽 선보다 아래에 있어야 합니다.');return;}
+  snapshotEdit();const protect=Number($('kl-edit-protect').value)/100*editCanvas.width;
+  const x=Math.floor(protect),w=editCanvas.width-x;
+  editCtx.clearRect(x,0,w,Math.floor(top));
+  editCtx.clearRect(x,Math.ceil(bottom),w,editCanvas.height-Math.ceil(bottom));
+  editGuides();
+ });
+ async function encodeResult(r){
+  // 편집 캔버스 바깥에 여분의 원본 영역을 보관해도
+  // 저장할 때는 실제 불투명 콘텐츠의 경계만 찾아 가로를 꽉 채운다.
+  const w=r.work.width,h=r.work.height,rgba=r.work.getContext('2d').getImageData(0,0,w,h).data;
+  let l=w,t=h,rr=-1,bb=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   if(rgba[(y*w+x)*4+3]<12)continue;
+   if(x<l)l=x;if(x>rr)rr=x;if(y<t)t=y;if(y>bb)bb=y;
+  }
+  if(rr<l||bb<t)return false;
+  l=Math.max(0,l-3);t=Math.max(0,t-3);rr=Math.min(w-1,rr+3);bb=Math.min(h-1,bb+3);
+  const cropW=rr-l+1,cropH=bb-t+1;
+  const scale=(OUTPUT_W-12)/cropW;
+  const dw=Math.max(1,Math.round(cropW*scale));
+  const dh=Math.max(1,Math.round(cropH*scale));
+  const outH=Math.max(MIN_OUTPUT_H,dh+12);
+  const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
+  const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+  g.drawImage(r.work,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!blob)return false;
+  if(r.url)URL.revokeObjectURL(r.url);
+  r.blob=blob;r.url=URL.createObjectURL(blob);r.outputH=outH;
+  return true;
+ }
+ $('kl-edit-apply').addEventListener('click',async()=>{
+  if(editorIndex<0)return;
+  const r=edited();r.work.getContext('2d').clearRect(0,0,r.work.width,r.work.height);
+  r.work.getContext('2d').drawImage(editCanvas,0,0);
+  const ok=await encodeResult(r);
+  if(ok){closeEditor(false);resultView();status('수정된 킬로그 PNG를 저장할 수 있습니다.');}
+  else status('수정한 PNG를 생성하지 못했습니다.');
+ });
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
@@ -4769,9 +4923,10 @@ saveBtn.addEventListener("click",async()=>{
    const info=document.createElement('div');info.className='card-info';
    info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${OUTPUT_W}×${r.outputH}`;
    const save=document.createElement('button');save.className='save';save.textContent='개별 저장';save.onclick=()=>saveFiles([r],i);
+   const edit=document.createElement('button');edit.className='save';edit.textContent='✏️ 배경/장식 수정';edit.style.borderColor='#7fa5d7';edit.onclick=()=>openEditor(i);
    const del=document.createElement('button');del.className='save';del.textContent='삭제';del.style.borderColor='#805568';
-   del.onclick=()=>{URL.revokeObjectURL(r.url);results.splice(i,1);resultView();drawSelections()};
-   card.append(img,info,save,del);wrap.append(card);
+   del.onclick=()=>{if(editorIndex>=0)closeEditor(true);URL.revokeObjectURL(r.url);results.splice(i,1);resultView();drawSelections()};
+   card.append(img,info,save,edit,del);wrap.append(card);
   });
  }
  async function saveFiles(list,startIndex=0){
@@ -4794,6 +4949,7 @@ saveBtn.addEventListener("click",async()=>{
   else status('사진을 읽지 못했습니다.');e.target.value='';
  });
  $('kl-clear').onclick=()=>{
+  if(editorIndex>=0)closeEditor(false);
   photos.length=0;active=-1;
   for(const r of results)URL.revokeObjectURL(r.url);
   results.length=0;redraw();resultView();drawSelections();
@@ -4976,32 +5132,31 @@ saveBtn.addEventListener("click",async()=>{
    minY=Math.min(minY,y);maxY=Math.max(maxY,y);
   }
   if(maxX<minX||maxY<minY)return null;
-  minX=clamp(minX-3,0,w-1);maxX=clamp(maxX+3,minX,w-1);
-  minY=clamp(minY-3,0,h-1);maxY=clamp(maxY+3,minY,h-1);
+  const selectionBounds={x:x0+minX,y:y0+minY,w:maxX-minX+1,h:maxY-minY+1};
+  // 선택된 영역 밖의 원본 픽셀도 편집용으로 보관한다.
+  // 원래 투명 처리로 사라진 장식을 '복원'할 수 있게 하는 여유 공간.
+  minX=clamp(minX-Math.min(85,Math.round(w*.07)),0,w-1);
+  maxX=clamp(maxX+Math.min(40,Math.round(w*.03)),minX,w-1);
+  minY=clamp(minY-Math.min(60,Math.round(h*.17)),0,h-1);
+  maxY=clamp(maxY+Math.min(60,Math.round(h*.17)),minY,h-1);
   const cropW=maxX-minX+1,cropH=maxY-minY+1;
   const temp=document.createElement('canvas');temp.width=cropW;temp.height=cropH;
+  const rawCanvas=document.createElement('canvas');rawCanvas.width=cropW;rawCanvas.height=cropH;
+  const rawG=rawCanvas.getContext('2d'),rawPixels=rawG.createImageData(cropW,cropH);
   const tg=temp.getContext('2d'),pixels=tg.createImageData(cropW,cropH);
   for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
    const k=P(x,y,w),p=P(x-minX,y-minY,cropW);
    pixels.data[p]=src[k];pixels.data[p+1]=src[k+1];pixels.data[p+2]=src[k+2];
    pixels.data[p+3]=alpha[I(x,y,w)];
+   rawPixels.data[p]=src[k];rawPixels.data[p+1]=src[k+1];rawPixels.data[p+2]=src[k+2];rawPixels.data[p+3]=255;
   }
-  tg.putImageData(pixels,0,0);
-  // 실제 내용이 가로폭을 채우게 맞춘다. 큰 장식 때문에 짧아지지 않는다.
-  // 세로가 더 필요하면 결과의 높이만 늘리고 이미지는 찌그러뜨리지 않는다.
-  const scale=(OUTPUT_W-12)/cropW;
-  const dw=Math.max(1,Math.round(cropW*scale));
-  const dh=Math.max(1,Math.round(cropH*scale));
-  const outputH=Math.max(MIN_OUTPUT_H,dh+12);
-  const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outputH;
-  const g=canvas.getContext('2d');
-  g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
-  g.clearRect(0,0,OUTPUT_W,outputH);
-  g.drawImage(temp,Math.round((OUTPUT_W-dw)/2),Math.round((outputH-dh)/2),dw,dh);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-  if(!blob)return null;
+  tg.putImageData(pixels,0,0);rawG.putImageData(rawPixels,0,0);
+  const found={blob:null,url:null,outputH:MIN_OUTPUT_H,work:temp,rawCanvas,
+   band:{top:bodyTop-minY,bottom:bodyBottom-minY,protect:Math.max(0,bodyLeft-minX+Math.min(110,cropW*.16))},
+   bounds:selectionBounds};
+  if(!(await encodeResult(found)))return null;
   window.__killlogLastDebug={bounds:[x0+minX,y0+minY,cropW,cropH],fire,ornateBlue,body:[x0+bodyLeft,y0+bodyTop,x0+bodyRight,y0+bodyBottom]};
-  return {blob,url:URL.createObjectURL(blob),outputH,bounds:{x:x0+minX,y:y0+minY,w:cropW,h:cropH}};
+  return found;
  }
 
  stage.addEventListener('click',async e=>{
