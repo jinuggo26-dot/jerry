@@ -4640,7 +4640,7 @@ saveBtn.addEventListener("click",async()=>{
 </script>
 
 <script>
-/* 킬로그 커팅 독립 기능 - 막대 내부는 보존, 바깥 장식만 분리 */
+/* 킬로그 커팅 독립 기능 - 터치 오인식 방지 + 길이 보정 */
 (()=>{
  'use strict';
  const $=id=>document.getElementById(id);
@@ -4751,10 +4751,19 @@ saveBtn.addEventListener("click",async()=>{
   if(!arr.length)return 60;
   arr.sort((a,b)=>a-b);return arr[Math.floor((arr.length-1)*.55)];
  }
+ function localHitScore(diff,cx,cy,w,h){
+  let ok=0,total=0;
+  for(let y=Math.max(0,cy-12);y<=Math.min(h-1,cy+12);y++){
+   for(let x=Math.max(0,cx-18);x<=Math.min(w-1,cx+18);x++){
+    total++;
+    if(diff[I(x,y,w)]>24)ok++;
+   }
+  }
+  return ok/Math.max(1,total);
+ }
 
  async function extractKilllog(tx,ty){
   const W=view.width,H=view.height;
-  // 배너 주변만 분석. 왼쪽/오른쪽 게임 화면을 배경 기준값으로 삼는다.
   const x0=clamp(Math.floor(tx-W*.215),0,W-1),x1=clamp(Math.ceil(tx+W*.255),1,W);
   const y0=clamp(Math.floor(ty-H*.115),0,H-1),y1=clamp(Math.ceil(ty+H*.102),1,H);
   const w=x1-x0,h=y1-y0;
@@ -4762,7 +4771,6 @@ saveBtn.addEventListener("click",async()=>{
   const data=ctx.getImageData(x0,y0,w,h),src=data.data;
   const cx=clamp(tx-x0,0,w-1),cy=clamp(ty-y0,0,h-1);
 
-  // 동일한 높이의 좌우 배경 픽셀을 보간하여 게임 화면의 어두운 명암을 추정.
   const l0=new Float32Array(h*3),r0=new Float32Array(h*3);
   const edgeL=[10,20,30,40,50,60],edgeR=edgeL.map(v=>w-1-v);
   for(let y=0;y<h;y++)for(let c=0;c<3;c++){
@@ -4793,7 +4801,6 @@ saveBtn.addEventListener("click",async()=>{
      const bg=leftBg[y*3+c]*(1-f)+rightBg[y*3+c]*f;
      d=Math.max(d,Math.abs(src[p+c]-bg));
     }
-    // 사용자가 파란 표시를 그린 사진이라면 표시선이 킬로그로 인식되지 않게 한다.
     const R=src[p],G=src[p+1],B=src[p+2];
     if(B>175&&R<115&&G<135&&B-Math.max(R,G)>74)d=0;
     diff[z]=d;
@@ -4813,7 +4820,6 @@ saveBtn.addEventListener("click",async()=>{
   let bodyBottom=clamp(Math.min(bottom,cy+44),bodyTop+1,h-1);
   if(bodyBottom-bodyTop<48){bodyTop=clamp(cy-33,0,h-2);bodyBottom=clamp(cy+39,bodyTop+1,h-1);}
 
-  // 배너를 이루는 가로 띠를 감지. 장식에 따라 달라지는 배너 길이를 각각 인식한다.
   for(let x=0;x<w;x++){
    let sum=0,n=0;
    for(let y=Math.max(0,center-22);y<Math.min(h,center+22);y++){
@@ -4829,7 +4835,6 @@ saveBtn.addEventListener("click",async()=>{
   for(let x=cx;x<w;x++){if(col[x]<colThreshold)gap++;else gap=0;if(gap>26)break;right=x;}
   if(right-left<200){left=clamp(cx-260,0,w-1);right=clamp(cx+360,left+1,w-1);}
 
-  // 불꽃형은 바깥 장식이 크므로 별도로 색상 기반 마스크 처리한다.
   let warmCount=0,warmTotal=0,smallWarm=0,smallTotal=0,blueBody=0,blueTotal=0;
   for(let y=Math.max(0,center-50);y<Math.min(h,center+40);y++)for(let x=left;x<=right;x+=2){
    const p=P(x,y,w),R=src[p],G=src[p+1],B=src[p+2];warmTotal++;
@@ -4842,11 +4847,18 @@ saveBtn.addEventListener("click",async()=>{
   let bodyLeft=clamp(left+(fire?145:(ornateBlue?115:25)),0,w-2);
   const bodyRight=clamp(right,bodyLeft+1,w-1);
 
-  const yStart=clamp(bodyTop-(fire?115:37),0,h-1),yEnd=clamp(bodyBottom+(fire?29:4),yStart,h-1);
-  const xStart=clamp(left-(fire?95:24),0,w-1),xEnd=clamp(right+8,xStart,w-1);
+  const hitPadX=fire?125:(ornateBlue?95:38);
+  const hitPadY=28;
+  const hitLocal=localHitScore(diff,cx,cy,w,h);
+  const hitX0=x0+Math.max(0,left-hitPadX),hitX1=x0+bodyRight+10;
+  const hitY0=y0+Math.max(0,bodyTop-hitPadY),hitY1=y0+Math.min(h-1,bodyBottom+hitPadY);
+  const insideHitZone=tx>=hitX0&&tx<=hitX1&&ty>=hitY0&&ty<=hitY1;
+  if(!insideHitZone||hitLocal<0.08)return null;
+
+  const yStart=clamp(bodyTop-(fire?108:36),0,h-1),yEnd=clamp(bodyBottom+(fire?26:8),yStart,h-1);
+  const xStart=clamp(left-(fire?108:(ornateBlue?76:30)),0,w-1),xEnd=clamp(right+18,xStart,w-1);
   const alpha=new Uint8Array(w*h);
 
-  // 바깥 장식: 주변 배경과 색이 다른 부분만 유지, 상단 UI나 아래 총기 제거.
   const extraMaxX=left+215;
   for(let y=yStart;y<=yEnd;y++)for(let x=xStart;x<=xEnd;x++){
    const z=I(x,y,w),d=diff[z],p=z*4,R=src[p],G=src[p+1],B=src[p+2];
@@ -4863,11 +4875,8 @@ saveBtn.addEventListener("click",async()=>{
    if(keep)alpha[z]=255;
   }
 
-  // 본체 띠: 글씨나 배경 무늬 안쪽 픽셀을 제거하지 않고 통째로 보존.
-  // 기존의 구멍, 줄무늬, 이중 잔상은 이 내부 지우기 방식 때문에 발생했음.
   for(let y=bodyTop;y<=bodyBottom;y++)for(let x=bodyLeft;x<=bodyRight;x++)alpha[I(x,y,w)]=255;
 
-  // 오른쪽 퇴색형 끝부분은 자연스럽게 투명해지도록 처리.
   if(bodyRight-bodyLeft>140){
    const fade=85,xs=Math.max(bodyLeft,bodyRight-fade);
    for(let y=bodyTop;y<=bodyBottom;y++)for(let x=xs;x<=bodyRight;x++){
@@ -4879,8 +4888,6 @@ saveBtn.addEventListener("click",async()=>{
    }
   }
 
-  // 너무 작은 찌꺼기와 킬로그 주변에 연결되지 않은 픽셀 제거.
-  // 큰 본체 마스크와 장식이 별개여도 그 형태는 보존한다.
   const seen=new Uint8Array(w*h),stack=[],group=[];
   for(let i=0;i<w*h;i++){
    if(alpha[i]===0||seen[i])continue;
@@ -4910,7 +4917,15 @@ saveBtn.addEventListener("click",async()=>{
    minY=Math.min(minY,y);maxY=Math.max(maxY,y);
   }
   if(maxX<minX||maxY<minY)return null;
-  minX=clamp(minX-3,0,w-1);maxX=clamp(maxX+3,minX,w-1);
+
+  const forceLeft=clamp(left-(fire?118:(ornateBlue?84:38)),0,w-1);
+  const forceRight=clamp(bodyRight+18,forceLeft,w-1);
+  const forceTop=clamp(bodyTop-(fire?92:30),0,h-1);
+  const forceBottom=clamp(bodyBottom+(fire?24:8),forceTop,h-1);
+  minX=Math.min(minX,forceLeft);maxX=Math.max(maxX,forceRight);
+  minY=Math.min(minY,forceTop);maxY=Math.max(maxY,forceBottom);
+
+  minX=clamp(minX-3,0,w-1);maxX=clamp(maxX+4,minX,w-1);
   minY=clamp(minY-3,0,h-1);maxY=clamp(maxY+3,minY,h-1);
   const cropW=maxX-minX+1,cropH=maxY-minY+1;
   const temp=document.createElement('canvas');temp.width=cropW;temp.height=cropH;
@@ -4923,13 +4938,20 @@ saveBtn.addEventListener("click",async()=>{
   tg.putImageData(pixels,0,0);
   const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=OUTPUT_H;
   const g=canvas.getContext('2d');
-  const scale=Math.min((OUTPUT_W-36)/cropW,(OUTPUT_H-20)/cropH);
+  const scaleW=(OUTPUT_W-26)/cropW;
+  const scaleH=(OUTPUT_H-18)/cropH;
+  const scale=Math.min(scaleW,scaleH);
   const dw=Math.max(1,Math.round(cropW*scale)),dh=Math.max(1,Math.round(cropH*scale));
   g.clearRect(0,0,OUTPUT_W,OUTPUT_H);
   g.drawImage(temp,Math.round((OUTPUT_W-dw)/2),Math.round((OUTPUT_H-dh)/2),dw,dh);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)return null;
-  window.__killlogLastDebug={bounds:[x0+minX,y0+minY,cropW,cropH],fire,ornateBlue,body:[x0+bodyLeft,y0+bodyTop,x0+bodyRight,y0+bodyBottom]};
+  window.__killlogLastDebug={
+   bounds:[x0+minX,y0+minY,cropW,cropH],
+   fire,ornateBlue,
+   body:[x0+bodyLeft,y0+bodyTop,x0+bodyRight,y0+bodyBottom],
+   touch:[hitX0,hitY0,hitX1-hitX0,hitY1-hitY0]
+  };
   return {blob,url:URL.createObjectURL(blob),bounds:{x:x0+minX,y:y0+minY,w:cropW,h:cropH}};
  }
 
@@ -4944,9 +4966,9 @@ saveBtn.addEventListener("click",async()=>{
   busy=true;status('킬로그 배경 분리 중…');
   try{
    const picked=await extractKilllog(tx,ty);
-   if(!picked){status('킬로그를 찾지 못했습니다. 가운데를 다시 터치해 주세요.');return;}
+   if(!picked){status('킬로그 글자/막대 근처를 다시 터치해 주세요. 다른 빈 곳은 선택되지 않습니다.');return;}
    results.push({...picked,photo:active});resultView();drawSelections();
-   status('킬로그 추출 완료 · 막대 보존 / 장식 분리 / PNG 저장');
+   status('킬로그 추출 완료 · 터치 범위 제한 / 길이 보정 / PNG 저장');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
