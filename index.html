@@ -1275,8 +1275,8 @@ window.closeAdmin=()=>{
   <input id="kl-files" type="file" accept="image/*" multiple>
   <div class="photo-panel"><div class="panel-head"><strong>사진 선택</strong><button class="photo-button" id="kl-clear" type="button">전체 삭제</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 킬로그를 터치하세요</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
-   <div style="position:relative;max-width:100%;overflow:hidden"><canvas id="kl-source" style="display:block;width:100%;height:auto;touch-action:manipulation;cursor:crosshair"></canvas></div>
-   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">파란색 동그라미가 없는 원본 사진을 권장합니다. 자동 선택이 틀리면 킬로그의 가운데를 다시 터치하세요.</p>
+   <div style="position:relative;max-width:100%;overflow:hidden"><canvas id="kl-source" style="display:block;width:100%;height:auto;touch-action:manipulation;cursor:crosshair"></canvas><canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas></div>
+   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">파란색 표시가 없는 원본 사진을 사용하세요. 복잡한 불꽃형 킬로그는 배경이 일부 남을 수 있습니다. 킬로그 가운데를 터치해 주세요.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 (투명 PNG)</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div><button class="all-save" id="kl-save-all" disabled>선택한 킬로그 모두 저장</button></div>
  </div>
@@ -4645,19 +4645,34 @@ saveBtn.addEventListener("click",async()=>{
  const $=id=>document.getElementById(id), photos=[], results=[];
  let active=-1;
  const view=$('kl-source'),ctx=view.getContext('2d',{willReadFrequently:true});
+ const overlay=$('kl-selection-overlay'),mark=overlay.getContext('2d');
+ function drawSelections(){
+  overlay.width=view.width;overlay.height=view.height;mark.clearRect(0,0,overlay.width,overlay.height);
+  if(active<0)return;
+  results.filter(r=>r.photo===active&&r.bounds).forEach((r,i)=>{
+   const b=r.bounds;mark.save();
+   mark.fillStyle='rgba(36,180,255,0.24)';mark.fillRect(b.x,b.y,b.w,b.h);
+   mark.strokeStyle='#29d6ff';mark.lineWidth=Math.max(3,view.width*.0025);mark.setLineDash([Math.max(9,view.width*.008),Math.max(5,view.width*.004)]);
+   mark.strokeRect(b.x,b.y,b.w,b.h);mark.setLineDash([]);
+   const radius=Math.max(12,view.width*.011),cx=b.x+b.w-8,cy=b.y+8;
+   mark.beginPath();mark.arc(cx,cy,radius,0,Math.PI*2);mark.fillStyle='#00b9f2';mark.fill();
+   mark.fillStyle='#061726';mark.textAlign='center';mark.textBaseline='middle';mark.font=`bold ${Math.round(radius*1.2)}px sans-serif`;mark.fillText('✓',cx,cy+1);
+   mark.restore();
+  });
+ }
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  function status(t){$('kl-status').textContent=t;}
  function loadImage(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(url);resolve(im)};im.onerror=()=>{URL.revokeObjectURL(url);reject(Error('이미지 읽기 실패'))};im.src=url;});}
  function redraw(){
   const holder=$('kl-photos');holder.replaceChildren();
   photos.forEach((p,i)=>{const b=document.createElement('button');b.className='photo-button'+(i===active?' active':'');b.textContent=`사진 ${i+1}`;b.onclick=()=>{active=i;redraw()};holder.append(b)});
-  if(active<0||!photos[active]){view.width=1;view.height=1;ctx.clearRect(0,0,1,1);status('사진을 추가해 주세요.');return;}
-  const im=photos[active].image;view.width=im.naturalWidth;view.height=im.naturalHeight;ctx.drawImage(im,0,0);status('상단 킬로그의 가운데를 터치하세요.');
+  if(active<0||!photos[active]){view.width=1;view.height=1;ctx.clearRect(0,0,1,1);status('사진을 추가해 주세요.');drawSelections();return;}
+  const im=photos[active].image;view.width=im.naturalWidth;view.height=im.naturalHeight;ctx.drawImage(im,0,0);status('상단 킬로그의 가운데를 터치하세요.');drawSelections();
  }
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();$('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
   if(!results.length){const d=document.createElement('div');d.className='empty';d.textContent='아직 선택된 킬로그가 없습니다.';wrap.append(d);return;}
-  results.forEach((r,i)=>{const card=document.createElement('div');card.className='card';const img=document.createElement('img');img.src=r.url;img.style.cssText='height:125px;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1}`;const save=document.createElement('button');save.className='save';save.textContent='개별 저장';save.onclick=()=>saveFiles([r]);const del=document.createElement('button');del.className='save';del.textContent='삭제';del.style.borderColor='#805568';del.onclick=()=>{URL.revokeObjectURL(r.url);results.splice(i,1);resultView()};card.append(img,info,save,del);wrap.append(card)});
+  results.forEach((r,i)=>{const card=document.createElement('div');card.className='card';const img=document.createElement('img');img.src=r.url;img.style.cssText='height:125px;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1}`;const save=document.createElement('button');save.className='save';save.textContent='개별 저장';save.onclick=()=>saveFiles([r]);const del=document.createElement('button');del.className='save';del.textContent='삭제';del.style.borderColor='#805568';del.onclick=()=>{URL.revokeObjectURL(r.url);results.splice(i,1);resultView();drawSelections()};card.append(img,info,save,del);wrap.append(card)});
  }
  async function saveFiles(list){
   const files=list.map((r,i)=>new File([r.blob],`킬로그_${String(i+1).padStart(2,'0')}.png`,{type:'image/png'}));
@@ -4670,7 +4685,7 @@ saveBtn.addEventListener("click",async()=>{
   for(const f of files){try{const im=await loadImage(f);photos.push({image:im,name:f.name});ok++}catch(err){console.warn(err)}}
   if(ok){active=photos.length-ok;redraw();window.logActivity?.('킬로그 사진 추가',{images:ok,total:photos.length});}else status('사진을 읽지 못했습니다.');e.target.value='';
  });
- $('kl-clear').onclick=()=>{photos.length=0;active=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();};
+ $('kl-clear').onclick=()=>{photos.length=0;active=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();drawSelections();};
  /* 터치 위치 근처의 가로 배너를 찾고, 행별 배경색과의 차이로 알파 마스크 생성 */
  view.addEventListener('click',async e=>{
   if(active<0)return;
@@ -4701,22 +4716,52 @@ saveBtn.addEventListener("click",async()=>{
   gap=0;for(let x=right;x<w;x++){if(xS[x]<threshold)gap++;else gap=0;if(gap>Math.round(W*.023)){right=x-gap;break}right=x}
   if(right-left<W*.09){left=clamp(Math.round(w*.18),0,w-1);right=clamp(Math.round(w*.82),1,w-1)}
   left=clamp(left-Math.round(W*.012),0,w-1);right=clamp(right+Math.round(W*.012),left+1,w-1);
-  // 잘린 영역 안에서 배경과 색 차이를 이용해 알파 추출
-  const pad=Math.round(H*.012),oy0=clamp(top-pad,0,h-1),oy1=clamp(bottom+pad,oy0+1,h);
-  const ow=right-left+1,oh=oy1-oy0,out=document.createElement('canvas');out.width=ow;out.height=oh;const og=out.getContext('2d');const pixels=og.createImageData(ow,oh);
+  // 실제 킬로그 배너 주변의 상/하단 픽셀로 배경을 추정합니다.
+  // 이전 구현은 배너 안쪽 픽셀을 배경으로 사용하여 배경 줄무늬와 이중 잔상을 남겼습니다.
+  const pad=Math.round(H*.004),oy0=clamp(top-pad,0,h-1),oy1=clamp(bottom+pad,oy0+1,h);
+  const ow=right-left+1,oh=oy1-oy0,out=document.createElement('canvas');out.width=ow;out.height=oh;
+  const og=out.getContext('2d'),pixels=og.createImageData(ow,oh);
+  const sampleTop=clamp(top-Math.round(H*.022),0,h-1);
+  const sampleBottom=clamp(bottom+Math.round(H*.022),0,h-1);
+  const bgTop=new Float32Array(ow*3),bgBottom=new Float32Array(ow*3);
+  // 좌우 샘플의 잡음/밝은 광선을 완화하기 위해 5점 평균을 사용합니다.
+  for(let x=0;x<ow;x++){
+   for(let c=0;c<3;c++){
+    let t=0,b=0,n=0;
+    for(let q=-2;q<=2;q++){
+     const xx=clamp(left+x+q,0,w-1);t+=src[at(xx,sampleTop)+c];b+=src[at(xx,sampleBottom)+c];n++;
+    }
+    bgTop[x*3+c]=t/n;bgBottom[x*3+c]=b/n;
+   }
+  }
+  const raw=new Uint8Array(ow*oh);
   for(let y=0;y<oh;y++)for(let x=0;x<ow;x++){
-   const xx=left+x,yy=oy0+y,k=at(xx,yy),z=4*(y*ow+x),b=bgAt(xx,yy);
-   const d=Math.max(Math.abs(src[k]-b[0]),Math.abs(src[k+1]-b[1]),Math.abs(src[k+2]-b[2]));
-   const chroma=Math.max(src[k],src[k+1],src[k+2])-Math.min(src[k],src[k+1],src[k+2]);
-   let a=clamp((d-15)/42,0,1);if(chroma>60)a=Math.max(a,clamp((chroma-35)/75,0,1));
-   // 아래/위 경계로 퍼지는 주변 잡음 억제
-   const edge=Math.min(1,(y+1)/Math.max(3,oh*.09),(oh-y)/Math.max(3,oh*.09));a*=edge;
-   for(let c=0;c<3;c++)pixels.data[z+c]=src[k+c];pixels.data[z+3]=Math.round(a*255);
+   const k=at(left+x,oy0+y),z=y*ow+x;
+   const mix=clamp((oy0+y-sampleTop)/Math.max(1,sampleBottom-sampleTop),0,1);
+   let d=0,lum=0,hi=0,lo=255;
+   for(let c=0;c<3;c++){
+    const v=src[k+c],background=bgTop[x*3+c]*(1-mix)+bgBottom[x*3+c]*mix;
+    d=Math.max(d,Math.abs(v-background));lum+=v;hi=Math.max(hi,v);lo=Math.min(lo,v);
+   }
+   const saturation=hi-lo;
+   // 밝은 글자, 색상 배너, 불꽃 장식을 보존하고 회색 게임 배경은 제거합니다.
+   let alpha=clamp((d-23)/35,0,1);
+   if(saturation>55&&d>18)alpha=Math.max(alpha,clamp((d-14)/32,0,1));
+   if(lum/3>175&&d>19)alpha=Math.max(alpha,clamp((d-14)/29,0,1));
+   raw[z]=Math.round(alpha*255);
+  }
+  // 경계가 불분명한 부분은 단단하게 만들되 가장자리의 계단 현상은 유지합니다.
+  // 상/하단 배경 픽셀이 남지 않도록 가장자리 2픽셀만 부드럽게 처리합니다.
+  for(let y=0;y<oh;y++)for(let x=0;x<ow;x++){
+   const z=y*ow+x,k=at(left+x,oy0+y),q=4*z;
+   const edge=Math.min(1,(y+1)/2,(oh-y)/2);
+   for(let c=0;c<3;c++)pixels.data[q+c]=src[k+c];
+   pixels.data[q+3]=Math.round(raw[z]*edge);
   }
   og.putImageData(pixels,0,0);
   status('킬로그 추출 완료 · 미리보기에서 확인하세요.');
   const blob=await new Promise(r=>out.toBlob(r,'image/png'));if(!blob)return;
-  results.push({blob,url:URL.createObjectURL(blob),photo:active});resultView();window.logActivity?.('킬로그 추출',{photo:active+1,width:ow,height:oh});
+  results.push({blob,url:URL.createObjectURL(blob),photo:active,bounds:{x:x0+left,y:y0+oy0,w:ow,h:oh}});resultView();drawSelections();window.logActivity?.('킬로그 추출',{photo:active+1,width:ow,height:oh});
  });
  redraw();resultView();
 })();
