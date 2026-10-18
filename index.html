@@ -680,6 +680,63 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 #auth-screen .auth-box .auth-input{display:block;width:100%;margin:10px 0;user-select:text;-webkit-user-select:text}
 #auth-screen .auth-box p{line-height:1.6}
 .member-legacy-connect{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.member-legacy-connect input{min-width:180px;flex:1;color:#fff;background:#121d31;border:1px solid #526789;border-radius:8px;padding:10px;user-select:text;-webkit-user-select:text}
+
+/* 2026-10-18: 모바일 상단 메뉴 - 누르기 편한 크기 + 가로 스크롤.
+   기존 탭 이벤트, 등급 설정, 관리자 표시/인증 로직은 변경하지 않음. */
+.global-tabs{
+  display:flex;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  overflow-y:hidden;
+  gap:10px;
+  scroll-behavior:smooth;
+  scroll-snap-type:x proximity;
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-color:#6881b0 transparent;
+  padding:12px max(12px,env(safe-area-inset-left)) 12px max(12px,env(safe-area-inset-right));
+}
+.global-tabs > button{
+  flex:0 0 auto;
+  min-width:124px;
+  min-height:58px;
+  padding:12px 15px;
+  font-size:15px;
+  line-height:1.35;
+  white-space:nowrap;
+  text-align:center;
+  scroll-snap-align:start;
+}
+@media(max-width:690px){
+  .global-tabs{gap:9px;padding:10px 12px;}
+  .global-tabs > button{
+    flex:0 0 auto;
+    min-width:146px;
+    min-height:62px;
+    padding:13px 16px;
+    font-size:15px;
+    font-weight:800;
+    white-space:nowrap;
+  }
+  .global-tabs > #btn-logout{
+    min-width:110px!important;
+    font-size:14px!important;
+    padding:13px 15px!important;
+  }
+  .global-tabs > #btn-member-info{
+    flex:0 0 65px!important;
+    min-width:65px!important;
+    font-size:22px!important;
+    padding:0!important;
+  }
+  .global-tabs > #btn-admin{
+    min-width:115px!important;
+    font-size:14px!important;
+    padding:13px 14px!important;
+  }
+}
+
 </style>
 </head>
 
@@ -1069,7 +1126,7 @@ async function resetCurrentSession(){
  for(const unsub of liveUnsubscribes)try{unsub();}catch(e){};
  liveUnsubscribes=[];
  authUser=null;savedName=null;currentMember=null;isAdminMode=false;
- accessExpiry=null;expiredHandled=false;adminDataStarted=false;
+ accessExpiry=null;expiredHandled=false;adminDataStarted=false;adminGradeDrafts.clear();
  document.getElementById('admin-dashboard').style.display='none';
  document.getElementById('btn-admin').style.display='none';
  document.getElementById('member-notice-overlay').style.display='none';
@@ -1198,6 +1255,23 @@ function renderActivityLogs(){
  filtered.forEach(log=>list.append(makeLogRow(log)));
  if(!filtered.length)list.append(make("div","admin-empty","표시할 작업 내역이 없습니다."));
 }
+// 관리자 등급 편집: Firestore 실제 저장 기간을 복원하고, 실시간 목록 갱신 중 선택값이 바뀌지 않게 보관.
+const adminGradeDrafts=new Map();
+function savedGradeDuration(data){
+ const saved=data?.gradeDuration;
+ if(saved==='7'||saved==='30'||saved==='permanent')return saved;
+ const until=data?.gradeExpiresAt;
+ if(until===null||until===undefined||until==='')return 'permanent';
+ const end=Number(until);
+ if(!Number.isFinite(end)||end<=0)return 'permanent';
+ const updated=Number(data?.gradeUpdatedAt);
+ if(Number.isFinite(updated)&&updated>0){
+  const days=(end-updated)/DAY_MS;
+  return days>18?'30':'7';
+ }
+ // 구버전 기록에는 선택 기간이 없을 수 있으므로 남은 시간으로 추정.
+ return (end-Date.now())/DAY_MS>7.5?'30':'7';
+}
 let adminUserSnapshot=null;
 function loadAdminData(){
  if(adminDataStarted)return;
@@ -1227,6 +1301,7 @@ function loadAdminData(){
    info.append(make('div','admin-expiry',`등급: ${GRADE_NAMES[effectiveGrade(data)]||'일반'} · 등급 만료: ${formatGradeTime(data.gradeExpiresAt)}`));
    if(data.authUid!==id && !data.migratedTo){
     const tip=make('div','admin-expiry','기존 닉네임 회원 · 새 Firebase 계정 UID 연결 필요');info.append(tip);
+    info.append(make('div','admin-expiry','UID 찾기: 회원이 이메일로 회원가입 → Firebase 콘솔 > Authentication > 사용자(Users) > 해당 이메일의 사용자 UID 복사. 본인 확인 후 연결하세요.'));
     const connect=make('div','member-legacy-connect');
     const uidInput=make('input');uidInput.placeholder='본인 확인한 회원의 Authentication UID';uidInput.setAttribute('aria-label','연결할 새 로그인 계정 UID');
     const linkButton=make('button','admin-btn btn-approve','이전 이용권 연결');
@@ -1244,7 +1319,7 @@ function loadAdminData(){
        if(oldData.migratedTo)throw new Error('이미 연결된 회원입니다.');
        if(newData.authUid!==newUid||newData.legacyId)throw new Error('가입 계정이 없거나 이미 이전 연결되었습니다.');
        if(newData.status!=='pending')throw new Error('새 계정의 상태가 대기가 아닙니다. 확인해 주세요.');
-       tx.update(newRef,{legacyId:id,status:oldData.status,plan:oldData.plan??null,expiresAt:oldData.expiresAt??null,grade:oldData.grade||'normal',gradeExpiresAt:oldData.gradeExpiresAt??null,approvedAt:oldData.approvedAt??Date.now(),migratedAt:Date.now()});
+       tx.update(newRef,{legacyId:id,status:oldData.status,plan:oldData.plan??null,expiresAt:oldData.expiresAt??null,grade:oldData.grade||'normal',gradeExpiresAt:oldData.gradeExpiresAt??null,gradeDuration:savedGradeDuration(oldData),approvedAt:oldData.approvedAt??Date.now(),migratedAt:Date.now()});
        tx.update(oldRef,{migratedTo:newUid,migratedAt:Date.now()});
       });
       window.uiAlert?.('기존 이용 기간과 등급을 새 로그인 계정에 연결했습니다.');
@@ -1256,12 +1331,23 @@ function loadAdminData(){
    const actions=make("div","admin-card-actions");
    const gradeSelect=make('select','admin-plan-select');gradeSelect.setAttribute('aria-label','회원 등급');
    Object.entries(GRADE_NAMES).forEach(([g,label])=>{const op=make('option',null,label);op.value=g;gradeSelect.append(op);});
-   gradeSelect.value=effectiveGrade(data);
+   const gradeDraft=adminGradeDrafts.get(id);
+   gradeSelect.value=gradeDraft?.grade||effectiveGrade(data);
    const gradeDuration=make('select','admin-plan-select');gradeDuration.setAttribute('aria-label','등급 이용 기간');
    [['7','등급 7일'],['30','등급 30일'],['permanent','등급 영구']].forEach(([v,t])=>{const op=make('option',null,t);op.value=v;gradeDuration.append(op);});
-   gradeDuration.value='30';
+   // 고정 30일이 아니라 Firebase에 실제 저장된 기간을 표시한다.
+   gradeDuration.value=gradeDraft?.duration||savedGradeDuration(data);
+   const rememberGradeDraft=()=>adminGradeDrafts.set(id,{grade:gradeSelect.value,duration:gradeDuration.value});
+   gradeSelect.addEventListener('change',rememberGradeDraft);
+   gradeDuration.addEventListener('change',rememberGradeDraft);
    const setGrade=make('button','admin-btn btn-approve','등급 저장');setGrade.type='button';
-   setGrade.onclick=()=>window.setUserGrade(id,gradeSelect.value,gradeDuration.value);
+   setGrade.onclick=async()=>{
+    const chosenGrade=gradeSelect.value,chosenDuration=gradeDuration.value;
+    setGrade.disabled=true;setGrade.textContent='저장 중…';
+    const success=await window.setUserGrade(id,chosenGrade,chosenDuration);
+    setGrade.disabled=false;setGrade.textContent='등급 저장';
+    if(success){adminGradeDrafts.delete(id);if(adminUserSnapshot)renderUserSnapshot(adminUserSnapshot);}
+   };
    actions.append(gradeSelect,gradeDuration,setGrade);
    const planSelect=make("select","admin-plan-select");
    planSelect.setAttribute("aria-label",`${data.name||id} 이용 기간`);
@@ -1304,13 +1390,19 @@ function loadAdminData(){
  liveUnsubscribes.push(onSnapshot(q,snapshot=>{activityCache=snapshot.docs.map(s=>s.data());renderActivityLogs();},err=>console.warn("작업 로그 오류",err)));
 }
 window.setUserGrade=async(id,grade='normal',duration='30')=>{
- if(!isAdminMode||!GRADE_NAMES[grade])return;
+ if(!isAdminMode||!GRADE_NAMES[grade])return false;
+ if(!['7','30','permanent'].includes(duration))return false;
  const span=duration==='7'?7:duration==='30'?30:null;
- const gradeExpiresAt=grade==='normal'||!span?null:Date.now()+span*DAY_MS;
+ const now=Date.now();
+ const gradeExpiresAt=grade==='normal'||!span?null:now+span*DAY_MS;
  try{
-  await updateDoc(doc(db,'users',id),{grade,gradeExpiresAt,fallbackGrade:'normal',gradeUpdatedAt:Date.now()});
+  // 기간 자체도 저장해서 실시간 갱신·재로그인 후 7/30/영구 선택이 정확히 유지된다.
+  await updateDoc(doc(db,'users',id),{
+   grade,gradeExpiresAt,gradeDuration:duration,fallbackGrade:'normal',gradeUpdatedAt:now
+  });
   window.logActivity?.('관리자: 등급 변경',{user:id,grade,days:span||'영구'});
- }catch(e){console.error(e);window.uiAlert?.('등급 변경 실패: Firestore 권한을 확인해 주세요.');}
+  return true;
+ }catch(e){console.error(e);window.uiAlert?.('등급 변경 실패: Firestore 권한을 확인해 주세요.');return false;}
 };
 window.approveUser=async(id,plan="permanent")=>{
  if(!isAdminMode||!auth.currentUser)return window.uiAlert?.('최고 관리자만 이용할 수 있습니다.');
