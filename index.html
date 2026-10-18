@@ -839,10 +839,13 @@ function refreshGradeUI(){
   b.setAttribute('aria-disabled',allowed?'false':'true');
  }
  document.getElementById('btn-member-info').title=`내 정보 · ${GRADE_NAMES[effective]} 등급`;
+ // 인증 상태가 아직 확인되지 않았을 때는 화면 이동·권한 안내를 실행하지 않는다.
+ // 특히 페이지를 새로 열 때 일반 등급으로 임시 판단되어 팝업이 반복되는 문제 방지.
+ if(!authUser||(!isAdminMode&&(!currentMember||currentMember.status!=='approved'||expired(currentMember))))return;
  const active=document.querySelector('.global-tabs button.active');
  if(active&&!window.canUseFeature(active.id.replace('btn-',''))){
-  const next=Object.keys(FEATURE_NAMES).find(x=>window.canUseFeature(x))||'gallery';
-  window.switchTab?.(next);
+  const next=[...Object.keys(FEATURE_NAMES),'gallery'].find(x=>window.canUseFeature(x));
+  if(next)window.switchTab?.(next,true); // 시스템이 자동 이동할 때는 경고 팝업 없음
  }
 }
 const formatGradeTime=v=>v==null||v===''?'영구':dateLabel(v);
@@ -1068,10 +1071,17 @@ async function resetCurrentSession(){
  authUser=null;savedName=null;currentMember=null;isAdminMode=false;
  accessExpiry=null;expiredHandled=false;adminDataStarted=false;
  document.getElementById('admin-dashboard').style.display='none';
+ document.getElementById('btn-admin').style.display='none';
+ document.getElementById('member-notice-overlay').style.display='none';
+ document.getElementById('member-info-overlay').style.display='none';
+ noticeItems=[];currentNotice=null;noticeSessionHidden.clear();
  refreshGradeUI();
 }
 let liveUnsubscribes=[];
 window.signOutMember=async()=>{try{await signOut(auth);}catch(e){authMsg('로그아웃 오류: '+e.message);}};
+window.confirmSignOutMember=async()=>{
+ if(await window.uiConfirm('정말 로그아웃하시겠어요?'))await window.signOutMember();
+};
 window.requestAgain=()=>window.signOutMember();
 window.openAdminPrompt=async()=>{
  if(!auth.currentUser)return window.uiAlert?.('로그인이 필요합니다.');
@@ -1079,6 +1089,7 @@ window.openAdminPrompt=async()=>{
   const token=await getIdTokenResult(auth.currentUser,true);
   if(token.claims.admin!==true)return window.uiAlert?.('최고 관리자 권한이 없습니다.');
   isAdminMode=true;
+  document.getElementById('btn-admin').style.display='';
   document.getElementById('admin-dashboard').style.display='block';
   loadAdminData();refreshGradeUI();
  }catch(e){console.error(e);window.uiAlert?.('관리자 권한 확인에 실패했어요. 다시 로그인해 주세요.');}
@@ -1113,6 +1124,7 @@ async function afterAuthLogin(user){
  const token=await getIdTokenResult(user,true);
  if(token.claims.admin===true){
   isAdminMode=true;
+  document.getElementById('btn-admin').style.display='';
   savedName=ADMIN_NAME;
   currentMember={name:ADMIN_NAME,grade:'vip',status:'approved',plan:'permanent',expiresAt:null};
   accessExpiry=Infinity;authScreen.style.display='none';refreshGradeUI();
@@ -1121,6 +1133,7 @@ async function afterAuthLogin(user){
   return;
  }
  isAdminMode=false;
+ document.getElementById('btn-admin').style.display='none';
  // Legacy users/{nickname} is never auto-claimed based on nicknames.
  const memberRef=doc(db,'users',user.uid);
  const member=await getDoc(memberRef);
@@ -1300,6 +1313,7 @@ window.setUserGrade=async(id,grade='normal',duration='30')=>{
  }catch(e){console.error(e);window.uiAlert?.('등급 변경 실패: Firestore 권한을 확인해 주세요.');}
 };
 window.approveUser=async(id,plan="permanent")=>{
+ if(!isAdminMode||!auth.currentUser)return window.uiAlert?.('최고 관리자만 이용할 수 있습니다.');
  const dayCount=plan==="7"?7:plan==="30"?30:null;
  const timestamp=Date.now();
  const expiresAt=dayCount?timestamp+dayCount*DAY_MS:null;
@@ -1309,10 +1323,12 @@ window.approveUser=async(id,plan="permanent")=>{
  }catch(err){console.error(err);alert("승인 저장 실패: Firebase 권한을 확인하세요.");}
 };
 window.revokeUser=async id=>{
+ if(!isAdminMode||!auth.currentUser)return window.uiAlert?.('최고 관리자만 이용할 수 있습니다.');
  try{await updateDoc(doc(db,"users",id),{status:"revoked"});window.logActivity("관리자: 사용자 차단",{user:id});}
  catch(e){alert("이용 중지에 실패했습니다.");}
 };
 window.deleteUser=async id=>{
+ if(!isAdminMode||!auth.currentUser)return window.uiAlert?.('최고 관리자만 이용할 수 있습니다.');
  try{await deleteDoc(doc(db,"users",id));window.logActivity("관리자: 사용자 삭제",{user:id});}
  catch(e){alert("사용자 삭제에 실패했습니다.");}
 };
@@ -1458,9 +1474,10 @@ window.addBoardToGallery=async(blob,options={})=>{
 };
 
 window.closeAdmin=()=>{
- isAdminMode=false;
+ // 관리자 화면을 닫는 것은 로그아웃이나 관리자 권한 해제가 아니다.
  document.getElementById("admin-dashboard").style.display="none";
  if(authUser&&currentMember?.status==='approved')authScreen.style.display='none';
+ refreshGradeUI();
 };
 </script>
 
@@ -1487,9 +1504,9 @@ window.closeAdmin=()=>{
  </button>
 
  <button id="btn-gallery" onclick="switchTab('gallery')">🏛️ 전시관</button>
- <button id="btn-logout" onclick="window.signOutMember()" title="로그아웃" style="flex:0 0 48px;font-size:19px;padding:0">🚪</button>
+ <button id="btn-logout" onclick="window.confirmSignOutMember()" title="로그아웃" style="flex:0 0 auto;min-width:80px;font-size:12px;padding:10px 12px">로그아웃</button>
   <button id="btn-member-info" onclick="window.openMemberInfo()" title="내 등급 · 공지사항" style="flex:0 0 48px;font-size:19px;padding:0">👤</button>
- <button onclick="window.openAdminPrompt()" title="관리자" style="flex:0 0 48px;font-size:20px;padding:0">⚙️</button>
+ <button id="btn-admin" onclick="window.openAdminPrompt()" title="최고 관리자 전용" style="display:none;flex:0 0 auto;min-width:76px;font-size:12px;padding:10px 12px">⚙ 관리자</button>
 
 </div>
 
@@ -2008,12 +2025,12 @@ window.closeAdmin=()=>{
    공통
 ===================================================== */
 
-function switchTab(tabId){
+function switchTab(tabId, silent=false){
  if(window.canUseFeature && !window.canUseFeature(tabId)){
-   window.uiAlert?.('현재 회원 등급에서는 이 기능을 이용할 수 없습니다. 내 이용 정보에서 등급을 확인하세요.');
+   if(!silent)window.uiAlert?.('현재 회원 등급에서는 이 기능을 이용할 수 없습니다. 내 이용 정보에서 등급을 확인하세요.');
    return;
  }
- if(window.logActivity)window.logActivity("기능 열기",{feature:({clothes:"옷 추출",guns:"총기 카드 자르기",merge:"이미지 합치기",kill:"킬로그 커팅",board:"대필판 만들기"})[tabId]||tabId});
+ if(!silent && window.logActivity)window.logActivity("기능 열기",{feature:({clothes:"옷 추출",guns:"총기 카드 자르기",merge:"이미지 합치기",kill:"킬로그 커팅",board:"대필판 만들기"})[tabId]||tabId});
  ["clothes","guns","kill","merge","board","gallery"].forEach(id=>{
   document.getElementById("btn-"+id).classList.remove("active");
   document.getElementById(id+"-tab").classList.remove("active");
