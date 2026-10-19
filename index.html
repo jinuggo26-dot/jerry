@@ -5713,17 +5713,12 @@ saveBtn.addEventListener("click",async()=>{
    if(x<l)l=x;if(x>rr)rr=x;if(y<t)t=y;if(y>bb)bb=y;
   }
   if(rr<l||bb<t)return false;
-  // 장식 가장자리가 결과물 프레임과 맞닿지 않도록 투명 안전 여백 확보.
-  l=Math.max(0,l-8);
-  t=Math.max(0,t-6);
-  rr=Math.min(w-1,rr+8);
-  bb=Math.min(h-1,bb+6);
+  l=Math.max(0,l-3);t=Math.max(0,t-3);rr=Math.min(w-1,rr+3);bb=Math.min(h-1,bb+3);
   const cropW=rr-l+1,cropH=bb-t+1;
-  // 최종 PNG 좌우에도 일정한 투명 안전 여백 확보 (760px 규격 유지).
-  const scale=(OUTPUT_W-28)/cropW;
+  const scale=(OUTPUT_W-12)/cropW;
   const dw=Math.max(1,Math.round(cropW*scale));
   const dh=Math.max(1,Math.round(cropH*scale));
-  const outH=Math.max(MIN_OUTPUT_H,dh+24);
+  const outH=Math.max(MIN_OUTPUT_H,dh+12);
   const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
   const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
   g.drawImage(r.work,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
@@ -5894,36 +5889,11 @@ saveBtn.addEventListener("click",async()=>{
   if(nearby/Math.max(1,samples)<.20)return null;
 
   const leftBand=fire?490:545;
-  let topBand=darkRed?153:fire?146:149;
-  let bottomBand=darkRed?195:fire?192:190;
-  // 일부 캡처(가로세로비 약 1.45)는 실제 막대가 아래로 더 내려온다.
-  // 추측한 149~208px 직사각형을 저장하지 않고 본체의 실제 수평 경계만 선택한다.
-  if(tallCapture){
-   const edgeScore=y=>{
-    let sum=0,n=0;
-    for(let x=725;x<=887;x+=5){
-     const c=rgb(x,y),d=rgb(x,y-2);
-     sum+=Math.max(Math.abs(c[0]-d[0]),Math.abs(c[1]-d[1]),Math.abs(c[2]-d[2]));n++;
-    }
-    return sum/Math.max(1,n);
-   };
-   let bestTop={y:161,v:0},bestBottom={y:208,v:0};
-   for(let y=148;y<=184;y++){
-    const v=(edgeScore(y-1)+2*edgeScore(y)+edgeScore(y+1))/4;
-    if(v>bestTop.v)bestTop={y,v};
-   }
-   for(let y=192;y<=219;y++){
-    const v=(edgeScore(y-1)+2*edgeScore(y)+edgeScore(y+1))/4;
-    if(v>bestBottom.v)bestBottom={y,v};
-   }
-   // 160~210 사이에 두 뚜렷한 수평 경계가 있어야 한다.
-   if(bestTop.v>15&&bestBottom.v>15&&bestBottom.y-bestTop.y>=28){
-    topBand=bestTop.y;
-    bottomBand=bestBottom.y+1;
-   }else{topBand=159;bottomBand=207;}
-  }
-  const sourceX0=fire?443:(largeOrnament?440:485),sourceX1=fire?1002:(largeOrnament?1005:995);
-  const sourceY0=fire?68:(largeOrnament?65:tallCapture?126:114),sourceY1=fire?253:(largeOrnament?254:tallCapture?243:238);
+  const topBand=darkRed?153:fire?146:149;
+  // 세로가 긴 캡처에서는 막대가 y≈205까지 내려와 기존 190px로는 아랫부분이 잘린다.
+  const bottomBand=tallCapture?(darkRed?207:fire?205:208):(darkRed?195:fire?192:190);
+  const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
+  const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
   // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
   const x0=clamp(Math.floor(sourceX0*sx),0,W-2);
   const x1=clamp(Math.ceil(sourceX1*sx),x0+1,W);
@@ -5946,13 +5916,12 @@ saveBtn.addEventListener("click",async()=>{
     const bx=(x+x0)/sx;
     let d=0;
     for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
-    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=977;
+    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
     let a=0;
     if(inStripe){
-     // 막대는 반드시 연결된 하나의 띠다. 배경 제거로 중간이 파이지 않도록 100% 보존.
-     // 외곽 배경은 이 띠 밖에서만 분리한다. 끝 20px만 완만히 알파 페이드.
+     // 완전 불투명한 글자·총 아이콘을 보존하면서 오른쪽만 부드럽게 퇴색.
      a=255;
-     if(bx>954){const t=clamp((979-bx)/25,0,1);a=Math.round(255*t*t*(3-2*t));}
+     if(bx>860){const t=clamp((970-bx)/110,0,1);a=Math.round(255*t*t*(3-2*t));}
     }
     if(fire){
      const warm=R>115&&R>B*1.25&&G>45&&d>30;
@@ -5960,55 +5929,18 @@ saveBtn.addEventListener("click",async()=>{
      if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;
     }else{
      const decorative=largeOrnament
-       ? d>29&&sat>19&&maxv>74&&bx>=459&&bx<840&&yRef>=81&&yRef<=(bx<620?231:224)
-       : d>28&&sat>20&&maxv>83&&bx<Math.max(727,leftBand+215)&&yRef>=topBand-25&&yRef<=bottomBand+15;
-     const pinkExtra=R>G*1.20&&sat>28&&d>30&&bx>=530&&bx<=829&&yRef>=bottomBand&&yRef<=230;
+       ? d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221)
+       : d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;
+     const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;
      const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;
      // 보라빛 막대 아래의 파편만 보호. 다른 스킨의 총기 UI는 추가하지 않음.
      const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;
      if(decorative||(purple&&pinkExtra)||redFlame)a=255;
     }
-    if(inStripe&&bx>925&&!fire){
-     // 글자 영역 밖의 반투명 배경 줄무늬는 910px 단면의 실제 막대 색을 부드럽게 잇는다.
-     // 알파는 위에서 정한 완전한 띠 형태를 유지한다.
-     const ax=clamp(Math.round(912*sx)-x0,0,w-1),ai=(y*w+ax)*4;
-     const t=clamp((bx-925)/25,0,1),m=t*t*(3-2*t);
-     for(let c=0;c<3;c++)raw[i+c]=Math.round(raw[i+c]*(1-m*.84)+cb[ai+c]*(m*.84));
-    }
     alpha[y*w+x]=a;
    }
   }
 
-  // 외곽 연결 배경 탐색: 오직 투명 후보(알파 0)만 연결하여 내부 작은 구멍 판별.
-  // 이전 버전처럼 직사각형 배경 픽셀을 다시 불투명하게 추가하지 않는다.
-  const exterior=new Uint8Array(w*h),floodQueue=new Int32Array(w*h);let floodHead=0,floodTail=0;
-  function exteriorPush(q){if(!exterior[q]&&alpha[q]===0){exterior[q]=1;floodQueue[floodTail++]=q;}}
-  for(let x=0;x<w;x++){exteriorPush(x);exteriorPush((h-1)*w+x);}
-  for(let y=0;y<h;y++){exteriorPush(y*w);exteriorPush(y*w+w-1);}
-  while(floodHead<floodTail){
-   const p=floodQueue[floodHead++],x=p%w,y=(p/w)|0;
-   if(x>0)exteriorPush(p-1);if(x<w-1)exteriorPush(p+1);
-   if(y>0)exteriorPush(p-w);if(y<h-1)exteriorPush(p+w);
-  }
-  // 장식 안쪽의 외곽과 끊어진 검은 세부만 소규모로 메꾼다.
-  // 사각형 배경 유입을 막기 위해 길게 뻗는 투명 영역은 절대 채우지 않는다.
-  const visitedHole=new Uint8Array(w*h),stackHole=[];
-  for(let p=0;p<alpha.length;p++){
-   if(alpha[p]||exterior[p]||visitedHole[p])continue;
-   let xs=w,xe=0,ys=h,ye=0;const area=[];
-   stackHole.length=0;stackHole.push(p);visitedHole[p]=1;
-   while(stackHole.length){
-    const q=stackHole.pop(),x=q%w,y=(q/w)|0;area.push(q);
-    xs=Math.min(xs,x);xe=Math.max(xe,x);ys=Math.min(ys,y);ye=Math.max(ye,y);
-    for(const n of [x>0?q-1:-1,x<w-1?q+1:-1,y>0?q-w:-1,y<h-1?q+w:-1]){
-     if(n>=0&&!visitedHole[n]&&!exterior[n]&&alpha[n]===0){visitedHole[n]=1;stackHole.push(n);}
-    }
-   }
-   // max 8x8px holes only; never create the rectangular patches previously reported.
-   if(area.length<=42*Math.max(.5,sx*sy) && xe-xs<=8*sx && ye-ys<=8*sy){
-    for(const q of area)alpha[q]=230;
-   }
-  }
   // 불꽃/장식 바깥의 작은 배경 잡티만 제거. 막대 본체 픽셀은 건드리지 않는다.
   const seen=new Uint8Array(w*h);
   const stack=[];
@@ -6030,20 +5962,12 @@ saveBtn.addEventListener("click",async()=>{
    minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY);
   }
   if(maxX<minX||maxY<minY)return null;
-  // 원본 마스크의 상하좌우 윤곽에 기본 완충 여백을 둔다.
-  minX=clamp(minX-Math.ceil(5*sx),0,w-1);
-  maxX=clamp(maxX+Math.ceil(5*sx),minX,w-1);
-  minY=clamp(minY-Math.ceil(5*sy),0,h-1);
-  maxY=clamp(maxY+Math.ceil(5*sy),minY,h-1);
-  // 오른쪽 자연스러운 페이드 및 좌측 돌출 장식의 원형을 유지하는 비대칭 여백.
-  const marginLeft=Math.round(46*sx);
-  const marginRight=Math.round(30*sx);
-  const marginTop=Math.round(18*sy);
-  const marginBottom=Math.round(18*sy);
-  minX=clamp(minX-marginLeft,0,w-1);
-  maxX=clamp(maxX+marginRight,minX,w-1);
-  minY=clamp(minY-marginTop,0,h-1);
-  maxY=clamp(maxY+marginBottom,minY,h-1);
+  minX=clamp(minX-Math.ceil(4*sx),0,w-1);maxX=clamp(maxX+Math.ceil(4*sx),minX,w-1);
+  minY=clamp(minY-Math.ceil(4*sy),0,h-1);maxY=clamp(maxY+Math.ceil(4*sy),minY,h-1);
+  // 장식을 보존할 수 있도록 여유 공간을 확보한다.
+  const marginX=Math.round(35*sx),marginY=Math.round(23*sy);
+  minX=clamp(minX-marginX,0,w-1);maxX=clamp(maxX+marginX,minX,w-1);
+  minY=clamp(minY-marginY,0,h-1);maxY=clamp(maxY+marginY,minY,h-1);
   const cropW=maxX-minX+1,cropH=maxY-minY+1;
   const temp=document.createElement('canvas');temp.width=cropW;temp.height=cropH;
   const masked=temp.getContext('2d').createImageData(cropW,cropH);
