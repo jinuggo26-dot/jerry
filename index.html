@@ -5692,7 +5692,11 @@ saveBtn.addEventListener("click",async()=>{
   const im=photos[active].image;
   view.width=im.naturalWidth;view.height=im.naturalHeight;
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
-  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status('사진 속 ‘킬 알림’ 막대를 눌러주세요.');drawSelections();
+  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;
+  status(view.width<500 || view.height<240 || view.width/view.height<1.98 || view.width/view.height>2.45
+    ? '원본 화면 비율을 확인해 주세요. 킬로그 커팅은 가로형 게임 스크린샷에서 작동해요.'
+    : '사진 속 ‘킬 알림’ 막대를 눌러주세요.');
+  drawSelections();
  }
  async function encodeResult(r){
   // 실제 킬로그 영역만 찾아 배경 없는 PNG로 저장한다.
@@ -5969,13 +5973,46 @@ saveBtn.addEventListener("click",async()=>{
   return result;
  }
 
- stage.addEventListener('click',async e=>{
-  if(Date.now()<suppressClickUntil)return;
-  if(active<0||busy)return;
+ // iPad/Safari에서는 한 손가락 탭이 사진 스크롤 처리 중 click으로 전달되지 않는
+ // 경우가 있다. 터치 종료 좌표를 직접 이용하고 브라우저의 후속 click은 중복 방지한다.
+ let startTouch=null,lastHandledTouch=0;
+ stage.addEventListener('touchstart',e=>{
+   if(e.touches.length!==1){startTouch=null;return;}
+   const t=e.touches[0];
+   startTouch={id:t.identifier,x:t.clientX,y:t.clientY,time:Date.now()};
+ },{passive:true});
+ stage.addEventListener('touchmove',e=>{
+   if(!startTouch||e.touches.length!==1){startTouch=null;return;}
+   const t=e.touches[0];
+   if(t.identifier!==startTouch.id || Math.hypot(t.clientX-startTouch.x,t.clientY-startTouch.y)>19)startTouch=null;
+ },{passive:true});
+ stage.addEventListener('touchcancel',()=>{startTouch=null},{passive:true});
+ stage.addEventListener('touchend',e=>{
+   const start=startTouch;startTouch=null;
+   if(!start || e.touches.length || pinch || Date.now()<suppressClickUntil)return;
+   const t=Array.from(e.changedTouches).find(p=>p.identifier===start.id);
+   if(!t || Date.now()-start.time>1800 || Math.hypot(t.clientX-start.x,t.clientY-start.y)>19)return;
+   // 손가락 탭을 처리했으므로 touch-generated click으로 두 번 선택하지 않는다.
+   e.preventDefault();
+   lastHandledTouch=Date.now();
+   void chooseKilllog(t.clientX,t.clientY);
+ },{passive:false});
+ stage.addEventListener('click',e=>{
+   if(Date.now()-lastHandledTouch<750 || Date.now()<suppressClickUntil)return;
+   void chooseKilllog(e.clientX,e.clientY);
+ });
+
+ async function chooseKilllog(clientX,clientY){
+  if(Date.now()<suppressClickUntil || active<0 || busy)return;
   const rect=view.getBoundingClientRect(),W=view.width,H=view.height;
-  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;
-  const tx=clamp(Math.round((e.clientX-rect.left)*W/rect.width),0,W-1);
-  const ty=clamp(Math.round((e.clientY-rect.top)*H/rect.height),0,H-1);
+  if(!rect.width || !rect.height || W<2 || H<2)return;
+  if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return;
+  const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
+  const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
+  if(W<500 || H<240 || W/H<1.98 || W/H>2.45){
+   status('이 사진은 지원하는 게임 화면 비율이 아니에요. 원본 가로형 게임 스크린샷을 추가해 주세요.');
+   return;
+  }
   if(results.some(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h)){
    const selectedIndex=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
    if(selectedIndex>=0){URL.revokeObjectURL(results[selectedIndex].url);results.splice(selectedIndex,1);resultView();drawSelections();updatePhotoCounts();status('킬로그 선택을 해제했어요.');}
@@ -5990,10 +6027,11 @@ saveBtn.addEventListener("click",async()=>{
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
- });
+ }
  redraw();resultView();
 })();
 </script>
 
 </body>
 </html>
+
