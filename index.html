@@ -5713,12 +5713,17 @@ saveBtn.addEventListener("click",async()=>{
    if(x<l)l=x;if(x>rr)rr=x;if(y<t)t=y;if(y>bb)bb=y;
   }
   if(rr<l||bb<t)return false;
-  l=Math.max(0,l-3);t=Math.max(0,t-3);rr=Math.min(w-1,rr+3);bb=Math.min(h-1,bb+3);
+  // 장식 가장자리가 결과물 프레임과 맞닿지 않도록 투명 안전 여백 확보.
+  l=Math.max(0,l-8);
+  t=Math.max(0,t-6);
+  rr=Math.min(w-1,rr+8);
+  bb=Math.min(h-1,bb+6);
   const cropW=rr-l+1,cropH=bb-t+1;
-  const scale=(OUTPUT_W-12)/cropW;
+  // 최종 PNG 좌우에도 일정한 투명 안전 여백 확보 (760px 규격 유지).
+  const scale=(OUTPUT_W-28)/cropW;
   const dw=Math.max(1,Math.round(cropW*scale));
   const dh=Math.max(1,Math.round(cropH*scale));
-  const outH=Math.max(MIN_OUTPUT_H,dh+12);
+  const outH=Math.max(MIN_OUTPUT_H,dh+24);
   const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
   const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
   g.drawImage(r.work,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
@@ -6110,12 +6115,20 @@ saveBtn.addEventListener("click",async()=>{
    minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY);
   }
   if(maxX<minX||maxY<minY)return null;
-  minX=clamp(minX-Math.ceil(4*sx),0,w-1);maxX=clamp(maxX+Math.ceil(4*sx),minX,w-1);
-  minY=clamp(minY-Math.ceil(4*sy),0,h-1);maxY=clamp(maxY+Math.ceil(4*sy),minY,h-1);
-  // 장식을 보존할 수 있도록 여유 공간을 확보한다.
-  const marginX=Math.round(35*sx),marginY=Math.round(23*sy);
-  minX=clamp(minX-marginX,0,w-1);maxX=clamp(maxX+marginX,minX,w-1);
-  minY=clamp(minY-marginY,0,h-1);maxY=clamp(maxY+marginY,minY,h-1);
+  // 원본 마스크의 상하좌우 윤곽에 기본 완충 여백을 둔다.
+  minX=clamp(minX-Math.ceil(5*sx),0,w-1);
+  maxX=clamp(maxX+Math.ceil(5*sx),minX,w-1);
+  minY=clamp(minY-Math.ceil(5*sy),0,h-1);
+  maxY=clamp(maxY+Math.ceil(5*sy),minY,h-1);
+  // 오른쪽 자연스러운 페이드 및 좌측 돌출 장식의 원형을 유지하는 비대칭 여백.
+  const marginLeft=Math.round(46*sx);
+  const marginRight=Math.round(30*sx);
+  const marginTop=Math.round(18*sy);
+  const marginBottom=Math.round(18*sy);
+  minX=clamp(minX-marginLeft,0,w-1);
+  maxX=clamp(maxX+marginRight,minX,w-1);
+  minY=clamp(minY-marginTop,0,h-1);
+  maxY=clamp(maxY+marginBottom,minY,h-1);
   const cropW=maxX-minX+1,cropH=maxY-minY+1;
   const temp=document.createElement('canvas');temp.width=cropW;temp.height=cropH;
   const masked=temp.getContext('2d').createImageData(cropW,cropH);
