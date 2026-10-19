@@ -5894,11 +5894,36 @@ saveBtn.addEventListener("click",async()=>{
   if(nearby/Math.max(1,samples)<.20)return null;
 
   const leftBand=fire?490:545;
-  const topBand=darkRed?153:fire?146:149;
-  // 세로가 긴 캡처에서는 막대가 y≈205까지 내려와 기존 190px로는 아랫부분이 잘린다.
-  const bottomBand=tallCapture?(darkRed?207:fire?205:208):(darkRed?195:fire?192:190);
-  const sourceX0=fire?443:(largeOrnament?440:490),sourceX1=fire?1002:(largeOrnament?1005:992);
-  const sourceY0=fire?72:(largeOrnament?64:114),sourceY1=fire?250:(largeOrnament?253:239);
+  let topBand=darkRed?153:fire?146:149;
+  let bottomBand=darkRed?195:fire?192:190;
+  // 일부 캡처(가로세로비 약 1.45)는 실제 막대가 아래로 더 내려온다.
+  // 추측한 149~208px 직사각형을 저장하지 않고 본체의 실제 수평 경계만 선택한다.
+  if(tallCapture){
+   const edgeScore=y=>{
+    let sum=0,n=0;
+    for(let x=725;x<=887;x+=5){
+     const c=rgb(x,y),d=rgb(x,y-2);
+     sum+=Math.max(Math.abs(c[0]-d[0]),Math.abs(c[1]-d[1]),Math.abs(c[2]-d[2]));n++;
+    }
+    return sum/Math.max(1,n);
+   };
+   let bestTop={y:161,v:0},bestBottom={y:208,v:0};
+   for(let y=148;y<=184;y++){
+    const v=(edgeScore(y-1)+2*edgeScore(y)+edgeScore(y+1))/4;
+    if(v>bestTop.v)bestTop={y,v};
+   }
+   for(let y=192;y<=219;y++){
+    const v=(edgeScore(y-1)+2*edgeScore(y)+edgeScore(y+1))/4;
+    if(v>bestBottom.v)bestBottom={y,v};
+   }
+   // 160~210 사이에 두 뚜렷한 수평 경계가 있어야 한다.
+   if(bestTop.v>15&&bestBottom.v>15&&bestBottom.y-bestTop.y>=28){
+    topBand=bestTop.y;
+    bottomBand=bestBottom.y+1;
+   }else{topBand=159;bottomBand=207;}
+  }
+  const sourceX0=fire?443:(largeOrnament?440:485),sourceX1=fire?1002:(largeOrnament?1005:995);
+  const sourceY0=fire?68:(largeOrnament?65:tallCapture?126:114),sourceY1=fire?253:(largeOrnament?254:tallCapture?243:238);
   // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
   const x0=clamp(Math.floor(sourceX0*sx),0,W-2);
   const x1=clamp(Math.ceil(sourceX1*sx),x0+1,W);
@@ -5908,153 +5933,6 @@ saveBtn.addEventListener("click",async()=>{
   const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
   const bandT=topBand*sy-y0,bandB=bottomBand*sy-y0;
   const topSample=Math.round((largeOrnament?75:115)*sy),bottomSample=Math.round((largeOrnament?238:221)*sy);
-  if(tallCapture){
-  const cb=ctx.getImageData(x0,y0,w,h).data;
-  const ctop=ctx.getImageData(x0,topSample,w,1).data;
-  const cbot=ctx.getImageData(x0,bottomSample,w,1).data;
-  // 실제 막대 바로 위 두 줄에서 배경의 색 변화 추정. 바 아래는 총기 UI가 겹칠 수 있다.
-  const upperA=ctx.getImageData(x0,clamp(Math.round((topBand-26)*sy),0,H-1),w,1).data;
-  const upperB=ctx.getImageData(x0,clamp(Math.round((topBand-11)*sy),0,H-1),w,1).data;
-  // 배경의 세로 빛줄기가 막대 오른쪽에 남지 않도록, 실제 막대 위/아래
-  // 수평 경계가 존재하는 가로 구간만 낮은 투명도로 페이드한다.
-  // 장식과 총 아이콘(좌측), 실제 킬로그 추출 알고리즘은 바꾸지 않는다.
-  const rightEdge=new Float32Array(w);
-  const rightSmooth=new Float32Array(w);
-  const edgeMax=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
-  if(!fire){
-   for(let x=0;x<w;x++){
-    const bx=(x+x0)/sx;
-    if(bx<750)continue;
-    const topEdge=edgeMax(rgb(bx,topBand-5),rgb(bx,topBand+10));
-    const bottomEdge=edgeMax(rgb(bx,bottomBand-7),rgb(bx,bottomBand+6));
-    rightEdge[x]=Math.max(topEdge,bottomEdge);
-   }
-   const windowRadius=Math.max(4,Math.round(7*sx));
-   for(let x=0;x<w;x++){
-    if((x+x0)/sx<750)continue;
-    let sum=0,n=0;
-    for(let dx=-windowRadius;dx<=windowRadius;dx++){
-     const q=x+dx;if(q<0||q>=w)continue;
-     sum+=rightEdge[q];n++;
-    }
-    rightSmooth[x]=sum/Math.max(1,n);
-   }
-  }
-  let barEdgeBase=24,barTailEnd=970;
-  // 단색/그라데이션 막대에만 끝부분의 배경 세로줄무늬를 제거한다.
-  const baselineSamples=[];
-  for(let bx=780;bx<=825;bx+=5)baselineSamples.push(rgb(bx,(topBand+bottomBand)/2));
-  let tailVariation=0;
-  for(let c=0;c<3;c++){
-   const mean=baselineSamples.reduce((sum,v)=>sum+v[c],0)/baselineSamples.length;
-   const deviation=Math.sqrt(baselineSamples.reduce((sum,v)=>sum+(v[c]-mean)*(v[c]-mean),0)/baselineSamples.length);
-   tailVariation=Math.max(tailVariation,deviation);
-  }
-  const smoothPlainTail=!fire&&tailVariation<8;
-  if(!fire){
-   const anchor=[];
-   for(let bx=775;bx<=825;bx+=7){
-    const p=Math.round(bx*sx)-x0;
-    if(p>=0&&p<w)anchor.push(rightSmooth[p]);
-   }
-   anchor.sort((a,b)=>a-b);
-   if(anchor.length)barEdgeBase=anchor[Math.floor(anchor.length/2)];
-   const edgeLimit=Math.max(11,barEdgeBase*0.34);
-   // 실제 막대 경계가 사라진 뒤 배경의 먼 줄무늬를 다시 잡지 않는다.
-   for(let bx=855;bx<=962;bx+=2){
-    let weak=0;
-    for(let dx=0;dx<=16;dx+=4){
-     const p=Math.round((bx+dx)*sx)-x0;
-     if(p>=0&&p<w && rightSmooth[p]<edgeLimit)weak++;
-    }
-    if(weak>=4){barTailEnd=bx;break;}
-   }
-  }
-  for(let y=0;y<h;y++){
-   const yRef=(y+y0)/sy;
-   const blend=largeOrnament?clamp((yRef-75)/163,0,1):clamp((yRef-115)/106,0,1);
-   for(let x=0;x<w;x++){
-    const i=(y*w+x)*4,bi=x*4;
-    const R=cb[i],G=cb[i+1],B=cb[i+2],maxv=Math.max(R,G,B),minv=Math.min(R,G,B),sat=maxv-minv;
-    raw[i]=R;raw[i+1]=G;raw[i+2]=B;raw[i+3]=255;
-    const bx=(x+x0)/sx;
-    let d=0;
-    for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
-    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
-    let a=0;
-    if(inStripe){
-     // 막대가 예상되는 사각형을 통째로 남기면 실제 막대 위쪽의 게임 배경도 저장된다.
-     // 각 픽셀을 같은 가로 위치의 위/아래 게임 배경과 비교해서 막대·글자만 남긴다.
-     // 차이가 12 이하인 배경은 투명, 32 이상인 실제 막대는 불투명하게 처리한다.
-     const confidence=clamp((d-12)/20,0,1);
-     a=Math.round(255*confidence*confidence*(3-2*confidence));
-     // 막대 아래의 중앙 총기 이미지가 배경 샘플에 섞여 생긴 잔상을 제거한다.
-     // 텍스트가 없는 오른쪽 835px 이후에만 위쪽 게임 배경으로 별도 검사한다.
-     if(!fire&&bx>835){
-      const t=(yRef-(topBand-11))/15;
-      let upperDelta=0;
-      for(let channel=0;channel<3;channel++){
-       const base=upperB[bi+channel]+(upperB[bi+channel]-upperA[bi+channel])*t;
-       upperDelta=Math.max(upperDelta,Math.abs(cb[i+channel]-clamp(base,0,255)));
-      }
-      const likelyBanner=clamp((upperDelta-5)/19,0,1);
-      a=Math.round(a*likelyBanner*likelyBanner*(3-2*likelyBanner));
-     }
-     // 오른쪽은 실제 막대의 수평 경계 강도가 약해지면 투명하게.
-     // 배경의 빛줄기는 수평 막대 경계를 만들지 않으므로 잔상이 사라진다.
-     if(!fire&&bx>835){
-      const edge=rightSmooth[x];
-      const edgeMin=Math.max(10,barEdgeBase*0.22);
-      const weight=clamp((edge-edgeMin)/Math.max(12,barEdgeBase*0.50),0,1);
-      const tail=clamp((barTailEnd+4-bx)/19,0,1);
-      a=Math.round(a*weight*weight*(3-2*weight)*tail*tail*(3-2*tail));
-     }
-     // 본래 킬로그 디자인의 끝 페이드도 유지한다.
-     if(bx>860){const t=clamp((970-bx)/110,0,1);a=Math.round(a*t*t*(3-2*t));}
-    }
-    if(fire){
-     const warm=R>115&&R>B*1.25&&G>45&&d>30;
-     const bright=R>110&&R>B*1.08&&sat>55&&d>55;
-     if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;
-    }else{
-     const decorative=largeOrnament
-       ? d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221)
-       : d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;
-     const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;
-     const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;
-     // 보라빛 막대 아래의 파편만 보호. 다른 스킨의 총기 UI는 추가하지 않음.
-     const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;
-     if(decorative||(purple&&pinkExtra)||redFlame)a=255;
-    }
-    // 반투명 막대 오른쪽의 원래 게임 배경색/세로 빛줄기가 비치는 문제 보정.
-    // 단순 배경 막대일 때만 좌측 본체 색상을 이용해 자연스럽게 이어준다.
-    if(smoothPlainTail&&inStripe&&bx>838){
-     const cx=clamp(Math.round(825*sx)-x0,0,w-1);
-     const core=(y*w+cx)*4;
-     const t=clamp((bx-838)/Math.max(24,barTailEnd-838),0,1);
-     const blend=clamp((bx-838)/36,0,1);
-     const weight=blend*blend*(3-2*blend);
-     for(let c=0;c<3;c++){
-      const color=cb[core+c]*(1-.25*t);
-      raw[i+c]=Math.round(cb[i+c]*(1-weight)+color*weight);
-     }
-    }
-    // 단순 막대는 오른쪽 끝의 알파도 앞부분을 따라 매끄럽게 페이드시켜,
-    // 배경에서 온 픽셀별 밝기 차이가 세로줄로 남지 않게 한다.
-    if(smoothPlainTail&&inStripe&&bx>838){
-     const cx=clamp(Math.round(825*sx)-x0,0,w-1);
-     const coreOpacity=alpha[y*w+cx];
-     const u=clamp((barTailEnd+4-bx)/Math.max(32,barTailEnd+4-838),0,1);
-     const fade=u*u*(3-2*u);
-     const mix=clamp((bx-838)/28,0,1);
-     const eased=mix*mix*(3-2*mix);
-     a=Math.round(a*(1-eased)+coreOpacity*fade*eased);
-    }
-    alpha[y*w+x]=a;
-   }
-  }
-
-  }else{
   const cb=ctx.getImageData(x0,y0,w,h).data;
   const ctop=ctx.getImageData(x0,topSample,w,1).data;
   const cbot=ctx.getImageData(x0,bottomSample,w,1).data;
@@ -6068,12 +5946,13 @@ saveBtn.addEventListener("click",async()=>{
     const bx=(x+x0)/sx;
     let d=0;
     for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
-    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
+    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=977;
     let a=0;
     if(inStripe){
-     // 본체와 글자를 선명하게 보존하고, 원래 막대 끝에서만 부드럽게 투명해지도록 한다.
+     // 막대는 반드시 연결된 하나의 띠다. 배경 제거로 중간이 파이지 않도록 100% 보존.
+     // 외곽 배경은 이 띠 밖에서만 분리한다. 끝 20px만 완만히 알파 페이드.
      a=255;
-     if(bx>940){const t=clamp((985-bx)/45,0,1);a=Math.round(255*t*t*(3-2*t));}
+     if(bx>954){const t=clamp((979-bx)/25,0,1);a=Math.round(255*t*t*(3-2*t));}
     }
     if(fire){
      const warm=R>115&&R>B*1.25&&G>45&&d>30;
@@ -6081,112 +5960,53 @@ saveBtn.addEventListener("click",async()=>{
      if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;
     }else{
      const decorative=largeOrnament
-       ? d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221)
-       : d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;
-     const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;
+       ? d>29&&sat>19&&maxv>74&&bx>=459&&bx<840&&yRef>=81&&yRef<=(bx<620?231:224)
+       : d>28&&sat>20&&maxv>83&&bx<Math.max(727,leftBand+215)&&yRef>=topBand-25&&yRef<=bottomBand+15;
+     const pinkExtra=R>G*1.20&&sat>28&&d>30&&bx>=530&&bx<=829&&yRef>=bottomBand&&yRef<=230;
      const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;
      // 보라빛 막대 아래의 파편만 보호. 다른 스킨의 총기 UI는 추가하지 않음.
      const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;
      if(decorative||(purple&&pinkExtra)||redFlame)a=255;
     }
-    // 반투명한 게임 배경이 킬로그 끝에 삼각 무늬처럼 비치지 않게 보정한다.
-    // 원래 막대의 915px 세로 단면을 기준으로 꼬리 색을 연결한다.
-    // 선명한 불꽃·장식처럼 고채도 무늬는 원본 픽셀을 유지한다.
-    if(inStripe && bx>916 && !fire){
-     const anchorX=clamp(Math.round(915*sx)-x0,0,w-1), ref=(y*w+anchorX)*4;
-     const u=clamp((bx-916)/50,0,1), sm=u*u*(3-2*u);
-     const detail=sat>58 && Math.max(Math.abs(R-cb[ref]),Math.abs(G-cb[ref+1]),Math.abs(B-cb[ref+2]))>40;
-     const mix=sm*(detail?.15:.87);
-     for(let c=0;c<3;c++){
-      const solid=cb[ref+c]*(1-.27*u);
-      raw[i+c]=Math.round(cb[i+c]*(1-mix)+solid*mix);
-     }
+    if(inStripe&&bx>925&&!fire){
+     // 글자 영역 밖의 반투명 배경 줄무늬는 910px 단면의 실제 막대 색을 부드럽게 잇는다.
+     // 알파는 위에서 정한 완전한 띠 형태를 유지한다.
+     const ax=clamp(Math.round(912*sx)-x0,0,w-1),ai=(y*w+ax)*4;
+     const t=clamp((bx-925)/25,0,1),m=t*t*(3-2*t);
+     for(let c=0;c<3;c++)raw[i+c]=Math.round(raw[i+c]*(1-m*.84)+cb[ai+c]*(m*.84));
     }
     alpha[y*w+x]=a;
    }
   }
 
+  // 외곽 연결 배경 탐색: 오직 투명 후보(알파 0)만 연결하여 내부 작은 구멍 판별.
+  // 이전 버전처럼 직사각형 배경 픽셀을 다시 불투명하게 추가하지 않는다.
+  const exterior=new Uint8Array(w*h),floodQueue=new Int32Array(w*h);let floodHead=0,floodTail=0;
+  function exteriorPush(q){if(!exterior[q]&&alpha[q]===0){exterior[q]=1;floodQueue[floodTail++]=q;}}
+  for(let x=0;x<w;x++){exteriorPush(x);exteriorPush((h-1)*w+x);}
+  for(let y=0;y<h;y++){exteriorPush(y*w);exteriorPush(y*w+w-1);}
+  while(floodHead<floodTail){
+   const p=floodQueue[floodHead++],x=p%w,y=(p/w)|0;
+   if(x>0)exteriorPush(p-1);if(x<w-1)exteriorPush(p+1);
+   if(y>0)exteriorPush(p-w);if(y<h-1)exteriorPush(p+w);
   }
-  // 외곽 연결 배경 제거 (Flood Fill): '검다'는 이유만으로 장식을 지우지 않는다.
-  // 1. 같은 가로 좌표의 위·아래 게임 배경으로 색 차이를 추정한다.
-  // 2. 실제 이미지 바깥쪽에서 이어진 '배경 후보'만 flood fill로 확인한다.
-  // 3. 그 배경과 이어지지 않은 희미한 장식은 본체와의 연속성을 확인해 복원한다.
-  // 이 처리는 막대 본체와 원래 오른쪽 페이드/태블릿 터치 좌표를 변경하지 않는다.
-  {
-   const topBg=ctx.getImageData(x0,topSample,w,1).data;
-   const bottomBg=ctx.getImageData(x0,bottomSample,w,1).data;
-   const contrast=new Uint8Array(w*h);
-   const outside=new Uint8Array(w*h);
-   const total=w*h,queue=new Int32Array(total);
-   for(let y=0;y<h;y++){
-    const by=(y+y0)/sy;
-    const mix=largeOrnament?clamp((by-75)/163,0,1):clamp((by-115)/106,0,1);
-    for(let x=0;x<w;x++){
-     const p=y*w+x,i=p*4,k=x*4;
-     let d=0;
-     for(let c=0;c<3;c++)d=Math.max(d,Math.abs(raw[i+c]-(topBg[k+c]*(1-mix)+bottomBg[k+c]*mix)));
-     contrast[p]=Math.round(clamp(d,0,255));
+  // 장식 안쪽의 외곽과 끊어진 검은 세부만 소규모로 메꾼다.
+  // 사각형 배경 유입을 막기 위해 길게 뻗는 투명 영역은 절대 채우지 않는다.
+  const visitedHole=new Uint8Array(w*h),stackHole=[];
+  for(let p=0;p<alpha.length;p++){
+   if(alpha[p]||exterior[p]||visitedHole[p])continue;
+   let xs=w,xe=0,ys=h,ye=0;const area=[];
+   stackHole.length=0;stackHole.push(p);visitedHole[p]=1;
+   while(stackHole.length){
+    const q=stackHole.pop(),x=q%w,y=(q/w)|0;area.push(q);
+    xs=Math.min(xs,x);xe=Math.max(xe,x);ys=Math.min(ys,y);ye=Math.max(ye,y);
+    for(const n of [x>0?q-1:-1,x<w-1?q+1:-1,y>0?q-w:-1,y<h-1?q+w:-1]){
+     if(n>=0&&!visitedHole[n]&&!exterior[n]&&alpha[n]===0){visitedHole[n]=1;stackHole.push(n);}
     }
    }
-   // 절대로 킬로그의 밝은 글자·금색 테두리·검은 그림자를 흰색으로 덮지 않는다.
-   // 배경은 낮은 색 차이를 보이면서 기존 장식/막대 마스크에도 속하지 않는 픽셀이다.
-   function walkable(p){return alpha[p]<95 && contrast[p]<19;}
-   let head=0,tail=0;
-   function pushBg(p){if(!outside[p]&&walkable(p)){outside[p]=1;queue[tail++]=p;}}
-   for(let x=0;x<w;x++){pushBg(x);pushBg((h-1)*w+x);}
-   for(let y=0;y<h;y++){pushBg(y*w);pushBg(y*w+w-1);}
-   while(head<tail){
-    const p=queue[head++],x=p%w,y=(p/w)|0;
-    if(x>0)pushBg(p-1);
-    if(x<w-1)pushBg(p+1);
-    if(y>0)pushBg(p-w);
-    if(y<h-1)pushBg(p+w);
-   }
-   // 이전 마스크에서 남긴 본체/장식에 연결된 후보만 작은 거리 이내에서 보강한다.
-   // 지나치게 떨어진 게임 UI 픽셀까지 살아나는 것을 막기 위해 거리 상한을 둔다.
-   const near=new Uint8Array(total),front=new Int32Array(total);
-   let frontHead=0,frontTail=0;
-   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    const p=y*w+x;
-    if(alpha[p]>=130 && contrast[p]>=16){near[p]=1;front[frontTail++]=p;}
-   }
-   const maxSteps=Math.max(14,Math.round(32*Math.min(sx,sy)));
-   let level=1;
-   while(frontHead<frontTail && level<=maxSteps){
-    const stop=frontTail;
-    while(frontHead<stop){
-     const p=front[frontHead++],x=p%w,y=(p/w)|0;
-     for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++){
-      for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
-       const q=yy*w+xx;
-       if(near[q]||outside[q]||contrast[q]<9)continue;
-       near[q]=1;front[frontTail++]=q;
-      }
-     }
-    }
-    level++;
-   }
-   for(let y=0;y<h;y++){
-    const by=(y+y0)/sy;
-    for(let x=0;x<w;x++){
-     const p=y*w+x,bx=(x+x0)/sx,d=contrast[p];
-     const isCore=(bx>=leftBand&&bx<=975&&by>=topBand&&by<=bottomBand);
-     // 중앙 막대는 기존 추출 결과를 유지한다. 외곽 연결 배경만 투명하게 한다.
-     if(isCore)continue;
-     const ornamentArea=bx>=440&&bx<=(fire?986:largeOrnament?920:840) && by>=62 && by<=253;
-     // 이미지 외곽에서 실제로 이어진 배경은 제거하되, 본체와 글자는 건드리지 않는다.
-     if(outside[p]){alpha[p]=0;continue;}
-     if(!ornamentArea||!near[p])continue;
-     const R=raw[p*4],G=raw[p*4+1],B=raw[p*4+2];
-     const maxC=Math.max(R,G,B),minC=Math.min(R,G,B),saturation=maxC-minC;
-     // 중성 색상(회색/검정)도 얼음·금색 장식의 어두운 윤곽이므로 무조건 버리지 않음.
-     // 배경과 대비가 낮은 발광 테두리는 낮은 불투명도로 살리고 실제 장식은 진하게.
-     let v=clamp((d-7)/26,0,1);
-     if(d>17&&saturation>19)v=Math.max(v,clamp((d-12)/22,0,1));
-     v=v*v*(3-2*v);
-     const recovery=Math.round(255*v);
-     if(recovery>alpha[p])alpha[p]=recovery;
-    }
+   // max 8x8px holes only; never create the rectangular patches previously reported.
+   if(area.length<=42*Math.max(.5,sx*sy) && xe-xs<=8*sx && ye-ys<=8*sy){
+    for(const q of area)alpha[q]=230;
    }
   }
   // 불꽃/장식 바깥의 작은 배경 잡티만 제거. 막대 본체 픽셀은 건드리지 않는다.
@@ -6202,12 +6022,7 @@ saveBtn.addEventListener("click",async()=>{
      const q=yy*w+xx;if(!seen[q]&&alpha[q]>15){seen[q]=1;stack.push(q);}
     }
    }
-   if(comp.length<5){
-    // 작고 약한 배경 노이즈만 정리. 따로 떨어진 불꽃 파편은 보존한다.
-    let strong=false;
-    for(const p of comp){const i=p*4;const sat=Math.max(raw[i],raw[i+1],raw[i+2])-Math.min(raw[i],raw[i+1],raw[i+2]);if(alpha[p]>225&&sat>42){strong=true;break;}}
-    if(!strong)for(const p of comp)alpha[p]=0;
-   }
+   if(comp.length<(largeOrnament?40:16))for(const p of comp)alpha[p]=0;
   }
   let minX=w,minY=h,maxX=-1,maxY=-1;
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
