@@ -1972,28 +1972,27 @@ window.closeAdmin=()=>{
 <div id="kill-tab" class="tab-pane">
  <div class="app" style="max-width:1050px">
   <header class="header"><div class="title-wrap"><h1>🎯 킬로그 커팅</h1><p>게임 스크린샷을 추가하고, 자를 킬로그를 눌러 선택하세요.</p></div></header>
-  <label class="upload" for="kl-files"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>사진 추가하기</strong><span>PNG · JPG · WEBP / 여러 장 선택 가능</span></div></div></label>
-  <input id="kl-files" type="file" accept="image/png,image/jpeg,image/webp" multiple>
-  <div class="photo-panel"><div class="panel-head"><strong>사진 목록</strong><button class="photo-button" id="kl-clear" type="button" title="추가한 사진과 추출 결과를 모두 삭제합니다">사진·결과 모두 삭제</button></div><div id="kl-photos" class="photo-list"></div></div>
+  <div id="kl-upload-normal">
+   <label class="upload" for="kl-files-normal"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>일반 킬로그 사진 추가하기</strong><span>PNG · JPG · WEBP / 여러 장 선택 가능 · 일반 사진함에만 추가</span></div></div></label>
+   <input id="kl-files-normal" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+  </div>
+  <div id="kl-upload-special" style="display:none">
+   <label class="upload" for="kl-files-special"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>고번 킬로그 사진 추가하기</strong><span>PNG · JPG · WEBP / 여러 장 선택 가능 · 고번 사진함에만 추가</span></div></div></label>
+   <input id="kl-files-special" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+  </div>
+  <div class="photo-panel"><div class="panel-head"><strong>사진 목록</strong><button class="photo-button" id="kl-clear" type="button" title="현재 선택한 킬로그 종류의 사진과 결과만 삭제합니다">현재 사진함 비우기</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 자를 킬로그 선택</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
    <div id="kl-mode-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:4px 0 10px">
     <button type="button" id="kl-mode-normal" class="photo-button active">일반 킬로그</button>
     <button type="button" id="kl-mode-special" class="photo-button">고번 킬로그</button>
     <span id="kl-mode-label" style="font-size:11px;color:#9fb2cc">일반 킬로그: 기존 막대형 / 고번 킬로그: 다른 형태의 킬로그 전용</span>
    </div>
-   <div id="kl-edit-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:0 0 11px;padding:10px 12px;border:1px solid #283447;border-radius:12px;background:#0c1626">
-    <strong style="font-size:13px;color:#dfeaff">미세 조정</strong>
-    <button type="button" id="kl-box-left" class="photo-button" style="min-width:44px">←</button>
-    <button type="button" id="kl-box-right" class="photo-button" style="min-width:44px">→</button>
-    <button type="button" id="kl-box-up" class="photo-button" style="min-width:44px">↑</button>
-    <button type="button" id="kl-box-down" class="photo-button" style="min-width:44px">↓</button>
-    <button type="button" id="kl-box-wider" class="photo-button">가로＋</button>
-    <button type="button" id="kl-box-narrower" class="photo-button">가로－</button>
-    <button type="button" id="kl-box-taller" class="photo-button">세로＋</button>
-    <button type="button" id="kl-box-shorter" class="photo-button">세로－</button>
-    <button type="button" id="kl-box-reset" class="photo-button">원래 인식으로</button>
-    <button type="button" id="kl-box-delete" class="photo-button">선택 결과 삭제</button>
-    <span id="kl-edit-status" style="font-size:11px;color:#9fb2cc">결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.</span>
+   <div id="kl-edit-controls" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 11px;padding:10px 12px;border:1px solid #283447;border-radius:12px;background:#0c1626">
+    <strong style="font-size:13px;color:#dfeaff">잘림 여백</strong>
+    <button type="button" id="kl-box-wider" class="photo-button">넓히기 ＋</button>
+    <button type="button" id="kl-box-narrower" class="photo-button">줄이기 −</button>
+    <button type="button" id="kl-box-reset" class="photo-button">기본으로</button>
+    <span id="kl-edit-status" style="font-size:11px;color:#9fb2cc">추출한 결과를 선택한 뒤 여백을 간단히 조절하세요. 기기 크기에 맞게 자동 적용됩니다.</span>
    </div>
    <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
     <button type="button" id="kl-zoom-out" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 축소">−</button>
@@ -2008,7 +2007,7 @@ window.closeAdmin=()=>{
      <canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
     </div>
    </div>
-   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 자동 인식이 조금 틀리면 위 미세 조정 버튼으로 선택 박스를 바로 수정할 수 있습니다.</p>
+   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 인식이 조금 틀리면 추출 결과를 선택하고 ‘넓히기/줄이기’로 잘림 여백만 간단히 조절하세요.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button></div>
@@ -5612,9 +5611,14 @@ saveBtn.addEventListener("click",async()=>{
 (()=>{
  'use strict';
  const $=id=>document.getElementById(id);
- const photos=[],results=[];
- let active=-1,busy=false,editingIndex=-1;
+ // 일반과 고번은 업로드, 선택 결과, 현재 사진 번호까지 완전히 독립적으로 보관.
+ const albums={
+  normal:{photos:[],results:[],active:-1,editingIndex:-1},
+  special:{photos:[],results:[],active:-1,editingIndex:-1}
+ };
  let killlogMode='normal';
+ let photos=albums.normal.photos,results=albums.normal.results;
+ let active=-1,busy=false,editingIndex=-1;
  const view=$('kl-source'), ctx=view.getContext('2d',{willReadFrequently:true});
  const overlay=$('kl-selection-overlay'), mark=overlay.getContext('2d');
  const OUTPUT_W=760,MIN_OUTPUT_H=190;
@@ -5628,12 +5632,23 @@ saveBtn.addEventListener("click",async()=>{
  const rgbDelta=(r1,g1,b1,r2,g2,b2)=>Math.max(Math.abs(r1-r2),Math.abs(g1-g2),Math.abs(b1-b2));
  
  function setMode(mode){
+  if(!albums[mode])return;
+  const previous=albums[killlogMode];
+  previous.active=active;
+  previous.editingIndex=editingIndex;
   killlogMode=mode;
+  const current=albums[killlogMode];
+  photos=current.photos;results=current.results;
+  active=current.active;editingIndex=current.editingIndex;
   $('kl-mode-normal').classList.toggle('active',mode==='normal');
   $('kl-mode-special').classList.toggle('active',mode==='special');
+  $('kl-upload-normal').style.display=mode==='normal'?'':'none';
+  $('kl-upload-special').style.display=mode==='special'?'':'none';
   $('kl-mode-label').textContent=mode==='normal'
-   ? '일반 킬로그: 기존 막대형 / 다른 사람 사진도 최대한 자동 인식'
-   : '고번 킬로그: 전시 화면·차량 화면처럼 다른 형태의 킬로그 전용';
+   ? '일반 사진함 · 기존 킬로그 전용'
+   : '고번 사진함 · 전시·차량 화면의 작은 킬로그 전용';
+  redraw();resultView();
+  editStatus(editingIndex>=0?`${mode==='normal'?'일반':'고번'} 킬로그 결과 선택됨. 여백을 조절하세요.`:'결과를 선택하면 잘림 여백을 조절할 수 있습니다.');
   if(active>=0)status(`${mode==='normal'?'일반':'고번'} 킬로그 모드입니다. 자를 킬로그를 눌러주세요.`);
  }
  $('kl-mode-normal').addEventListener('click',()=>setMode('normal'));
@@ -5681,7 +5696,8 @@ saveBtn.addEventListener("click",async()=>{
   overlay.width=view.width;overlay.height=view.height;
   mark.clearRect(0,0,overlay.width,overlay.height);
   if(active<0)return;
-  results.filter(r=>r.photo===active&&r.bounds).forEach((r,idx)=>{
+  results.forEach((r,idx)=>{
+   if(r.photo!==active||!r.bounds)return;
    const b=r.bounds;
    const edit=idx===editingIndex;
    mark.save();
@@ -5705,13 +5721,14 @@ saveBtn.addEventListener("click",async()=>{
  });}
  function redraw(){
   const holder=$('kl-photos');holder.replaceChildren();
+  albums[killlogMode].active=active;
   photos.forEach((p,i)=>{
    const b=document.createElement('button');b.className='photo-button'+(i===active?' active':'');
    b.textContent=`사진 ${i+1} (${results.filter(r=>r.photo===i).length}개)`;b.onclick=()=>{active=i;redraw()};holder.append(b);
   });
   if(active<0||!photos[active]){
    view.width=1;view.height=1;ctx.clearRect(0,0,1,1);
-   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();editingIndex=-1;editStatus('결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.');return;
+   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();editingIndex=-1;editStatus('추출한 결과를 선택하면 여백을 조절할 수 있습니다.');return;
   }
   const im=photos[active].image;
   view.width=im.naturalWidth;view.height=im.naturalHeight;
@@ -5760,10 +5777,10 @@ saveBtn.addEventListener("click",async()=>{
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&previewModal.style.display==='flex')hidePreview();});
  function setEditingIndex(idx){
   editingIndex=idx;
-  if(idx<0||!results[idx]){editStatus('결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.');drawSelections();resultView();return;}
+  if(idx<0||!results[idx]){editStatus('추출한 결과를 선택하면 여백을 조절할 수 있습니다.');drawSelections();resultView();return;}
   const r=results[idx];
   active=r.photo;redraw();
-  editStatus(`사진 ${r.photo+1}의 ${r.mode==='special'?'고번':'일반'} 킬로그를 미세 조정 중입니다.`);
+  editStatus(`사진 ${r.photo+1}의 ${r.mode==='special'?'고번':'일반'} 킬로그 여백 조절 중입니다.`);
   drawSelections();resultView();
  }
  function resultView(){
@@ -5773,7 +5790,7 @@ saveBtn.addEventListener("click",async()=>{
   results.forEach((r,i)=>{
    const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');
    card.style.borderColor=i===editingIndex?'#ffb020':'';
-   const img=document.createElement('img');img.src=r.url;img.alt='누르면 확대해서 볼 수 있습니다';img.style.cursor='zoom-in';img.onclick=()=>showPreview(r,i);
+   const img=document.createElement('img');img.src=r.url;img.alt='킬로그 추출 결과: 누르면 확대해서 볼 수 있습니다';img.style.cursor='zoom-in';img.onclick=()=>showPreview(r,i);
    img.style.cssText='display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
    const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${r.mode==='special'?'고번':'일반'} · ${OUTPUT_W}×${r.outputH}`;
    card.append(img,info);
@@ -5782,28 +5799,95 @@ saveBtn.addEventListener("click",async()=>{
    const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
-    mk('미세조정',()=>setEditingIndex(i)),
+    mk('여백 조절',()=>setEditingIndex(i)),
     mk('개별 저장',()=>saveFiles([r],i)),
     mk('삭제',()=>deleteResult(i))
    );
    card.append(btnRow);wrap.append(card);
   });
  }
- async function saveFiles(list,startIndex){
-  for(let i=0;i<list.length;i++){
-   const r=list[i],f=new File([r.blob],`킬로그_${String(startIndex+i+1).padStart(2,'0')}.png`,{type:'image/png'});
-   const u=URL.createObjectURL(f),a=document.createElement('a');a.href=u;a.download=f.name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);await new Promise(r=>setTimeout(r,220));
+ async function saveFiles(list,startIndex=0){
+  if(!list?.length)return;
+  const files=list.map((r,i)=>new File([r.blob],`${r.mode==='special'?'고번':'일반'}_킬로그_${String(startIndex+i+1).padStart(2,'0')}.png`,{type:'image/png'}));
+  // 옷/총 저장과 동일: iOS/iPadOS/Android에서 파일 공유를 지원할 경우 공유·저장 창 사용.
+  // 사용자 버튼을 누른 직후 다른 await 없이 share를 호출해야 모바일 공유 권한이 유지된다.
+  try{
+   if(navigator.canShare&&navigator.canShare({files})&&navigator.share){
+    await navigator.share({files});return;
+   }
+  }catch(e){
+   if(e?.name==='AbortError')return;
+   console.warn('킬로그 공유창 실패',e);
+  }
+  // 지원하지 않는 브라우저에서는 원본 PNG 파일 내려받기로 대체.
+  for(const f of files){
+   const url=URL.createObjectURL(f),a=document.createElement('a');a.href=url;a.download=f.name;a.style.display='none';
+   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2500);
+   if(files.length>1)await new Promise(resolve=>setTimeout(resolve,180));
   }
  }
  $('kl-save-all').onclick=()=>saveFiles(results,0);
- $('kl-files').addEventListener('change',async e=>{
-  const files=[...e.target.files];if(!files.length)return;status('사진 불러오는 중…');let ok=0;
-  for(const f of files){try{const im=await loadImage(f);photos.push({image:im,name:f.name});ok++;}catch(err){console.warn(err);}}
-  if(ok){active=photos.length-ok;redraw();window.logActivity?.('킬로그 사진 추가',{images:ok,total:photos.length});}else status('사진을 읽지 못했습니다.');e.target.value='';
- });
+ async function receivePhotos(mode,e){
+  const filesToAdd=[...e.target.files];if(!filesToAdd.length)return;
+  const target=albums[mode];
+  const first=target.photos.length;
+  if(killlogMode!==mode)setMode(mode);
+  status(`${mode==='normal'?'일반':'고번'} 사진을 불러오는 중…`);
+  let ok=0;
+  // 사진 읽기 중 모드를 바꿔도 결과가 다른 모드 사진함으로 섞이지 않게 고정한다.
+  for(const f of filesToAdd){try{const im=await loadImage(f);target.photos.push({image:im,name:f.name});ok++;}catch(err){console.warn(err);}}
+  if(ok){
+   target.active=first;
+   target.editingIndex=-1;
+   if(killlogMode===mode){active=first;editingIndex=-1;redraw();resultView();}
+   window.logActivity?.('킬로그 사진 추가',{mode,images:ok,total:target.photos.length});
+  }else if(killlogMode===mode)status('사진을 읽지 못했습니다.');
+  e.target.value='';
+ }
+ $('kl-files-normal').addEventListener('change',e=>receivePhotos('normal',e));
+ $('kl-files-special').addEventListener('change',e=>receivePhotos('special',e));
  $('kl-clear').onclick=()=>{photos.length=0;active=-1;editingIndex=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();drawSelections();};
  
+ function cleanupDetachedBelow(alpha,w,h,raw){
+  const seen=new Uint8Array(w*h),queue=new Int32Array(w*h),items=[];
+  for(let i=0;i<alpha.length;i++){
+   if(alpha[i]<16||seen[i])continue;
+   let head=0,tail=1;queue[0]=i;seen[i]=1;
+   let minY=h,maxY=0,minX=w,maxX=0;
+   while(head<tail){
+    const idx=queue[head++],x=idx%w,y=(idx/w)|0;
+    if(y<minY)minY=y;if(y>maxY)maxY=y;if(x<minX)minX=x;if(x>maxX)maxX=x;
+    for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++)for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
+     const k=yy*w+xx;if(!seen[k]&&alpha[k]>=16){seen[k]=1;queue[tail++]=k;}
+    }
+   }
+   items.push({seed:i,area:tail,minY,maxY,minX,maxX});
+  }
+  if(items.length<2)return;
+  const main=items.reduce((a,b)=>a.area>b.area?a:b);
+  for(const item of items){
+   // 큰 장식은 유지. 본체와 떨어진 '아래쪽 작은 불꽃 조각'만 제거.
+   if(item===main||item.area>main.area*.018||item.minY<=main.maxY+6||item.maxX-item.minX>w*.35)continue;
+   let head=0,tail=1;queue[0]=item.seed;
+   const local=new Set([item.seed]);
+   while(head<tail){
+    const idx=queue[head++],x=idx%w,y=(idx/w)|0;
+    for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++)for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
+     const k=yy*w+xx;
+     if(alpha[k]>=16&&!local.has(k)){local.add(k);queue[tail++]=k;}
+    }
+   }
+   let warm=0;
+   for(let j=0;j<tail;j++){
+    const k=queue[j]*4,R=raw[k],G=raw[k+1],B=raw[k+2];
+    if(R>100 && R>G*1.22 && G>B*1.05)warm++;
+   }
+   // 보라색 펜던트나 보석 등 의도적인 분리 장식은 절대 지우지 않는다.
+   if(warm/Math.max(1,tail)>.48)for(let j=0;j<tail;j++)alpha[queue[j]]=0;
+  }
+ }
  function createMaskedResult(sourceX,sourceY,w,h,raw,alpha,mode,meta={}){
+  if(mode==='normal')cleanupDetachedBelow(alpha,w,h,raw);
   const master=document.createElement('canvas');master.width=w;master.height=h;
   const img=master.getContext('2d').createImageData(w,h);
   let minX=w,minY=h,maxX=-1,maxY=-1;
@@ -5838,12 +5922,76 @@ saveBtn.addEventListener("click",async()=>{
   if(best.length<minKeep)return null;
   const out=new Uint8Array(w*h);for(const p of best)out[p]=1;return out;
  }
+ // 고번(전시/차량 화면)은 일반 킬로그와 별도의 색상·경계 기반 마스크를 사용한다.
+ // 화면비율 대신 원본 가로 픽셀 비율을 기준으로 확대하므로 패드/폰 인치에 영향받지 않는다.
+ function buildSpecialMaskedResult(tx,ty){
+  const W=view.width,H=view.height;
+  if(W<250||H<200)return null;
+  const s=W/1536;
+  const x0=clamp(Math.floor(tx-163*s),0,W-2),x1=clamp(Math.ceil(tx+193*s),x0+1,W);
+  const y0=clamp(Math.floor(ty-39*s),0,H-2),y1=clamp(Math.ceil(ty+43*s),y0+1,H);
+  const w=x1-x0,h=y1-y0;
+  const src=ctx.getImageData(x0,y0,w,h).data;
+  const top=ctx.getImageData(x0,clamp(Math.round(ty-47*s),0,H-1),w,1).data;
+  const bottom=ctx.getImageData(x0,clamp(Math.round(ty+50*s),0,H-1),w,1).data;
+  const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
+  let kept=0;
+  // 빛 효과가 강한 오렌지 막대에서는 밝은 벽/수평선을 장식으로 착각하지 않도록 색상 확인.
+  const sample=ctx.getImageData(clamp(Math.round(tx+80*s),0,W-1),clamp(Math.round(ty+12*s),0,H-1),1,1).data;
+  const warm=sample[0]>110 && sample[0]>sample[1]*1.20 && sample[1]>sample[2]*1.40;
+  for(let y=0;y<h;y++){
+   const gy=y0+y,dy=(gy-ty)/s;
+   const t=clamp((dy+47)/97,0,1);
+   for(let x=0;x<w;x++){
+    const i=4*(y*w+x),j=x*4,gx=x0+x,dx=(gx-tx)/s;
+    const R=src[i],G=src[i+1],B=src[i+2],sat=Math.max(R,G,B)-Math.min(R,G,B),maxv=Math.max(R,G,B);
+    raw[i]=R;raw[i+1]=G;raw[i+2]=B;raw[i+3]=255;
+    const bgR=top[j]*(1-t)+bottom[j]*t;
+    const bgG=top[j+1]*(1-t)+bottom[j+1]*t;
+    const bgB=top[j+2]*(1-t)+bottom[j+2]*t;
+    const d=rgbDelta(R,G,B,bgR,bgG,bgB);
+    const core=dx>=-123&&dx<=180&&dy>=-11&&dy<=29;
+    const detail=dx>=-156&&dx<=58&&dy>=-34&&dy<=35;
+    const orange=R>105&&R>G*1.14&&G>B*1.4;
+    const chroma=!warm||orange||(maxv>205&&d>55);
+    let a=0;
+    if(core && d>19 && chroma)a=255;
+    if(detail && d>31 && maxv>84 && (sat>21||maxv>160) && chroma)a=255;
+    // 본체는 끊기지 않도록, 배경과 완전히 같은 부분이 아니면 보존한다.
+    if(core && dx>27 && dx<145 && dy>-5 && dy<26 && d>13 && chroma)a=Math.max(a,230);
+    if(dx>143 && a){
+     const fade=clamp((184-dx)/41,0,1);a=Math.round(a*fade*fade*(3-2*fade));
+    }
+    alpha[y*w+x]=a;
+    if(a>=16)kept++;
+   }
+  }
+  if(kept<200*s*s)return null;
+  // 복잡한 배경을 마스크로 복구하지 않는다. 작은 단독 픽셀만 정리.
+  const seen=new Uint8Array(w*h),stack=[];
+  for(let i=0;i<alpha.length;i++){
+   if(seen[i]||alpha[i]<16)continue;
+   const comp=[];stack.length=0;stack.push(i);seen[i]=1;
+   while(stack.length){
+    const p=stack.pop(),px=p%w,py=(p/w)|0;comp.push(p);
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     if(!dx&&!dy)continue;
+     const xx=px+dx,yy=py+dy;
+     if(xx<0||xx>=w||yy<0||yy>=h)continue;
+     const q=yy*w+xx;
+     if(!seen[q]&&alpha[q]>=16){seen[q]=1;stack.push(q);}
+    }
+   }
+   if(comp.length<Math.max(4,Math.round(7*s*s)))for(const j of comp)alpha[j]=0;
+  }
+  return createMaskedResult(x0,y0,w,h,raw,alpha,'special',{specialMask:true,click:[tx,ty]});
+ }
  function buildGenericResult(tx,ty,mode='normal'){
   const W=view.width,H=view.height; if(W<200||H<120)return null;
   const rgba=ctx.getImageData(0,0,W,H).data;
-  const sx=W/1536,sy=H/709;
+  const sx=W/1536,sy=(W/H>1.95?H/709:W/1536);
   const cfg=mode==='special'
-   ? {left:140,right:360,top:70,bottom:75,bandHalf:15,refGap:28,decorLeft:125,decorRight:95,threshold:20,decorThreshold:24,fadeRight:160}
+   ? {left:240,right:380,top:86,bottom:86,bandHalf:17,refGap:34,decorLeft:210,decorRight:110,threshold:25,decorThreshold:27,fadeRight:190}
    : {left:260,right:520,top:120,bottom:120,bandHalf:24,refGap:48,decorLeft:190,decorRight:115,threshold:18,decorThreshold:22,fadeRight:190};
   const x0=clamp(Math.floor(tx-cfg.left*sx),0,W-2), x1=clamp(Math.ceil(tx+cfg.right*sx),x0+1,W);
   const y0=clamp(Math.floor(ty-cfg.top*sy),0,H-2), y1=clamp(Math.ceil(ty+cfg.bottom*sy),y0+1,H);
@@ -5863,14 +6011,15 @@ saveBtn.addEventListener("click",async()=>{
     const absX=x0+x;
     const inCore=Math.abs(absY-ty)<=cfg.bandHalf*sy && absX>=tx-cfg.left*.18*sx && absX<=tx+cfg.right*.85*sx;
     const inLeftDecor=absX>=tx-cfg.decorLeft*sx && absX<=tx+cfg.decorRight*sx && Math.abs(absY-ty)<=cfg.top*.9*sy;
-    const brightText=maxv>170 && sat<85;
-    const decorative=inLeftDecor && d>cfg.decorThreshold && sat>14 && maxv>70;
+    const brightText=maxv>165 && sat<100 && d>cfg.threshold;
+    const decorative=inLeftDecor && d>cfg.decorThreshold && sat>21 && maxv>83;
     let a=0;
-    if(inCore && (d>cfg.threshold || brightText || sat>8)) a=255;
+    // 주변 게임 배경을 통째로 복사하던 밝기/채도 조건을 제거함.
+    if(inCore && (d>cfg.threshold || brightText)) a=255;
     if(decorative) a=255;
-    if(absX>tx+cfg.fadeRight*sx && inCore){
+    if(absX>tx+cfg.fadeRight*sx && a){
      const t=clamp((tx+cfg.right*.85*sx-absX)/Math.max(1,cfg.right*.25*sx),0,1);
-     a=Math.max(a,Math.round(255*t*t*(3-2*t)));
+     a=Math.round(a*t*t*(3-2*t));
     }
     alpha[y*w+x]=a;
    }
@@ -5950,55 +6099,105 @@ saveBtn.addEventListener("click",async()=>{
  async function extractKilllog(tx,ty,mode){
   let result=null;
   if(mode==='normal'){result=await extractKilllogClassic(tx,ty);if(!result)result=buildGenericResult(tx,ty,'normal');}
-  else result=buildGenericResult(tx,ty,'special');
+  else result=buildSpecialMaskedResult(tx,ty);
   if(!result)return null;
   if(!(await encodeResult(result)))return null;
   return result;
  }
  async function tweakResult(idx,kind){
-  const r=results[idx];if(!r)return;const stepX=Math.max(1,Math.round(view.width/420)),stepY=Math.max(1,Math.round(view.height/420));
-  const limX=r.master.width, limY=r.master.height; let ch=true;
-  if(kind==='left')r.inner.x=clamp(r.inner.x-stepX,0,Math.max(0,limX-r.inner.w));
-  else if(kind==='right')r.inner.x=clamp(r.inner.x+stepX,0,Math.max(0,limX-r.inner.w));
-  else if(kind==='up')r.inner.y=clamp(r.inner.y-stepY,0,Math.max(0,limY-r.inner.h));
-  else if(kind==='down')r.inner.y=clamp(r.inner.y+stepY,0,Math.max(0,limY-r.inner.h));
-  else if(kind==='wider'){r.inner.x=clamp(r.inner.x-stepX,0,limX-1);r.inner.w=clamp(r.inner.w+stepX*2,2,limX-r.inner.x);} 
-  else if(kind==='narrower'){r.inner.x=clamp(r.inner.x+stepX,0,limX-2);r.inner.w=clamp(r.inner.w-stepX*2,2,limX-r.inner.x);} 
-  else if(kind==='taller'){r.inner.y=clamp(r.inner.y-stepY,0,limY-1);r.inner.h=clamp(r.inner.h+stepY*2,2,limY-r.inner.y);} 
-  else if(kind==='shorter'){r.inner.y=clamp(r.inner.y+stepY,0,limY-2);r.inner.h=clamp(r.inner.h-stepY*2,2,limY-r.inner.y);} 
-  else if(kind==='reset'){r.inner={...r.baseInner};}
-  else ch=false;
-  if(!ch)return;
-  await encodeResult(r);drawSelections();resultView();editStatus('미세 조정 내용을 반영했어요.');
+  const r=results[idx];if(!r||busy)return;
+  const limX=r.master.width,limY=r.master.height;
+  const sx=Math.max(2,Math.round(view.width/1536*9));
+  const sy=Math.max(2,Math.round(view.height/709*5));
+  if(kind==='reset')r.inner={...r.baseInner};
+  else if(kind==='wider'){
+   const x0=Math.max(0,r.inner.x-sx),y0=Math.max(0,r.inner.y-sy);
+   const x1=Math.min(limX,r.inner.x+r.inner.w+sx),y1=Math.min(limY,r.inner.y+r.inner.h+sy);
+   r.inner={x:x0,y:y0,w:x1-x0,h:y1-y0};
+  }else if(kind==='narrower'){
+   const x0=Math.min(limX-2,r.inner.x+sx),y0=Math.min(limY-2,r.inner.y+sy);
+   const x1=Math.max(x0+2,r.inner.x+r.inner.w-sx),y1=Math.max(y0+2,r.inner.y+r.inner.h-sy);
+   r.inner={x:x0,y:y0,w:x1-x0,h:y1-y0};
+  }else return;
+  busy=true;
+  try{await encodeResult(r);drawSelections();resultView();editStatus('잘림 여백을 변경했어요. 아래 미리보기를 확인하세요.');}
+  catch(e){console.error(e);editStatus('여백 조정에 실패했습니다.');}
+  finally{busy=false;}
  }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
   if(editingIndex===idx)editingIndex=-1; else if(editingIndex>idx)editingIndex--;
   resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');
  }
- [['kl-box-left','left'],['kl-box-right','right'],['kl-box-up','up'],['kl-box-down','down'],['kl-box-wider','wider'],['kl-box-narrower','narrower'],['kl-box-taller','taller'],['kl-box-shorter','shorter'],['kl-box-reset','reset']].forEach(([id,kind])=>$(id).onclick=()=>editingIndex>=0&&tweakResult(editingIndex,kind));
- $('kl-box-delete').onclick=()=>editingIndex>=0&&deleteResult(editingIndex);
- 
- stage.addEventListener('click',async e=>{
+ [['kl-box-wider','wider'],['kl-box-narrower','narrower'],['kl-box-reset','reset']].forEach(([id,kind])=>$(id).onclick=()=>editingIndex>=0?tweakResult(editingIndex,kind):editStatus('먼저 아래 결과의 ‘여백 조절’을 눌러주세요.'));
+ // Tablet-friendly finger/pen/mouse input: one tap -> one selection, panning/zooming never selects.
+ let gesturePointer=null,gestureTouch=null,lastHandledTouch=0;
+ const TAP_DRIFT=18,TAP_SCROLL_DRIFT=8,TAP_MAX_MS=1750;
+ const gestureStart=(id,x,y)=>({id,x,y,at:Date.now(),scrollX:viewport.scrollLeft,scrollY:viewport.scrollTop});
+ function validTap(start,x,y){
+  return !!start&&Date.now()-start.at<=TAP_MAX_MS&&
+   Math.hypot(x-start.x,y-start.y)<=TAP_DRIFT&&
+   Math.abs(viewport.scrollLeft-start.scrollX)<=TAP_SCROLL_DRIFT&&
+   Math.abs(viewport.scrollTop-start.scrollY)<=TAP_SCROLL_DRIFT&&
+   !pinch&&Date.now()>=suppressClickUntil;
+ }
+ function tapped(x,y){lastHandledTouch=Date.now();void chooseKilllog(x,y);}
+ stage.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse')return;
+  gesturePointer=e.isPrimary&&e.button===0&&!pinch?gestureStart(e.pointerId,e.clientX,e.clientY):null;
+ },{passive:true});
+ stage.addEventListener('pointermove',e=>{
+  if(gesturePointer&&e.pointerId===gesturePointer.id&&
+   Math.hypot(e.clientX-gesturePointer.x,e.clientY-gesturePointer.y)>TAP_DRIFT)gesturePointer=null;
+ },{passive:true});
+ stage.addEventListener('pointercancel',()=>{gesturePointer=null;},{passive:true});
+ stage.addEventListener('pointerup',e=>{
+  if(e.pointerType==='mouse')return;
+  const start=gesturePointer;gesturePointer=null;
+  if(!start||e.pointerId!==start.id||lastHandledTouch>=start.at||!validTap(start,e.clientX,e.clientY))return;
+  e.preventDefault();tapped(e.clientX,e.clientY);
+ });
+ stage.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1){gestureTouch=null;gesturePointer=null;return;}
+  const t=e.touches[0];gestureTouch=gestureStart(t.identifier,t.clientX,t.clientY);
+ },{passive:true});
+ stage.addEventListener('touchmove',e=>{
+  if(!gestureTouch||e.touches.length!==1){gestureTouch=null;return;}
+  const t=e.touches[0];if(t.identifier!==gestureTouch.id||
+   Math.hypot(t.clientX-gestureTouch.x,t.clientY-gestureTouch.y)>TAP_DRIFT)gestureTouch=null;
+ },{passive:true});
+ stage.addEventListener('touchcancel',()=>{gestureTouch=null;gesturePointer=null;},{passive:true});
+ stage.addEventListener('touchend',e=>{
+  const start=gestureTouch;gestureTouch=null;
+  if(!start||e.touches.length||lastHandledTouch>=start.at)return;
+  const t=Array.from(e.changedTouches).find(p=>p.identifier===start.id);
+  if(!t||!validTap(start,t.clientX,t.clientY))return;
+  e.preventDefault();tapped(t.clientX,t.clientY);
+ },{passive:false});
+ stage.addEventListener('click',e=>{
+  if(Date.now()-lastHandledTouch<850||Date.now()<suppressClickUntil)return;
+  void chooseKilllog(e.clientX,e.clientY);
+ });
+ async function chooseKilllog(clientX,clientY){
   if(Date.now()<suppressClickUntil)return;
   if(active<0||busy)return;
   const rect=view.getBoundingClientRect(),W=view.width,H=view.height;
-  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;
-  const tx=clamp(Math.round((e.clientX-rect.left)*W/rect.width),0,W-1);
-  const ty=clamp(Math.round((e.clientY-rect.top)*H/rect.height),0,H-1);
+  if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return;
+  const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
+  const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
   const already=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
-  if(already>=0){setEditingIndex(already);status('선택한 킬로그를 미세 조정할 수 있어요.');return;}
+  if(already>=0){setEditingIndex(already);status('선택한 킬로그의 잘림 여백을 조절할 수 있어요.');return;}
   busy=true;status('킬로그를 자르는 중…');
   try{
    const picked=await extractKilllog(tx,ty,killlogMode);
    if(!picked){status('킬로그를 인식하지 못했어요. 막대 중앙이나 장식 부분을 조금 더 정확히 눌러주세요.');return;}
    picked.photo=active;results.push(picked);updatePhotoCounts();resultView();setEditingIndex(results.length-1);drawSelections();
-   status('킬로그 추출 완료! 필요하면 위 미세 조정 버튼으로 바로 다듬으세요.');
+   status('킬로그 추출 완료! 아래 결과를 확인하고 필요하면 여백을 조절하세요.');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
- });
- setMode('normal');redraw();resultView();
+ }
+ setMode('normal');
 })();
 </script>
 
