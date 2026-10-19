@@ -5875,8 +5875,37 @@ saveBtn.addEventListener("click",async()=>{
   if(nearby/Math.max(1,samples)<.20)return null;
 
   const leftBand=fire?490:545;
-  const topBand=darkRed?153:fire?146:149;
-  const bottomBand=darkRed?195:fire?192:190;
+  // 아이폰(1536x709): 원래 추출 수치를 그대로 사용한다.
+  // 태블릿 캡처: 킬로그 실제 높이가 사진마다 다르므로 바깥쪽 평탄한 막대 영역으로 측정한다.
+  // 흰 글자와 왼쪽 장식이 없는 오른쪽 막대 위치(820~930)만 표본으로 사용한다.
+  let topBand=darkRed?153:fire?146:149;
+  let bottomBand=darkRed?195:fire?192:190;
+  if(sourceCanvas!==view){
+   const probes=[820,845,870,890,910,930];
+   const topRef=probes.map(x=>rgb(x,112));
+   const lowRef=probes.map(x=>rgb(x,234));
+   let first=-1,last=-1,bestStart=-1,bestEnd=-1;
+   // 게임 UI 고정 좌표에서 전경과 배경의 색 차이를 비교. 번진 장식은 별도 마스크로 보존.
+   for(let y=105;y<=220;y++){
+    let hits=0;
+    for(let k=0;k<probes.length;k++){
+     const c=rgb(probes[k],y),t=topRef[k],b=lowRef[k];
+     const ref=[(t[0]+b[0])/2,(t[1]+b[1])/2,(t[2]+b[2])/2];
+     if(delta(c,ref)>15)hits++;
+    }
+    if(hits>=3){if(first<0)first=y;last=y;}
+    else if(first>=0){
+     if(last-first>bestEnd-bestStart){bestStart=first;bestEnd=last;}
+     first=-1;last=-1;
+    }
+   }
+   if(first>=0&&last-first>bestEnd-bestStart){bestStart=first;bestEnd=last;}
+   // 정상적인 킬로그 두께만 허용하며, 실제 띠 바깥으로 사각형 마스크가 확장되지 않게 한다.
+   if(bestStart>=128&&bestStart<=180 && bestEnd-bestStart>=23 && bestEnd-bestStart<=75){
+    topBand=bestStart;
+    bottomBand=bestEnd+1;
+   }
+  }
   const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
   const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
   // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
@@ -5901,7 +5930,7 @@ saveBtn.addEventListener("click",async()=>{
     const bx=(x+x0)/sx;
     let d=0;
     for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
-    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
+    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=(sourceCanvas!==view&&fire?620:leftBand)&&bx<=975;
     let a=0;
     if(inStripe){
      // 완전 불투명한 글자·총 아이콘을 보존하면서 오른쪽만 부드럽게 퇴색.
@@ -5966,7 +5995,7 @@ saveBtn.addEventListener("click",async()=>{
    bounds:{x:x0+minX,y:y0+minY,w:cropW,h:cropH}};
   if(!(await encodeResult(result)))return null;
   window.__killlogLastDebug={
-   fire,darkRed,largeOrnament,upperDecorCount,lowerRedCount,body:[leftBand*sx,topBand*sy,970*sx,bottomBand*sy],bounds:[x0+minX,y0+minY,cropW,cropH],touch:[tx,ty]};
+   topBand,bottomBand,tabletBand:sourceCanvas!==view,fire,darkRed,largeOrnament,upperDecorCount,lowerRedCount,body:[leftBand*sx,topBand*sy,970*sx,bottomBand*sy],bounds:[x0+minX,y0+minY,cropW,cropH],touch:[tx,ty]};
   return result;
  }
 
