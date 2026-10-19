@@ -521,7 +521,8 @@ input[type=file]{display:none}
 #board-tab .board-preset.active{outline:2px solid #a4c1ec;border-color:#a4c1ec}
 #board-tab .board-preset span{display:block;color:#bac6d8;font-size:11px;margin-top:4px}
 #board-tab .board-preview-wrap{padding:10px;background:#101725;border:1px solid #354157;border-radius:16px;overflow:auto}
-#board-tab #b_preview{display:block;width:100%;height:auto;border-radius:6px;background:#fff}
+#board-tab #b_preview{display:block;width:100%;height:auto;border-radius:6px;background:#fff;touch-action:manipulation;cursor:pointer}
+#board-tab .board-preview-wrap{width:min(calc(100vw - 24px),1250px);max-width:none;margin-left:50%;transform:translateX(-50%)}
 #board-tab .board-sticky-actions{position:sticky;bottom:8px;z-index:20;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;padding:8px 0;background:linear-gradient(transparent,#08090d 25%)}
 #board-tab .board-sticky-actions .board-btn{min-height:54px;font-size:14px}
 #board-tab .board-callout{padding:12px;border-radius:12px;background:#111a2a;color:#b7c3d6;font-size:12px;line-height:1.55;margin-top:10px}
@@ -754,6 +755,41 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 
 <body>
 
+<div id="auth-consent-screen" style="display:none;position:fixed;inset:0;z-index:1000001;background:#080e18ed;align-items:center;justify-content:center;padding:18px">
+ <div style="width:min(100%,480px);border:1px solid #415676;border-radius:20px;background:#182438;padding:24px 22px;box-shadow:0 22px 65px #0009;color:#e9f0ff">
+  <h2 style="font-size:22px;margin-bottom:10px">이용 안내 및 개인정보 처리 동의</h2>
+  <p style="font-size:13px;line-height:1.75;margin-bottom:12px">이 서비스는 사진에서 게임 아이템을 추출·편집하는 프로그램입니다. 계정 가입과 이용 권한 관리를 위해 다음 정보를 사용합니다.</p>
+  <div style="padding:13px;background:#101a2b;border-radius:12px;font-size:12px;line-height:1.85;color:#ccdaf2">
+   <b>수집·이용 항목</b>: 이메일 주소, 닉네임, 계정 식별번호(UID), 등급·이용 기간, 접속 및 기능 이용 기록<br>
+   <b>이용 목적</b>: 로그인, 회원 승인·등급·기간 관리, 서비스 운영 및 오류 확인<br>
+   <b>보유 기간</b>: 서비스 이용 및 회원 관리에 필요한 기간. 계정 삭제나 정보 삭제 요청 시 관련 법령상 보관이 필요한 정보를 제외하고 정리합니다.<br>
+   <b>비밀번호</b>: Firebase 인증 서비스에서 처리하며 관리자 화면에 비밀번호를 표시하거나 저장하지 않습니다.<br>
+   <b>관리자 확인 가능 정보</b>: 회원 닉네임·UID·등급·기간·작업 기록 등 관리자 화면의 운영 정보(이메일은 Firebase 인증 콘솔에서 확인될 수 있음)
+  </div>
+  <p style="font-size:12px;line-height:1.6;color:#9fb3d2;margin:12px 0">만 14세 미만은 법정대리인의 동의가 필요합니다. 동의하지 않아도 페이지를 닫을 수 있지만, 동의하지 않으면 신규 가입과 서비스 이용이 어렵습니다. 회원 정보의 열람·수정·삭제는 운영자에게 요청할 수 있습니다.</p>
+  <label style="display:flex;gap:10px;align-items:center;margin:10px 0 16px;font-size:14px;cursor:pointer"><input type="checkbox" id="auth-consent-check" style="width:19px;height:19px;flex-shrink:0"> 이용 안내와 개인정보 수집·이용 내용을 확인했고 동의합니다.</label>
+  <button id="auth-consent-continue" type="button" style="display:block;width:100%;border:0;border-radius:12px;background:linear-gradient(110deg,#90b2f8,#b2a9f9);color:#101827;font-weight:800;padding:14px">확인 후 로그인 / 회원가입</button>
+  <p id="auth-consent-error" role="status" style="min-height:1em;font-size:12px;color:#ffb0b0;margin-top:8px"></p>
+ </div>
+</div>
+<script>
+(()=>{
+ const overlay=document.getElementById('auth-consent-screen');
+ const check=document.getElementById('auth-consent-check');
+ const message=document.getElementById('auth-consent-error');
+ const key='dp_editor_privacy_ack_20261020';
+ let accepted=false;
+ try{accepted=localStorage.getItem(key)==='yes';}catch(_){/* private browsing */}
+ if(!accepted)overlay.style.display='flex';
+ document.getElementById('auth-consent-continue').addEventListener('click',()=>{
+  if(!check.checked){message.textContent='내용 확인 후 동의에 체크해 주세요.';return;}
+  accepted=true;try{localStorage.setItem(key,'yes');}catch(_){}
+  overlay.style.display='none';
+ });
+ window.hasEditorPrivacyAgreement=()=>accepted;
+ window.showEditorPrivacyNotice=()=>{overlay.style.display='flex';check.checked=accepted;message.textContent='';};
+})();
+</script>
 <div id="auth-screen">
  <div class="auth-box" id="view-user-form">
   <h2>🔐 대필 편집기 로그인</h2>
@@ -1288,6 +1324,7 @@ window.resetLoginPassword=async()=>{
  }finally{if(b){b.disabled=false;b.textContent='비밀번호 재설정 이메일 받기';}}
 };
 window.registerMember=async()=>{
+ if(!window.hasEditorPrivacyAgreement?.()){window.showEditorPrivacyNotice?.();return;} 
  const email=document.getElementById('auth-email').value.trim();
  const password=document.getElementById('auth-password').value;
  const nickname=document.getElementById('userNameInput').value.trim();
@@ -1800,7 +1837,7 @@ window.closeAdmin=()=>{
 <section class="photo-panel">
  <div class="panel-head">
   <strong>사진 목록</strong>
-  <span id="c_photoCountLabel">0장</span>
+  <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="c_totalSelected" style="color:#91b8ff;font-weight:800">전체 선택 0개</span><span id="c_photoCountLabel">0장</span></span>
  </div>
  <div id="c_photoList" class="photo-list"></div>
 </section>
@@ -1848,7 +1885,7 @@ window.closeAdmin=()=>{
  <div style="font-size:20px;font-weight:850">
   추출 결과 <span id="c_resultCountTitle" style="color:#629aff">0</span>
  </div>
- <div style="color:#666e7c;font-size:11px">JPG 이미지</div>
+ <button id="c_saveAllTop" type="button" class="photo-button" onclick="window.c_saveAllCards()" disabled style="min-height:44px;background:#869fea;color:#0a1632;font-weight:800;white-space:nowrap">📥 모두 저장</button>
 </div>
 
 <div id="c_results" class="results">
@@ -1898,7 +1935,7 @@ window.closeAdmin=()=>{
 <section class="photo-panel">
  <div class="panel-head">
   <strong>사진 목록</strong>
-  <span id="g_photoCountLabel">0장</span>
+  <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="g_totalSelected" style="color:#91b8ff;font-weight:800">전체 선택 0개</span><span id="g_photoCountLabel">0장</span></span>
  </div>
  <div id="g_photoList" class="photo-list"></div>
 </section>
@@ -1946,7 +1983,7 @@ window.closeAdmin=()=>{
  <div style="font-size:20px;font-weight:850">
   추출 결과 <span id="g_resultCountTitle" style="color:#629aff">0</span>
  </div>
- <div style="color:#666e7c;font-size:11px">JPG 이미지</div>
+ <button id="g_saveAllTop" type="button" class="photo-button" onclick="window.g_saveAllCards()" disabled style="min-height:44px;background:#869fea;color:#0a1632;font-weight:800;white-space:nowrap">📥 모두 저장</button>
 </div>
 
 <div id="g_results" class="results">
@@ -1987,13 +2024,7 @@ window.closeAdmin=()=>{
     <button type="button" id="kl-mode-special" class="photo-button">고번 킬로그</button>
     <span id="kl-mode-label" style="font-size:11px;color:#9fb2cc">일반 킬로그: 기존 막대형 / 고번 킬로그: 다른 형태의 킬로그 전용</span>
    </div>
-   <div id="kl-edit-controls" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 11px;padding:10px 12px;border:1px solid #283447;border-radius:12px;background:#0c1626">
-    <strong style="font-size:13px;color:#dfeaff">잘림 여백</strong>
-    <button type="button" id="kl-box-wider" class="photo-button">넓히기 ＋</button>
-    <button type="button" id="kl-box-narrower" class="photo-button">줄이기 −</button>
-    <button type="button" id="kl-box-reset" class="photo-button">기본으로</button>
-    <span id="kl-edit-status" style="font-size:11px;color:#9fb2cc">추출한 결과를 선택한 뒤 여백을 간단히 조절하세요. 기기 크기에 맞게 자동 적용됩니다.</span>
-   </div>
+   <p style="font-size:12px;color:#9eb6d8;line-height:1.55;margin:3px 0 10px">사진에서 킬로그 막대를 한 번 눌러 추출하세요. 기기 크기와 관계없이 원본 사진의 픽셀 좌표로 인식합니다.</p>
    <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
     <button type="button" id="kl-zoom-out" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 축소">−</button>
     <span id="kl-zoom-percent" style="font-size:13px;font-weight:800;min-width:50px;text-align:center;color:#cfe1ff">100%</span>
@@ -2275,6 +2306,7 @@ window.closeAdmin=()=>{
    <h2>6. 미리보기</h2>
    
    <div id="b_previewMeta" class="board-counter">옷 0장 · 총기 0장 · 대기 중</div>
+   <div id="b_touch-sort-hint" style="margin-top:8px;border:1px solid #3a5279;background:#0e1c34;color:#d6e6ff;padding:11px 12px;border-radius:12px;font-size:13px;text-align:center">옷 순서 바꾸기: 미리보기에서 <b>첫 번째 옷</b>을 누르고, <b>바꿀 옷</b>을 누르세요.</div>
    <div class="board-preview-wrap" style="margin-top:10px"><canvas id="b_preview" width="900" height="1300"></canvas></div>
    <div class="member-panel" style="margin:10px 0"><h3>🏛️ 대필 전시관 자동 등록</h3>
     <p>PNG 대필판을 저장하면 전시관에 자동으로 등록되고 모든 회원에게 공개됩니다.</p>
@@ -5265,6 +5297,7 @@ saveBtn.addEventListener("click",async()=>{
    return {zoom,dx,dy};
   }
 
+  const previewTileRects=[];
   function drawItems(items,x,w,cols,key,options={}){
    if(!items.length||!cols||!w)return;
    const top=options.top??photoTop;
@@ -5296,6 +5329,7 @@ saveBtn.addEventListener("click",async()=>{
      const item=entry.item;
      const x0=snap(colX),x1=snap(colX+entry.width);
      const tileW=Math.max(1/scale,x1-x0);
+     if(preview && items===clothes)previewTileRects.push({type:'clothes',index:clothes.indexOf(item),x:x0,y:y0,w:tileW,h:tileH});
      // packRows derives each tile's dimensions from its own source-image aspect ratio.
      // Snap shared edges to device pixels so Safari/iOS and Samsung render no hairline gaps.
      // No panel-colour underlay, copied edge, duplicate draw, or source crop is used.
@@ -5359,7 +5393,7 @@ saveBtn.addEventListener("click",async()=>{
   const bottomGap=isLarge&&clothes.length&&guns.length?
    Math.abs((photoTop+packingHeight(clothesPacking))-(largeGunTop+packingHeight(gunsPacking))):0;
   applyBoardSaturation(target);
-  return {width,height,mode,colsLeft:clothesCols,rowsLeft:clothesRows,colsRight:gunsCols,rowsRight:gunsRows,rows:isLarge?clothesRows:rows,bottomGap,
+  return {width,height,mode,previewTileRects,colsLeft:clothesCols,rowsLeft:clothesRows,colsRight:gunsCols,rowsRight:gunsRows,rows:isLarge?clothesRows:rows,bottomGap,
    photoRects:isLarge?{
     clothes:{x:margin,y:photoTop,w:largeLeftInnerW,h:Math.max(0,bodyBottom-photoTop),contentH:packingHeight(clothesPacking)},
     guns:{x:margin+largeLeftInnerW+seamW,y:largeGunTop,w:rightInnerW,h:Math.max(0,bodyBottom-largeGunTop),contentH:packingHeight(gunsPacking)}
@@ -5423,6 +5457,29 @@ saveBtn.addEventListener("click",async()=>{
  $("b_photoFineFill").addEventListener("change",scheduleDraw);
  $("b_photoFineReset").addEventListener("click",resetPhotoFine);
  refreshFineValues();
+ // 모바일/태블릿/PC 공통: 미리보기의 옷 칸을 두 번 선택해 서로 위치를 교체합니다.
+ let tileSwapFrom=-1;
+ canvas.addEventListener('click',event=>{
+  if($("b_photoFineEnabled").checked)return; // 기존 사진 위치 드래그 기능과 충돌 방지
+  const layout=state.previewLayout,rect=canvas.getBoundingClientRect();
+  if(!layout?.previewTileRects||!rect.width||!rect.height)return;
+  const x=(event.clientX-rect.left)*layout.width/rect.width;
+  const y=(event.clientY-rect.top)*layout.height/rect.height;
+  const hit=layout.previewTileRects.find(r=>r.index>=0&&x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h);
+  if(!hit){tileSwapFrom=-1;return;}
+  if(tileSwapFrom<0){
+   tileSwapFrom=hit.index;
+   $("b_touch-sort-hint").textContent=`${tileSwapFrom+1}번 옷 선택됨 · 위치를 바꿀 다른 옷을 터치하세요.`;
+   return;
+  }
+  const from=tileSwapFrom,to=hit.index;tileSwapFrom=-1;
+  if(from!==to&&state.clothes[from]&&state.clothes[to]){
+   [state.clothes[from],state.clothes[to]]=[state.clothes[to],state.clothes[from]];
+   renderItems('clothes');scheduleDraw();
+   window.logActivity?.('대필판 미리보기 옷 순서 교체',{from:from+1,to:to+1});
+   $("b_touch-sort-hint").textContent=`${from+1}번 ↔ ${to+1}번 옷 순서를 바꿨어요. 계속 두 칸을 터치하면 다시 교체할 수 있어요.`;
+  } else $("b_touch-sort-hint").textContent='같은 옷을 눌러 선택을 해제했어요.';
+ });
  // Touch/mouse dragging in the preview updates the same X/Y controls that the
  // sliders use, so the exported PNG exactly matches the preview.
  let previewDrag=null;
@@ -5628,7 +5685,7 @@ saveBtn.addEventListener("click",async()=>{
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  const I=(x,y,w)=>y*w+x;
  const status=text=>{$('kl-status').textContent=text;};
- const editStatus=text=>{$('kl-edit-status').textContent=text;};
+ const editStatus=text=>{const el=$('kl-edit-status');if(el)el.textContent=text;};
  const rgbDelta=(r1,g1,b1,r2,g2,b2)=>Math.max(Math.abs(r1-r2),Math.abs(g1-g2),Math.abs(b1-b2));
  
  function setMode(mode){
@@ -5648,7 +5705,7 @@ saveBtn.addEventListener("click",async()=>{
    ? '일반 사진함 · 기존 킬로그 전용'
    : '고번 사진함 · 전시·차량 화면의 작은 킬로그 전용';
   redraw();resultView();
-  editStatus(editingIndex>=0?`${mode==='normal'?'일반':'고번'} 킬로그 결과 선택됨. 여백을 조절하세요.`:'결과를 선택하면 잘림 여백을 조절할 수 있습니다.');
+  editStatus(editingIndex>=0?`${mode==='normal'?'일반':'고번'} 킬로그 결과 선택됨. 미리보기로 확인하세요.`:'추출 결과를 아래에서 미리보기·저장할 수 있습니다.');
   if(active>=0)status(`${mode==='normal'?'일반':'고번'} 킬로그 모드입니다. 자를 킬로그를 눌러주세요.`);
  }
  $('kl-mode-normal').addEventListener('click',()=>setMode('normal'));
@@ -5799,8 +5856,7 @@ saveBtn.addEventListener("click",async()=>{
    const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
-    mk('여백 조절',()=>setEditingIndex(i)),
-    mk('개별 저장',()=>saveFiles([r],i)),
+        mk('개별 저장',()=>saveFiles([r],i)),
     mk('삭제',()=>deleteResult(i))
    );
    card.append(btnRow);wrap.append(card);
@@ -5939,6 +5995,52 @@ saveBtn.addEventListener("click",async()=>{
   // 빛 효과가 강한 오렌지 막대에서는 밝은 벽/수평선을 장식으로 착각하지 않도록 색상 확인.
   const sample=ctx.getImageData(clamp(Math.round(tx+80*s),0,W-1),clamp(Math.round(ty+12*s),0,H-1),1,1).data;
   const warm=sample[0]>110 && sample[0]>sample[1]*1.20 && sample[1]>sample[2]*1.40;
+  let barEvidence=0;
+  // 테두리를 눌렀을 때 클릭 위치가 실제 띠보다 1~4px 위/아래일 수 있다.
+  // 여러 세로 표본 중 가장 확실한 행으로 인식하되, 배경 오인식을 막는다.
+  for(const dyProbe of [-5,0,4,8]){
+   let rowEvidence=0;
+   for(let k=0;k<20;k++){
+    const px=clamp(Math.round(tx+(k-5)*8*s),0,W-1),py=clamp(Math.round(ty+dyProbe*s),0,H-1);
+    const c=ctx.getImageData(px,py,1,1).data,bg=ctx.getImageData(px,clamp(Math.round(ty+45*s),0,H-1),1,1).data;
+    if(rgbDelta(c[0],c[1],c[2],bg[0],bg[1],bg[2])>22)rowEvidence++;
+   }
+   barEvidence=Math.max(barEvidence,rowEvidence);
+  }
+  if(barEvidence<5)return null;
+  // 터치 근처의 세로 색상 변화로 막대 두께를 자동 인식합니다.
+  // 좌측 장식/글자가 아닌 막대 오른쪽의 여러 열만 측정합니다.
+  const xProbe=[28,43,58,74,90,105].map(dx=>clamp(Math.round(tx+dx*s),0,W-1));
+  const refTop=clamp(Math.round(ty-41*s),0,H-1);
+  const refBot=clamp(Math.round(ty+54*s),0,H-1);
+  let bandStart=-1,bandEnd=-1,bestLen=-1,scanStart=-1;
+  const rowFrom=clamp(Math.round(ty-31*s),0,H-1);
+  const rowTo=clamp(Math.round(ty+40*s),rowFrom,H-1);
+  for(let yy=rowFrom;yy<=rowTo+1;yy++){
+   let hit=0;
+   if(yy<=rowTo){
+    for(const xx of xProbe){
+     const a=ctx.getImageData(xx,yy,1,1).data;
+     const b=ctx.getImageData(xx,refTop,1,1).data;
+     const c=ctx.getImageData(xx,refBot,1,1).data;
+     const bgR=(b[0]+c[0])/2,bgG=(b[1]+c[1])/2,bgB=(b[2]+c[2])/2;
+     if(rgbDelta(a[0],a[1],a[2],bgR,bgG,bgB)>24)hit++;
+    }
+   }
+   if(hit>=4){if(scanStart<0)scanStart=yy;}
+   else if(scanStart>=0){
+    const length=yy-scanStart;
+    if(length>bestLen && length>=8*s && length<=53*s && ty>=scanStart-11*s && ty<=yy+9*s){
+     bestLen=length;bandStart=scanStart;bandEnd=yy-1;
+    }
+    scanStart=-1;
+   }
+  }
+  const detected=bestLen>0;
+  const detectedTop=detected?(bandStart-ty)/s:-10;
+  // 보라색 스킨은 막대 하단이 배경과 비슷해서 일부분만 감지될 수 있다.
+  // 짧은 구간만 감지됐으면 해당 시작점부터 킬로그 기본 높이를 안전하게 보존한다.
+  const detectedBottom=detected?(bestLen<19*s?(bandStart-ty)/s+30:(bandEnd-ty)/s):22;
   for(let y=0;y<h;y++){
    const gy=y0+y,dy=(gy-ty)/s;
    const t=clamp((dy+47)/97,0,1);
@@ -5950,18 +6052,20 @@ saveBtn.addEventListener("click",async()=>{
     const bgG=top[j+1]*(1-t)+bottom[j+1]*t;
     const bgB=top[j+2]*(1-t)+bottom[j+2]*t;
     const d=rgbDelta(R,G,B,bgR,bgG,bgB);
-    const core=dx>=-123&&dx<=180&&dy>=-11&&dy<=29;
-    const detail=dx>=-156&&dx<=58&&dy>=-34&&dy<=35;
-    const orange=R>105&&R>G*1.14&&G>B*1.4;
-    const chroma=!warm||orange||(maxv>205&&d>55);
+    // 별도 방식: 고번 막대 본체를 한 덩어리로 보존해 중간에 구멍이 생기지 않도록 합니다.
+    // 장식 영역은 주변 픽셀과 다른 색·밝기일 때만 남깁니다.
+    const barTop=detected?Math.max(-34,detectedTop-1):-10,barBottom=detected?Math.min(39,detectedBottom+1):22;
+    const core=dx>=-88&&dx<=156&&dy>=barTop&&dy<=barBottom;
+    const ornament=dx>=-157&&dx<-81&&dy>=-29&&dy<=32;
     let a=0;
-    if(core && d>19 && chroma)a=255;
-    if(detail && d>31 && maxv>84 && (sat>21||maxv>160) && chroma)a=255;
-    // 본체는 끊기지 않도록, 배경과 완전히 같은 부분이 아니면 보존한다.
-    if(core && dx>27 && dx<145 && dy>-5 && dy<26 && d>13 && chroma)a=Math.max(a,230);
-    if(dx>143 && a){
-     const fade=clamp((184-dx)/41,0,1);a=Math.round(a*fade*fade*(3-2*fade));
+    if(core){
+      a=255;
+      if(dx>112){const fade=clamp((165-dx)/53,0,1);a=Math.round(a*fade*fade*(3-2*fade));}
     }
+    if(ornament&&d>43&&maxv>108&&(sat>29||maxv>200))a=255;
+    // 막대 위아래에 붙은 광택/장식: 본체 주변의 강한 전경 신호만 살림
+    if(dx>=-116&&dx<-52&&!core&&dy>=barTop-13&&dy<=barBottom+10&&d>63&&sat>47&&maxv>145)a=Math.max(a,225);
+    // 화면 상단 하이라이트는 장식과 오인하지 않도록 외곽 보호 구간에서 제외
     alpha[y*w+x]=a;
     if(a>=16)kept++;
    }
@@ -6104,33 +6208,11 @@ saveBtn.addEventListener("click",async()=>{
   if(!(await encodeResult(result)))return null;
   return result;
  }
- async function tweakResult(idx,kind){
-  const r=results[idx];if(!r||busy)return;
-  const limX=r.master.width,limY=r.master.height;
-  const sx=Math.max(2,Math.round(view.width/1536*9));
-  const sy=Math.max(2,Math.round(view.height/709*5));
-  if(kind==='reset')r.inner={...r.baseInner};
-  else if(kind==='wider'){
-   const x0=Math.max(0,r.inner.x-sx),y0=Math.max(0,r.inner.y-sy);
-   const x1=Math.min(limX,r.inner.x+r.inner.w+sx),y1=Math.min(limY,r.inner.y+r.inner.h+sy);
-   r.inner={x:x0,y:y0,w:x1-x0,h:y1-y0};
-  }else if(kind==='narrower'){
-   const x0=Math.min(limX-2,r.inner.x+sx),y0=Math.min(limY-2,r.inner.y+sy);
-   const x1=Math.max(x0+2,r.inner.x+r.inner.w-sx),y1=Math.max(y0+2,r.inner.y+r.inner.h-sy);
-   r.inner={x:x0,y:y0,w:x1-x0,h:y1-y0};
-  }else return;
-  busy=true;
-  try{await encodeResult(r);drawSelections();resultView();editStatus('잘림 여백을 변경했어요. 아래 미리보기를 확인하세요.');}
-  catch(e){console.error(e);editStatus('여백 조정에 실패했습니다.');}
-  finally{busy=false;}
- }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
   if(editingIndex===idx)editingIndex=-1; else if(editingIndex>idx)editingIndex--;
   resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');
  }
- [['kl-box-wider','wider'],['kl-box-narrower','narrower'],['kl-box-reset','reset']].forEach(([id,kind])=>$(id).onclick=()=>editingIndex>=0?tweakResult(editingIndex,kind):editStatus('먼저 아래 결과의 ‘여백 조절’을 눌러주세요.'));
- // Tablet-friendly finger/pen/mouse input: one tap -> one selection, panning/zooming never selects.
  let gesturePointer=null,gestureTouch=null,lastHandledTouch=0;
  const TAP_DRIFT=18,TAP_SCROLL_DRIFT=8,TAP_MAX_MS=1750;
  const gestureStart=(id,x,y)=>({id,x,y,at:Date.now(),scrollX:viewport.scrollLeft,scrollY:viewport.scrollTop});
@@ -6186,13 +6268,13 @@ saveBtn.addEventListener("click",async()=>{
   const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
   const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
   const already=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
-  if(already>=0){setEditingIndex(already);status('선택한 킬로그의 잘림 여백을 조절할 수 있어요.');return;}
+  if(already>=0){status('이미 추출한 킬로그입니다. 아래 결과 목록에서 확인하거나 삭제할 수 있어요.');return;}
   busy=true;status('킬로그를 자르는 중…');
   try{
    const picked=await extractKilllog(tx,ty,killlogMode);
    if(!picked){status('킬로그를 인식하지 못했어요. 막대 중앙이나 장식 부분을 조금 더 정확히 눌러주세요.');return;}
-   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();setEditingIndex(results.length-1);drawSelections();
-   status('킬로그 추출 완료! 아래 결과를 확인하고 필요하면 여백을 조절하세요.');
+   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();
+   status('킬로그 추출 완료! 아래에서 확인하고 저장하세요.');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
@@ -6201,5 +6283,28 @@ saveBtn.addEventListener("click",async()=>{
 })();
 </script>
 
+<script>
+// 화면 전용: 기존 옷·총 저장 함수/공유 방식은 변경하지 않고 버튼 상태만 동기화합니다.
+(()=>{
+ for(const p of ['c','g']){
+  const bottom=document.getElementById(p+'_saveAllButton'),top=document.getElementById(p+'_saveAllTop');
+  const photoList=document.getElementById(p+'_photoList'),counter=document.getElementById(p+'_totalSelected');
+  if(!bottom||!top||!photoList||!counter)continue;
+  const sync=()=>{
+   top.disabled=bottom.disabled;
+   // 사진 목록 버튼들은 기존 코드가 사진번호 · 선택수 형태로 렌더합니다.
+   let sum=0;
+   photoList.querySelectorAll('button').forEach(b=>{
+    const match=(b.textContent||'').match(/·\s*(\d+)\s*$/);
+    if(match)sum+=Number(match[1])||0;
+   });
+   counter.textContent='전체 선택 '+sum+'개';
+  };
+  new MutationObserver(sync).observe(photoList,{childList:true,subtree:true,characterData:true});
+  new MutationObserver(sync).observe(bottom,{attributes:true,attributeFilter:['disabled']});
+  sync();
+ }
+})();
+</script>
 </body>
 </html>
