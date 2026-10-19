@@ -5889,9 +5889,35 @@ saveBtn.addEventListener("click",async()=>{
   if(nearby/Math.max(1,samples)<.20)return null;
 
   const leftBand=fire?490:545;
-  const topBand=darkRed?153:fire?146:149;
-  // 세로가 긴 캡처에서는 막대가 y≈205까지 내려와 기존 190px로는 아랫부분이 잘린다.
-  const bottomBand=tallCapture?(darkRed?207:fire?205:208):(darkRed?195:fire?192:190);
+  // 각 스크린샷의 실제 막대 경계(수평 색상 변화)를 확인한다.
+  // 원래의 배너/장식 이미지를 재생성하지 않고, 주변 회색 게임 배경만 제외한다.
+  function barRowEdge(y){
+   const diffs=[];
+   for(let x=785;x<=915;x+=10)diffs.push(delta(rgb(x,y),rgb(x,y-1)));
+   diffs.sort((a,b)=>a-b);
+   return diffs[diffs.length>>1];
+  }
+  function findEdge(start,end){
+   let best={y:start,score:-1};
+   for(let y=start;y<=end;y++){
+    const score=(barRowEdge(y-1)+2*barRowEdge(y)+barRowEdge(y+1))/4;
+    if(score>best.score)best={y,score};
+   }
+   return best;
+  }
+  let topBand=darkRed?153:fire?146:149;
+  let bottomBand=tallCapture?(darkRed?207:fire?205:208):(darkRed?195:fire?192:190);
+  const actualTop=findEdge(tallCapture?152:143,tallCapture?170:165);
+  const actualBottom=findEdge(tallCapture?198:183,tallCapture?214:206);
+  if(actualTop.score>13&&actualBottom.score>12&&actualBottom.y-actualTop.y>=27){
+   // 원본에 포함된 반투명 테두리를 위해 1~2px씩 완충한다.
+   // 복잡한 장식형에서 내부 강조선을 경계로 오판하지 않도록 폭을 제한한다.
+   if(tallCapture){topBand=actualTop.y-1;bottomBand=actualBottom.y+2;}
+   else if(!fire){
+    topBand=Math.min(topBand,actualTop.y-1);
+    bottomBand=Math.max(bottomBand,actualBottom.y+2);
+   }
+  }
   const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
   const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
   // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
@@ -5929,8 +5955,8 @@ saveBtn.addEventListener("click",async()=>{
      if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;
     }else{
      const decorative=largeOrnament
-       ? d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221)
-       : d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;
+       ? d>34&&sat>25&&maxv>90&&bx>=468&&bx<820&&yRef>=88&&yRef<=(bx<615?203:221)
+       : d>29&&sat>22&&maxv>92&&bx<Math.max(728,leftBand+230)&&yRef>=topBand-26&&yRef<=bottomBand+15;
      const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;
      const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;
      // 보라빛 막대 아래의 파편만 보호. 다른 스킨의 총기 UI는 추가하지 않음.
@@ -5939,6 +5965,28 @@ saveBtn.addEventListener("click",async()=>{
     }
     alpha[y*w+x]=a;
    }
+  }
+
+  // 얼음/파란색 장식 가장자리 보완: 이미 살린 장식과 가까운 색상 픽셀만
+  // 추가 보호한다. 어두운 회색 배경에는 적용하지 않는다.
+  const currentAlpha=alpha.slice();
+  for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+   const idx=y*w+x, bx=(x+x0)/sx;
+   if(currentAlpha[idx]>0||bx<460||bx>755)continue;
+   const i=idx*4,R=raw[i],G=raw[i+1],B=raw[i+2];
+   const chroma=Math.max(R,G,B)-Math.min(R,G,B);
+   if(chroma<26||Math.max(R,G,B)<77)continue;
+   let near=false;
+   for(let dy=-2;dy<=2&&!near;dy++)for(let dx=-2;dx<=2;dx++){
+    if(currentAlpha[(y+dy)*w+x+dx]>150){near=true;break;}
+   }
+   if(!near)continue;
+   const yRef=(y+y0)/sy;
+   if(yRef<85||yRef>231)continue;
+   const sampleX=x*4,blend=clamp((yRef-115)/106,0,1);
+   let difference=0;
+   for(let c=0;c<3;c++)difference=Math.max(difference,Math.abs(raw[i+c]-(ctop[sampleX+c]*(1-blend)+cbot[sampleX+c]*blend)));
+   if(difference>24)alpha[idx]=Math.min(230,Math.round((difference-24)*7));
   }
 
   // 불꽃/장식 바깥의 작은 배경 잡티만 제거. 막대 본체 픽셀은 건드리지 않는다.
