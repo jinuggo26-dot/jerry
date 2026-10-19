@@ -1968,6 +1968,12 @@ window.closeAdmin=()=>{
 ===================================================== -->
 
 
+<style>
+/* 화면 폭이 좁은 기기에서 안내 문구 길이 변화가 사진 터치 위치를 밀지 않도록 높이 확보 */
+@media (max-width: 540px) {
+ #kl-status { min-height: 66px; max-width: 55%; display: flex; align-items: center; justify-content: flex-end; text-align: right; line-height: 1.4; }
+}
+</style>
 <!-- 킬로그 자동 커팅: 독립 모듈 -->
 <div id="kill-tab" class="tab-pane">
  <div class="app" style="max-width:1050px">
@@ -5693,8 +5699,8 @@ saveBtn.addEventListener("click",async()=>{
   view.width=im.naturalWidth;view.height=im.naturalHeight;
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
   applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;
-  status(view.width<500 || view.height<240 || view.width/view.height<1.98 || view.width/view.height>2.45
-    ? '원본 화면 비율을 확인해 주세요. 킬로그 커팅은 가로형 게임 스크린샷에서 작동해요.'
+  status(view.width<500 || view.height<240 || view.width/view.height<1.25 || view.width/view.height>2.55
+    ? '원본 화면 비율을 확인해 주세요. 가로형 게임 스크린샷을 추가해 주세요.'
     : '사진 속 ‘킬 알림’ 막대를 눌러주세요.');
   drawSelections();
  }
@@ -5814,10 +5820,15 @@ saveBtn.addEventListener("click",async()=>{
 
  async function extractKilllog(tx,ty){
   const W=view.width,H=view.height;
-  const sx=W/1536,sy=H/709;
+  // 기존 1536×709 전체 게임 스크린샷은 종전 좌표를 유지하고,
+  // 1536×1059 등 세로가 더 긴 캡처는 게임 UI의 실제 픽셀 폭을 기준으로
+  // 킬로그 영역을 찾는다. 화면 전체 높이에 맞춰 y좌표를 과도하게 늘리지 않는다.
+  const wideLayout=W/H>=1.98&&W/H<=2.45;
+  const sx=W/1536,sy=wideLayout?H/709:sx;
+  const tallCapture=H/W>.61;
   // 실제 게임 원본 19장의 공통 킬로그 레이아웃을 기준으로 분석.
   // 사진을 확대해도 클릭 좌표는 자연 크기로 들어오므로 정확한 좌표로 처리한다.
-  if(W<500||H<240||W/H<1.98||W/H>2.45)return null;
+  if(W<500||H<240||W/H<1.25||W/H>2.55)return null;
   const rgba=ctx.getImageData(0,0,W,H).data;
   function rgb(x,y){
    x=clamp(Math.round(x*sx),0,W-1);y=clamp(Math.round(y*sy),0,H-1);
@@ -5879,7 +5890,8 @@ saveBtn.addEventListener("click",async()=>{
 
   const leftBand=fire?490:545;
   const topBand=darkRed?153:fire?146:149;
-  const bottomBand=darkRed?195:fire?192:190;
+  // 세로가 긴 캡처에서는 막대가 y≈205까지 내려와 기존 190px로는 아랫부분이 잘린다.
+  const bottomBand=tallCapture?(darkRed?207:fire?205:208):(darkRed?195:fire?192:190);
   const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
   const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
   // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
@@ -6009,8 +6021,8 @@ saveBtn.addEventListener("click",async()=>{
   if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return;
   const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
   const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
-  if(W<500 || H<240 || W/H<1.98 || W/H>2.45){
-   status('이 사진은 지원하는 게임 화면 비율이 아니에요. 원본 가로형 게임 스크린샷을 추가해 주세요.');
+  if(W<500 || H<240 || W/H<1.25 || W/H>2.55){
+   status('이 사진은 지원하는 게임 화면 비율이 아니에요. 가로형 게임 스크린샷을 추가해 주세요.');
    return;
   }
   if(results.some(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h)){
