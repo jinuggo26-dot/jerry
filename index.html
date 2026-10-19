@@ -1976,6 +1976,25 @@ window.closeAdmin=()=>{
   <input id="kl-files" type="file" accept="image/png,image/jpeg,image/webp" multiple>
   <div class="photo-panel"><div class="panel-head"><strong>사진 목록</strong><button class="photo-button" id="kl-clear" type="button" title="추가한 사진과 추출 결과를 모두 삭제합니다">사진·결과 모두 삭제</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 자를 킬로그 선택</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
+   <div id="kl-mode-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:4px 0 10px">
+    <button type="button" id="kl-mode-normal" class="photo-button active">일반 킬로그</button>
+    <button type="button" id="kl-mode-special" class="photo-button">고번 킬로그</button>
+    <span id="kl-mode-label" style="font-size:11px;color:#9fb2cc">일반 킬로그: 기존 막대형 / 고번 킬로그: 다른 형태의 킬로그 전용</span>
+   </div>
+   <div id="kl-edit-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:0 0 11px;padding:10px 12px;border:1px solid #283447;border-radius:12px;background:#0c1626">
+    <strong style="font-size:13px;color:#dfeaff">미세 조정</strong>
+    <button type="button" id="kl-box-left" class="photo-button" style="min-width:44px">←</button>
+    <button type="button" id="kl-box-right" class="photo-button" style="min-width:44px">→</button>
+    <button type="button" id="kl-box-up" class="photo-button" style="min-width:44px">↑</button>
+    <button type="button" id="kl-box-down" class="photo-button" style="min-width:44px">↓</button>
+    <button type="button" id="kl-box-wider" class="photo-button">가로＋</button>
+    <button type="button" id="kl-box-narrower" class="photo-button">가로－</button>
+    <button type="button" id="kl-box-taller" class="photo-button">세로＋</button>
+    <button type="button" id="kl-box-shorter" class="photo-button">세로－</button>
+    <button type="button" id="kl-box-reset" class="photo-button">원래 인식으로</button>
+    <button type="button" id="kl-box-delete" class="photo-button">선택 결과 삭제</button>
+    <span id="kl-edit-status" style="font-size:11px;color:#9fb2cc">결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.</span>
+   </div>
    <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
     <button type="button" id="kl-zoom-out" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 축소">−</button>
     <span id="kl-zoom-percent" style="font-size:13px;font-weight:800;min-width:50px;text-align:center;color:#cfe1ff">100%</span>
@@ -1989,7 +2008,7 @@ window.closeAdmin=()=>{
      <canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
     </div>
    </div>
-   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">게임 화면 위쪽의 ‘킬 알림’ 막대를 누르면 그 부분을 자동으로 잘라요. 사진을 확대해도 저장되는 이미지 크기는 달라지지 않습니다. 추출된 이미지는 아래에서 확인하고 저장하세요.</p>
+   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 자동 인식이 조금 틀리면 위 미세 조정 버튼으로 선택 박스를 바로 수정할 수 있습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button></div>
@@ -5589,19 +5608,37 @@ saveBtn.addEventListener("click",async()=>{
 
 <div id="kl-preview-modal" style="display:none;position:fixed;inset:0;z-index:999999;background:#050912ed;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:15px" role="dialog" aria-modal="true" aria-label="킬로그 결과 크게 보기"><div style="display:flex;justify-content:space-between;width:min(95vw,980px);align-items:center"><strong id="kl-preview-title">추출 결과</strong><button id="kl-preview-close" type="button" style="padding:12px;border-radius:10px;background:#273951;color:white">닫기 ✕</button></div><div id="kl-preview-area" style="width:min(95vw,980px);max-height:72vh;overflow:auto;background:repeating-conic-gradient(#303746 0% 25%,#172032 0% 50%) 50%/18px 18px;border-radius:12px"><img id="kl-preview-img" alt="킬로그 확대 보기" style="width:100%;display:block;height:auto"></div><div style="display:flex;gap:15px;align-items:center"><button id="kl-preview-minus" style="padding:10px 20px;background:#273951;color:#fff;border-radius:10px">−</button><span id="kl-preview-percent">100%</span><button id="kl-preview-plus" style="padding:10px 20px;background:#273951;color:#fff;border-radius:10px">＋</button></div></div>
 <script>
-/* 킬로그 커팅 독립 기능 - 막대 내부는 보존, 바깥 장식만 분리 */
+/* 킬로그 커팅 독립 기능 - 일반/고번 분리 + 자동 인식 + 수동 미세 조정 */
 (()=>{
  'use strict';
  const $=id=>document.getElementById(id);
  const photos=[],results=[];
- let active=-1,busy=false;
+ let active=-1,busy=false,editingIndex=-1;
+ let killlogMode='normal';
  const view=$('kl-source'), ctx=view.getContext('2d',{willReadFrequently:true});
  const overlay=$('kl-selection-overlay'), mark=overlay.getContext('2d');
  const OUTPUT_W=760,MIN_OUTPUT_H=190;
  const viewport=$('kl-viewport'), stage=$('kl-stage');
  let zoom=1,pinch=null,suppressClickUntil=0;
  const MIN_ZOOM=1,MAX_ZOOM=4;
- // CSS로 사진과 표시선만 확대한다. 원본 캔버스 픽셀은 바뀌지 않는다.
+ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+ const I=(x,y,w)=>y*w+x;
+ const status=text=>{$('kl-status').textContent=text;};
+ const editStatus=text=>{$('kl-edit-status').textContent=text;};
+ const rgbDelta=(r1,g1,b1,r2,g2,b2)=>Math.max(Math.abs(r1-r2),Math.abs(g1-g2),Math.abs(b1-b2));
+ 
+ function setMode(mode){
+  killlogMode=mode;
+  $('kl-mode-normal').classList.toggle('active',mode==='normal');
+  $('kl-mode-special').classList.toggle('active',mode==='special');
+  $('kl-mode-label').textContent=mode==='normal'
+   ? '일반 킬로그: 기존 막대형 / 다른 사람 사진도 최대한 자동 인식'
+   : '고번 킬로그: 전시 화면·차량 화면처럼 다른 형태의 킬로그 전용';
+  if(active>=0)status(`${mode==='normal'?'일반':'고번'} 킬로그 모드입니다. 자를 킬로그를 눌러주세요.`);
+ }
+ $('kl-mode-normal').addEventListener('click',()=>setMode('normal'));
+ $('kl-mode-special').addEventListener('click',()=>setMode('special'));
+ 
  function applyZoom(next,pointX,pointY){
   const newZoom=clamp(Math.round(next*100)/100,MIN_ZOOM,MAX_ZOOM);
   if(!Number.isFinite(newZoom))return;
@@ -5627,50 +5664,37 @@ saveBtn.addEventListener("click",async()=>{
  $('kl-zoom-in').addEventListener('click',()=>applyZoom(zoom+.25));
  $('kl-zoom-reset').addEventListener('click',()=>applyZoom(1));
  const dist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
- viewport.addEventListener('touchstart',e=>{
-  if(e.touches.length===2){
-   pinch={initialDistance:Math.max(1,dist(e.touches[0],e.touches[1])),initialZoom:zoom};
-   suppressClickUntil=Date.now()+800;
-  }
- },{passive:true});
+ viewport.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch={initialDistance:Math.max(1,dist(e.touches[0],e.touches[1])),initialZoom:zoom};suppressClickUntil=Date.now()+800;}},{passive:true});
  viewport.addEventListener('touchmove',e=>{
   if(e.touches.length!==2||!pinch)return;
   e.preventDefault();
   const one=e.touches[0],two=e.touches[1];
-  applyZoom(pinch.initialZoom*dist(one,two)/pinch.initialDistance,
-   (one.clientX+two.clientX)/2,(one.clientY+two.clientY)/2);
+  applyZoom(pinch.initialZoom*dist(one,two)/pinch.initialDistance,(one.clientX+two.clientX)/2,(one.clientY+two.clientY)/2);
   suppressClickUntil=Date.now()+800;
  },{passive:false});
- viewport.addEventListener('touchend',e=>{
-  if(e.touches.length<2)pinch=null;
- },{passive:true});
+ viewport.addEventListener('touchend',e=>{if(e.touches.length<2)pinch=null;},{passive:true});
  viewport.addEventListener('touchcancel',()=>{pinch=null},{passive:true});
- // Ctrl+휠 확대도 사진 영역만 변경한다.
- viewport.addEventListener('wheel',e=>{
-  if(!e.ctrlKey&&!e.metaKey)return;
-  e.preventDefault();
-  applyZoom(zoom*(e.deltaY<0?1.15:1/1.15),e.clientX,e.clientY);
- },{passive:false});
+ viewport.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();applyZoom(zoom*(e.deltaY<0?1.15:1/1.15),e.clientX,e.clientY);},{passive:false});
  window.addEventListener('resize',()=>{if(view.width>1)applyZoom(zoom)});
- const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
- const I=(x,y,w)=>y*w+x, P=(x,y,w)=>4*(y*w+x);
- const status=text=>{$('kl-status').textContent=text;};
-
+ 
  function drawSelections(){
   overlay.width=view.width;overlay.height=view.height;
   mark.clearRect(0,0,overlay.width,overlay.height);
   if(active<0)return;
-  results.filter(r=>r.photo===active&&r.bounds).forEach(r=>{
+  results.filter(r=>r.photo===active&&r.bounds).forEach((r,idx)=>{
    const b=r.bounds;
+   const edit=idx===editingIndex;
    mark.save();
-   mark.fillStyle='rgba(36,180,255,.22)';mark.fillRect(b.x,b.y,b.w,b.h);
-   mark.strokeStyle='#29d6ff';mark.lineWidth=Math.max(3,view.width*.0025);
+   mark.fillStyle=edit?'rgba(255,171,46,.24)':'rgba(36,180,255,.22)';
+   mark.fillRect(b.x,b.y,b.w,b.h);
+   mark.strokeStyle=edit?'#ffb020':'#29d6ff';
+   mark.lineWidth=Math.max(3,view.width*.0025);
    mark.setLineDash([Math.max(9,view.width*.008),Math.max(5,view.width*.004)]);
    mark.strokeRect(b.x,b.y,b.w,b.h);mark.setLineDash([]);
    const radius=Math.max(12,view.width*.011),cx=b.x+b.w-8,cy=b.y+8;
-   mark.beginPath();mark.arc(cx,cy,radius,0,Math.PI*2);mark.fillStyle='#00b9f2';mark.fill();
+   mark.beginPath();mark.arc(cx,cy,radius,0,Math.PI*2);mark.fillStyle=edit?'#ffb020':'#00b9f2';mark.fill();
    mark.fillStyle='#061726';mark.textAlign='center';mark.textBaseline='middle';
-   mark.font=`bold ${Math.round(radius*1.2)}px sans-serif`;mark.fillText('✓',cx,cy+1);
+   mark.font=`bold ${Math.round(radius*1.2)}px sans-serif`;mark.fillText(edit?'E':'✓',cx,cy+1);
    mark.restore();
   });
  }
@@ -5687,23 +5711,17 @@ saveBtn.addEventListener("click",async()=>{
   });
   if(active<0||!photos[active]){
    view.width=1;view.height=1;ctx.clearRect(0,0,1,1);
-   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();return;
+   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();editingIndex=-1;editStatus('결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.');return;
   }
   const im=photos[active].image;
   view.width=im.naturalWidth;view.height=im.naturalHeight;
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
-  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status('사진 속 ‘킬 알림’ 막대를 눌러주세요.');drawSelections();
+  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status(`${killlogMode==='normal'?'일반':'고번'} 킬로그 모드입니다. 사진 속 ‘킬 알림’ 막대를 눌러주세요.`);drawSelections();
  }
  async function encodeResult(r){
-  // 실제 킬로그 영역만 찾아 배경 없는 PNG로 저장한다.
-  const w=r.work.width,h=r.work.height,rgba=r.work.getContext('2d').getImageData(0,0,w,h).data;
-  let l=w,t=h,rr=-1,bb=-1;
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-   if(rgba[(y*w+x)*4+3]<12)continue;
-   if(x<l)l=x;if(x>rr)rr=x;if(y<t)t=y;if(y>bb)bb=y;
-  }
-  if(rr<l||bb<t)return false;
-  l=Math.max(0,l-3);t=Math.max(0,t-3);rr=Math.min(w-1,rr+3);bb=Math.min(h-1,bb+3);
+  if(!r.master||!r.inner)return false;
+  const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
+  const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
   const cropW=rr-l+1,cropH=bb-t+1;
   const scale=(OUTPUT_W-12)/cropW;
   const dw=Math.max(1,Math.round(cropW*scale));
@@ -5711,215 +5729,198 @@ saveBtn.addEventListener("click",async()=>{
   const outH=Math.max(MIN_OUTPUT_H,dh+12);
   const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
   const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
-  g.drawImage(r.work,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
+  g.drawImage(r.master,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)return false;
   if(r.url)URL.revokeObjectURL(r.url);
   r.blob=blob;r.url=URL.createObjectURL(blob);r.outputH=outH;r.contentWidth=dw;
+  r.bounds={x:r.sourceX+l,y:r.sourceY+t,w:cropW,h:cropH};
   return true;
  }
-
  function updatePhotoCounts(){photos.forEach((p,i)=>{const button=$('kl-photos').children[i];if(button)button.textContent=`사진 ${i+1} (${results.filter(r=>r.photo===i).length}개)`;});}
  function resultWarning(r){
-  if(!r.work)return '이미지 확인 필요';
-  const w=r.work.width,h=r.work.height;
-  if(!w||!h)return '추출 내용이 비어 있음';
-  const rgba=r.work.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
-  let l=w,rt=-1,t=h,bt=-1,count=0;
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-   if(rgba[(y*w+x)*4+3]<20)continue;
-   l=Math.min(l,x);rt=Math.max(rt,x);t=Math.min(t,y);bt=Math.max(bt,y);count++;
-  }
-  if(rt<l)return '내용이 거의 없음';
-  const a=rt-l+1,b=bt-t+1;
+  if(!r.master||!r.inner)return '이미지 확인 필요';
+  const w=r.master.width,h=r.master.height,rgba=r.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+  const l=Math.round(r.inner.x),t=Math.round(r.inner.y),rr=Math.round(r.inner.x+r.inner.w-1),bb=Math.round(r.inner.y+r.inner.h-1);
+  let count=0;
+  for(let y=t;y<=bb;y++)for(let x=l;x<=rr;x++)if(rgba[(y*w+x)*4+3]>=20)count++;
+  const a=rr-l+1,b=bb-t+1;
   if(a/b<2)return '가로가 지나치게 짧을 수 있음';
   if(a/b>18)return '세로가 지나치게 얇을 수 있음';
-  if(count/(a*b)<.07)return '일부 영역이 누락됐을 수 있음';
+  if(count/(a*b)<.05)return '일부 영역이 누락됐을 수 있음';
   return '';
  }
  let previewZoom=1;
  const previewModal=$('kl-preview-modal'),previewImg=$('kl-preview-img');
  function setPreviewZoom(v){previewZoom=clamp(v,1,4);previewImg.style.width=Math.round(previewZoom*100)+'%';$('kl-preview-percent').textContent=Math.round(previewZoom*100)+'%';}
- function showPreview(r,i){previewImg.src=r.url;$('kl-preview-title').textContent=`킬로그 ${i+1} · 사진 ${r.photo+1}`;previewModal.style.display='flex';setPreviewZoom(1);}
+ function showPreview(r,i){previewImg.src=r.url;$('kl-preview-title').textContent=`킬로그 ${i+1} · 사진 ${r.photo+1}`;previewModal.style.display='flex';setPreviewZoom(1);} 
  function hidePreview(){previewModal.style.display='none';previewImg.removeAttribute('src');}
- $('kl-preview-close').onclick=hidePreview;
- $('kl-preview-minus').onclick=()=>setPreviewZoom(previewZoom-.25);
- $('kl-preview-plus').onclick=()=>setPreviewZoom(previewZoom+.25);
+ $('kl-preview-close').onclick=hidePreview;$('kl-preview-minus').onclick=()=>setPreviewZoom(previewZoom-.25);$('kl-preview-plus').onclick=()=>setPreviewZoom(previewZoom+.25);
  previewModal.addEventListener('click',e=>{if(e.target===previewModal)hidePreview();});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&previewModal.style.display==='flex')hidePreview();});
+ function setEditingIndex(idx){
+  editingIndex=idx;
+  if(idx<0||!results[idx]){editStatus('결과를 하나 추출하거나 아래 결과 카드에서 ‘미세조정’ 버튼을 누르세요.');drawSelections();resultView();return;}
+  const r=results[idx];
+  active=r.photo;redraw();
+  editStatus(`사진 ${r.photo+1}의 ${r.mode==='special'?'고번':'일반'} 킬로그를 미세 조정 중입니다.`);
+  drawSelections();resultView();
+ }
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
-  if(!results.length){const d=document.createElement('div');d.className='empty';
-   d.textContent='아직 선택된 킬로그가 없습니다.';wrap.append(d);return;}
+  if(!results.length){const d=document.createElement('div');d.className='empty';d.textContent='아직 선택된 킬로그가 없습니다.';wrap.append(d);return;}
   results.forEach((r,i)=>{
-   const card=document.createElement('div');card.className='card';
+   const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');
+   card.style.borderColor=i===editingIndex?'#ffb020':'';
    const img=document.createElement('img');img.src=r.url;img.alt='누르면 확대해서 볼 수 있습니다';img.style.cursor='zoom-in';img.onclick=()=>showPreview(r,i);
    img.style.cssText='display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
-   const info=document.createElement('div');info.className='card-info';
-   info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${OUTPUT_W}×${r.outputH} · 가로 길이 통일`;
-   const warn=resultWarning(r);if(warn){const note=document.createElement('div');note.textContent='⚠ 결과 확인 권장: '+warn;note.style.cssText='padding:5px;color:#ffc67a;font-size:11px';card.append(note);}const save=document.createElement('button');save.className='save';save.textContent='개별 저장';save.onclick=()=>saveFiles([r],i);
-   const del=document.createElement('button');del.className='save';del.textContent='삭제';del.style.borderColor='#805568';
-   del.onclick=()=>{URL.revokeObjectURL(r.url);results.splice(i,1);resultView();drawSelections();updatePhotoCounts()};
-   card.append(img,info,save,del);wrap.append(card);
+   const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${r.mode==='special'?'고번':'일반'} · ${OUTPUT_W}×${r.outputH}`;
+   card.append(img,info);
+   const warn=resultWarning(r);if(warn){const note=document.createElement('div');note.style.cssText='font-size:12px;color:#ffcb7d;margin:4px 0 8px';note.textContent='주의: '+warn;card.append(note);}
+   const btnRow=document.createElement('div');btnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
+   const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
+   btnRow.append(
+    mk('미리보기',()=>showPreview(r,i)),
+    mk('미세조정',()=>setEditingIndex(i)),
+    mk('개별 저장',()=>saveFiles([r],i)),
+    mk('삭제',()=>deleteResult(i))
+   );
+   card.append(btnRow);wrap.append(card);
   });
  }
- async function saveFiles(list,startIndex=0){
-  const files=list.map((r,i)=>new File([r.blob],`킬로그_${String(startIndex+i+1).padStart(2,'0')}.png`,{type:'image/png'}));
-  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files});return;}}
-  catch(e){if(e.name==='AbortError')return;}
-  for(const f of files){
-   const u=URL.createObjectURL(f),a=document.createElement('a');a.href=u;a.download=f.name;
-   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);
-   await new Promise(r=>setTimeout(r,220));
+ async function saveFiles(list,startIndex){
+  for(let i=0;i<list.length;i++){
+   const r=list[i],f=new File([r.blob],`킬로그_${String(startIndex+i+1).padStart(2,'0')}.png`,{type:'image/png'});
+   const u=URL.createObjectURL(f),a=document.createElement('a');a.href=u;a.download=f.name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);await new Promise(r=>setTimeout(r,220));
   }
  }
  $('kl-save-all').onclick=()=>saveFiles(results,0);
  $('kl-files').addEventListener('change',async e=>{
-  const files=[...e.target.files];if(!files.length)return;
-  status('사진 불러오는 중…');let ok=0;
-  for(const f of files){try{const im=await loadImage(f);photos.push({image:im,name:f.name});ok++;}
-   catch(err){console.warn(err);}}
-  if(ok){active=photos.length-ok;redraw();window.logActivity?.('킬로그 사진 추가',{images:ok,total:photos.length});}
-  else status('사진을 읽지 못했습니다.');e.target.value='';
+  const files=[...e.target.files];if(!files.length)return;status('사진 불러오는 중…');let ok=0;
+  for(const f of files){try{const im=await loadImage(f);photos.push({image:im,name:f.name});ok++;}catch(err){console.warn(err);}}
+  if(ok){active=photos.length-ok;redraw();window.logActivity?.('킬로그 사진 추가',{images:ok,total:photos.length});}else status('사진을 읽지 못했습니다.');e.target.value='';
  });
- $('kl-clear').onclick=()=>{
-  photos.length=0;active=-1;
-  for(const r of results)URL.revokeObjectURL(r.url);
-  results.length=0;redraw();resultView();drawSelections();
- };
-
- function blur1D(array,radius=5){
-  const n=array.length,out=new Float32Array(n);
-  for(let i=0;i<n;i++){
-   let sum=0,wt=0;
-   for(let j=-radius;j<=radius;j++){
-    const x=clamp(i+j,0,n-1),q=radius+1-Math.abs(j);
-    sum+=array[x]*q;wt+=q;
-   }
-   out[i]=sum/wt;
+ $('kl-clear').onclick=()=>{photos.length=0;active=-1;editingIndex=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();drawSelections();};
+ 
+ function createMaskedResult(sourceX,sourceY,w,h,raw,alpha,mode,meta={}){
+  const master=document.createElement('canvas');master.width=w;master.height=h;
+  const img=master.getContext('2d').createImageData(w,h);
+  let minX=w,minY=h,maxX=-1,maxY=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const idx=y*w+x,src=idx*4;img.data[src]=raw[src];img.data[src+1]=raw[src+1];img.data[src+2]=raw[src+2];img.data[src+3]=alpha[idx]||0;
+   if((alpha[idx]||0)>=8){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
   }
-  return out;
+  if(maxX<minX||maxY<minY)return null;
+  master.getContext('2d').putImageData(img,0,0);
+  const sx=view.width/1536,sy=view.height/709;
+  const marginX=Math.max(5,Math.round((mode==='special'?20:35)*sx));
+  const marginY=Math.max(5,Math.round((mode==='special'?14:23)*sy));
+  const inner={x:clamp(minX-marginX,0,w-1),y:clamp(minY-marginY,0,h-1)};
+  inner.w=clamp(maxX+marginX,inner.x,w-1)-inner.x+1;
+  inner.h=clamp(maxY+marginY,inner.y,h-1)-inner.y+1;
+  const result={blob:null,url:null,outputH:MIN_OUTPUT_H,master,inner,baseInner:{...inner},sourceX,sourceY,mode,meta};
+  return result;
  }
- function quantile55(values,start,end){
-  const arr=[];
-  for(let i=clamp(start,0,values.length);i<clamp(end,0,values.length);i++)arr.push(values[i]);
-  if(!arr.length)return 60;
-  arr.sort((a,b)=>a-b);return arr[Math.floor((arr.length-1)*.55)];
+ function connectedKeep(alpha,w,h,seeds,minKeep=12){
+  const seen=new Uint8Array(w*h),keep=new Uint8Array(w*h),stack=[];
+  for(const p of seeds){if(p<0||p>=w*h||alpha[p]<16||seen[p])continue;seen[p]=1;stack.push(p);} 
+  while(stack.length){const p=stack.pop(),px=p%w,py=(p/w)|0;keep[p]=1;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const xx=px+dx,yy=py+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;const q=yy*w+xx;if(!seen[q]&&alpha[q]>15){seen[q]=1;stack.push(q);}}}
+  if(keep.some(v=>v))return keep;
+  const used=new Uint8Array(w*h);
+  let best=[];
+  for(let i=0;i<alpha.length;i++){
+   if(used[i]||alpha[i]<16)continue;
+   const comp=[];stack.length=0;stack.push(i);used[i]=1;
+   while(stack.length){const p=stack.pop(),px=p%w,py=(p/w)|0;comp.push(p);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const xx=px+dx,yy=py+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;const q=yy*w+xx;if(!used[q]&&alpha[q]>15){used[q]=1;stack.push(q);}}}
+   if(comp.length>best.length)best=comp;
+  }
+  if(best.length<minKeep)return null;
+  const out=new Uint8Array(w*h);for(const p of best)out[p]=1;return out;
  }
-
- async function extractKilllog(tx,ty,sourceCanvas=view){
-  const scanCtx=sourceCanvas===view?ctx:sourceCanvas.getContext('2d',{willReadFrequently:true});
-  const W=sourceCanvas.width,H=sourceCanvas.height;
+ function buildGenericResult(tx,ty,mode='normal'){
+  const W=view.width,H=view.height; if(W<200||H<120)return null;
+  const rgba=ctx.getImageData(0,0,W,H).data;
   const sx=W/1536,sy=H/709;
-  // 실제 게임 원본 19장의 공통 킬로그 레이아웃을 기준으로 분석.
-  // 사진을 확대해도 클릭 좌표는 자연 크기로 들어오므로 정확한 좌표로 처리한다.
-  if(W<500||H<240||W/H<1.98||W/H>2.45)return null;
-  const rgba=scanCtx.getImageData(0,0,W,H).data;
-  function rgb(x,y){
-   x=clamp(Math.round(x*sx),0,W-1);y=clamp(Math.round(y*sy),0,H-1);
-   const p=4*(y*W+x);return [rgba[p],rgba[p+1],rgba[p+2]];
-  }
-  function delta(a,b){return Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));}
-  // 색상에 관계없이 막대가 실제로 존재하는지 먼저 확인한다.
-  // 선택 실패 시 근처 배경을 임의의 킬로그로 만드는 과거 강제 보정은 사용하지 않음.
-  let visual=0,total=0;
-  for(let x=600;x<=825;x+=8){
-   const bg1=rgb(x,115),bg2=rgb(x,220);
-   for(let y=158;y<=180;y+=11){
-    const c=rgb(x,y);
-    const background=[(bg1[0]+bg2[0])/2,(bg1[1]+bg2[1])/2,(bg1[2]+bg2[2])/2];
-    visual+=Math.max(0,delta(c,background)-17);total++;
+  const cfg=mode==='special'
+   ? {left:140,right:360,top:70,bottom:75,bandHalf:15,refGap:28,decorLeft:125,decorRight:95,threshold:20,decorThreshold:24,fadeRight:160}
+   : {left:260,right:520,top:120,bottom:120,bandHalf:24,refGap:48,decorLeft:190,decorRight:115,threshold:18,decorThreshold:22,fadeRight:190};
+  const x0=clamp(Math.floor(tx-cfg.left*sx),0,W-2), x1=clamp(Math.ceil(tx+cfg.right*sx),x0+1,W);
+  const y0=clamp(Math.floor(ty-cfg.top*sy),0,H-2), y1=clamp(Math.ceil(ty+cfg.bottom*sy),y0+1,H);
+  const w=x1-x0,h=y1-y0;
+  const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
+  const topRef=clamp(Math.round(ty-cfg.refGap*sy),0,H-1), botRef=clamp(Math.round(ty+cfg.refGap*sy),0,H-1);
+  const rowTop=ctx.getImageData(x0,topRef,w,1).data, rowBot=ctx.getImageData(x0,botRef,w,1).data;
+  for(let y=0;y<h;y++){
+   const absY=y0+y, yNorm=(absY-(ty-cfg.refGap*sy))/Math.max(1,(cfg.refGap*2*sy));
+   const blend=clamp(yNorm,0,1);
+   for(let x=0;x<w;x++){
+    const src=4*(y*w+x),bi=x*4;
+    const R=rgba[(absY*W+(x0+x))*4],G=rgba[(absY*W+(x0+x))*4+1],B=rgba[(absY*W+(x0+x))*4+2];
+    raw[src]=R;raw[src+1]=G;raw[src+2]=B;raw[src+3]=255;
+    const bgR=rowTop[bi]*(1-blend)+rowBot[bi]*blend, bgG=rowTop[bi+1]*(1-blend)+rowBot[bi+1]*blend, bgB=rowTop[bi+2]*(1-blend)+rowBot[bi+2]*blend;
+    const d=rgbDelta(R,G,B,bgR,bgG,bgB), maxv=Math.max(R,G,B), minv=Math.min(R,G,B), sat=maxv-minv;
+    const absX=x0+x;
+    const inCore=Math.abs(absY-ty)<=cfg.bandHalf*sy && absX>=tx-cfg.left*.18*sx && absX<=tx+cfg.right*.85*sx;
+    const inLeftDecor=absX>=tx-cfg.decorLeft*sx && absX<=tx+cfg.decorRight*sx && Math.abs(absY-ty)<=cfg.top*.9*sy;
+    const brightText=maxv>170 && sat<85;
+    const decorative=inLeftDecor && d>cfg.decorThreshold && sat>14 && maxv>70;
+    let a=0;
+    if(inCore && (d>cfg.threshold || brightText || sat>8)) a=255;
+    if(decorative) a=255;
+    if(absX>tx+cfg.fadeRight*sx && inCore){
+     const t=clamp((tx+cfg.right*.85*sx-absX)/Math.max(1,cfg.right*.25*sx),0,1);
+     a=Math.max(a,Math.round(255*t*t*(3-2*t)));
+    }
+    alpha[y*w+x]=a;
    }
   }
+  const seedPts=[];
+  for(let yy=Math.max(0,Math.round(ty-y0-8*sy));yy<=Math.min(h-1,Math.round(ty-y0+8*sy));yy++){
+   for(let xx=Math.max(0,Math.round(tx-x0-10*sx));xx<=Math.min(w-1,Math.round(tx-x0+10*sx));xx++) seedPts.push(yy*w+xx);
+  }
+  const keep=connectedKeep(alpha,w,h,seedPts,mode==='special'?10:14);
+  if(!keep)return null;
+  for(let i=0;i<alpha.length;i++)if(!keep[i])alpha[i]=0;
+  return createMaskedResult(x0,y0,w,h,raw,alpha,mode,{generic:true,click:[tx,ty]});
+ }
+ async function extractKilllogClassic(tx,ty){
+  const W=view.width,H=view.height;
+  const sx=W/1536,sy=H/709;
+  if(W<500||H<240||W/H<1.98||W/H>2.45)return null;
+  const rgba=ctx.getImageData(0,0,W,H).data;
+  function rgb(x,y){x=clamp(Math.round(x*sx),0,W-1);y=clamp(Math.round(y*sy),0,H-1);const p=4*(y*W+x);return [rgba[p],rgba[p+1],rgba[p+2]];}
+  function delta(a,b){return Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));}
+  let visual=0,total=0;
+  for(let x=600;x<=825;x+=8){const bg1=rgb(x,115),bg2=rgb(x,220);for(let y=158;y<=180;y+=11){const c=rgb(x,y);const background=[(bg1[0]+bg2[0])/2,(bg1[1]+bg2[1])/2,(bg1[2]+bg2[2])/2];visual+=Math.max(0,delta(c,background)-17);total++;}}
   if(visual/Math.max(1,total)<24)return null;
   let warmth=0,warmTotal=0;
-  for(let y=160;y<185;y+=3)for(let x=750;x<900;x+=5){
-   const [R,G,B]=rgb(x,y);warmTotal++;
-   if(R>145&&R>B*1.6&&G>70)warmth++;
-  }
+  for(let y=160;y<185;y+=3)for(let x=750;x<900;x+=5){const [R,G,B]=rgb(x,y);warmTotal++;if(R>145&&R>B*1.6&&G>70)warmth++;}
   const fire=warmth/Math.max(1,warmTotal)>.42;
   const centerColor=rgb(760,182);
   const darkRed=!fire&&centerColor[0]<85&&centerColor[1]<75&&centerColor[2]<85&&centerColor[0]>centerColor[1]*1.04;
-  // 실제 장식형인지 색상·위치·배경 차이로 판별. 평범한 바에서는 기존 마스크 그대로.
   let upperDecorCount=0,lowerRedCount=0;
-  for(let x=490;x<=780;x+=4){
-   const refBg=rgb(x,75);
-   for(let y=94;y<=138;y+=3){
-    const c=rgb(x,y),sat=Math.max(...c)-Math.min(...c);
-    if(delta(c,refBg)>36&&sat>27&&Math.max(...c)>95)upperDecorCount++;
-   }
-   for(let y=201;y<=225;y+=3){
-    const c=rgb(x,y);
-    if(c[0]>118&&c[0]>c[1]*1.2&&delta(c,refBg)>35)lowerRedCount++;
-   }
-  }
+  for(let x=490;x<=780;x+=4){const refBg=rgb(x,75);for(let y=94;y<=138;y+=3){const c=rgb(x,y),sat=Math.max(...c)-Math.min(...c);if(delta(c,refBg)>36&&sat>27&&Math.max(...c)>95)upperDecorCount++;}for(let y=201;y<=225;y+=3){const c=rgb(x,y);if(c[0]>118&&c[0]>c[1]*1.2&&delta(c,refBg)>35)lowerRedCount++;}}
   const largeOrnament=!fire&&(upperDecorCount>25||lowerRedCount>13);
-
   const ux=tx/sx,uy=ty/sy;
   const inBar=ux>=540&&ux<=950&&uy>=143&&uy<=197;
   const inFire=fire&&ux>=476&&ux<=980&&uy>=99&&uy<=217;
   const hitColor=rgb(ux,uy),hitSat=Math.max(...hitColor)-Math.min(...hitColor);
-  const inLargeDecoration=largeOrnament&&ux>=478&&ux<=810&&uy>=95&&uy<=221&&
-   delta(hitColor,rgb(ux,75))>48&&hitSat>36&&Math.max(...hitColor)>105;
+  const inLargeDecoration=largeOrnament&&ux>=478&&ux<=810&&uy>=95&&uy<=221&&delta(hitColor,rgb(ux,75))>48&&hitSat>36&&Math.max(...hitColor)>105;
   if(!inBar&&!inFire&&!inLargeDecoration)return null;
-
-  // 빈 배경만 눌렀을 때는 막대가 존재하는 화면이라도 통과시키지 않는다.
   let nearby=0,samples=0;
-  for(let y=uy-8;y<=uy+8;y+=4)for(let x=ux-10;x<=ux+10;x+=4){
-   const c=rgb(x,y),t=rgb(x,largeOrnament?75:115),b=rgb(x,largeOrnament?238:221);
-   const bg=[(t[0]+b[0])/2,(t[1]+b[1])/2,(t[2]+b[2])/2];
-   if(delta(c,bg)>24)nearby++;
-   samples++;
-  }
+  for(let y=uy-8;y<=uy+8;y+=4)for(let x=ux-10;x<=ux+10;x+=4){const c=rgb(x,y),t=rgb(x,largeOrnament?75:115),b=rgb(x,largeOrnament?238:221);const bg=[(t[0]+b[0])/2,(t[1]+b[1])/2,(t[2]+b[2])/2];if(delta(c,bg)>24)nearby++;samples++;}
   if(nearby/Math.max(1,samples)<.20)return null;
-
   const leftBand=fire?490:545;
-  // 아이폰(1536x709): 원래 추출 수치를 그대로 사용한다.
-  // 태블릿 캡처: 킬로그 실제 높이가 사진마다 다르므로 바깥쪽 평탄한 막대 영역으로 측정한다.
-  // 흰 글자와 왼쪽 장식이 없는 오른쪽 막대 위치(820~930)만 표본으로 사용한다.
-  let topBand=darkRed?153:fire?146:149;
-  let bottomBand=darkRed?195:fire?192:190;
-  if(sourceCanvas!==view){
-   const probes=[820,845,870,890,910,930];
-   const topRef=probes.map(x=>rgb(x,112));
-   const lowRef=probes.map(x=>rgb(x,234));
-   let first=-1,last=-1,bestStart=-1,bestEnd=-1;
-   // 게임 UI 고정 좌표에서 전경과 배경의 색 차이를 비교. 번진 장식은 별도 마스크로 보존.
-   for(let y=105;y<=220;y++){
-    let hits=0;
-    for(let k=0;k<probes.length;k++){
-     const c=rgb(probes[k],y),t=topRef[k],b=lowRef[k];
-     const ref=[(t[0]+b[0])/2,(t[1]+b[1])/2,(t[2]+b[2])/2];
-     if(delta(c,ref)>15)hits++;
-    }
-    if(hits>=3){if(first<0)first=y;last=y;}
-    else if(first>=0){
-     if(last-first>bestEnd-bestStart){bestStart=first;bestEnd=last;}
-     first=-1;last=-1;
-    }
-   }
-   if(first>=0&&last-first>bestEnd-bestStart){bestStart=first;bestEnd=last;}
-   // 정상적인 킬로그 두께만 허용하며, 실제 띠 바깥으로 사각형 마스크가 확장되지 않게 한다.
-   if(bestStart>=128&&bestStart<=180 && bestEnd-bestStart>=23 && bestEnd-bestStart<=75){
-    topBand=bestStart;
-    bottomBand=bestEnd+1;
-   }
-  }
+  const topBand=darkRed?153:fire?146:149;
+  const bottomBand=darkRed?195:fire?192:190;
   const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
   const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
-  // 주변 장식이 잘리지 않도록 원본 영역을 조금 더 확보한다.
-  const x0=clamp(Math.floor(sourceX0*sx),0,W-2);
-  const x1=clamp(Math.ceil(sourceX1*sx),x0+1,W);
-  const y0=clamp(Math.floor(sourceY0*sy),0,H-2);
-  const y1=clamp(Math.ceil(sourceY1*sy),y0+1,H);
+  const x0=clamp(Math.floor(sourceX0*sx),0,W-2),x1=clamp(Math.ceil(sourceX1*sx),x0+1,W),y0=clamp(Math.floor(sourceY0*sy),0,H-2),y1=clamp(Math.ceil(sourceY1*sy),y0+1,H);
   const w=x1-x0,h=y1-y0;
   const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
-  const bandT=topBand*sy-y0,bandB=bottomBand*sy-y0;
   const topSample=Math.round((largeOrnament?75:115)*sy),bottomSample=Math.round((largeOrnament?238:221)*sy);
-  const cb=scanCtx.getImageData(x0,y0,w,h).data;
-  const ctop=scanCtx.getImageData(x0,topSample,w,1).data;
-  const cbot=scanCtx.getImageData(x0,bottomSample,w,1).data;
+  const cb=ctx.getImageData(x0,y0,w,h).data,ctop=ctx.getImageData(x0,topSample,w,1).data,cbot=ctx.getImageData(x0,bottomSample,w,1).data;
   for(let y=0;y<h;y++){
    const yRef=(y+y0)/sy;
    const blend=largeOrnament?clamp((yRef-75)/163,0,1):clamp((yRef-115)/106,0,1);
@@ -5928,168 +5929,76 @@ saveBtn.addEventListener("click",async()=>{
     const R=cb[i],G=cb[i+1],B=cb[i+2],maxv=Math.max(R,G,B),minv=Math.min(R,G,B),sat=maxv-minv;
     raw[i]=R;raw[i+1]=G;raw[i+2]=B;raw[i+3]=255;
     const bx=(x+x0)/sx;
-    let d=0;
-    for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
-    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=(sourceCanvas!==view&&fire?620:leftBand)&&bx<=975;
+    let d=0;for(let c=0;c<3;c++)d=Math.max(d,Math.abs(cb[i+c]-(ctop[bi+c]*(1-blend)+cbot[bi+c]*blend)));
+    const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
     let a=0;
-    if(inStripe){
-     // 완전 불투명한 글자·총 아이콘을 보존하면서 오른쪽만 부드럽게 퇴색.
-     a=255;
-     if(bx>860){const t=clamp((970-bx)/110,0,1);a=Math.round(255*t*t*(3-2*t));}
-    }
-    if(fire){
-     const warm=R>115&&R>B*1.25&&G>45&&d>30;
-     const bright=R>110&&R>B*1.08&&sat>55&&d>55;
-     if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;
-    }else{
-     const decorative=largeOrnament
-       ? d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221)
-       : d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;
-     const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;
-     const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;
-     // 보라빛 막대 아래의 파편만 보호. 다른 스킨의 총기 UI는 추가하지 않음.
-     const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;
-     if(decorative||(purple&&pinkExtra)||redFlame)a=255;
-    }
+    if(inStripe){a=255;if(bx>860){const t=clamp((970-bx)/110,0,1);a=Math.round(255*t*t*(3-2*t));}}
+    if(fire){const warm=R>115&&R>B*1.25&&G>45&&d>30;const bright=R>110&&R>B*1.08&&sat>55&&d>55;if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;}
+    else{const decorative=largeOrnament?d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221):d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;if(decorative||(purple&&pinkExtra)||redFlame)a=255;}
     alpha[y*w+x]=a;
    }
   }
-
-  // 불꽃/장식 바깥의 작은 배경 잡티만 제거. 막대 본체 픽셀은 건드리지 않는다.
-  const seen=new Uint8Array(w*h);
-  const stack=[];
+  const seen=new Uint8Array(w*h),stack=[];
   for(let i=0;i<alpha.length;i++){
    if(seen[i]||alpha[i]<16)continue;
    const comp=[];stack.length=0;stack.push(i);seen[i]=1;
-   while(stack.length){
-    const p=stack.pop(),px=p%w,py=(p/w)|0;comp.push(p);
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-     const xx=px+dx,yy=py+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;
-     const q=yy*w+xx;if(!seen[q]&&alpha[q]>15){seen[q]=1;stack.push(q);}
-    }
-   }
+   while(stack.length){const p=stack.pop(),px=p%w,py=(p/w)|0;comp.push(p);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=px+dx,yy=py+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;const q=yy*w+xx;if(!seen[q]&&alpha[q]>15){seen[q]=1;stack.push(q);}}}
    if(comp.length<(largeOrnament?40:16))for(const p of comp)alpha[p]=0;
   }
-  let minX=w,minY=h,maxX=-1,maxY=-1;
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-   if(alpha[y*w+x]<8)continue;
-   minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY);
-  }
-  if(maxX<minX||maxY<minY)return null;
-  minX=clamp(minX-Math.ceil(4*sx),0,w-1);maxX=clamp(maxX+Math.ceil(4*sx),minX,w-1);
-  minY=clamp(minY-Math.ceil(4*sy),0,h-1);maxY=clamp(maxY+Math.ceil(4*sy),minY,h-1);
-  // 장식을 보존할 수 있도록 여유 공간을 확보한다.
-  const marginX=Math.round(35*sx),marginY=Math.round(23*sy);
-  minX=clamp(minX-marginX,0,w-1);maxX=clamp(maxX+marginX,minX,w-1);
-  minY=clamp(minY-marginY,0,h-1);maxY=clamp(maxY+marginY,minY,h-1);
-  const cropW=maxX-minX+1,cropH=maxY-minY+1;
-  const temp=document.createElement('canvas');temp.width=cropW;temp.height=cropH;
-  const masked=temp.getContext('2d').createImageData(cropW,cropH);
-  for(let y=0;y<cropH;y++)for(let x=0;x<cropW;x++){
-   const ii=((y+minY)*w+x+minX),dst=4*(y*cropW+x),src=ii*4;
-   for(let c=0;c<3;c++)masked.data[dst+c]=raw[src+c];
-   masked.data[dst+3]=alpha[ii];
-  }
-  temp.getContext('2d').putImageData(masked,0,0);
-  const result={blob:null,url:null,outputH:MIN_OUTPUT_H,work:temp,
-   bounds:{x:x0+minX,y:y0+minY,w:cropW,h:cropH}};
+  return createMaskedResult(x0,y0,w,h,raw,alpha,'normal',{fire,darkRed,largeOrnament});
+ }
+ async function extractKilllog(tx,ty,mode){
+  let result=null;
+  if(mode==='normal'){result=await extractKilllogClassic(tx,ty);if(!result)result=buildGenericResult(tx,ty,'normal');}
+  else result=buildGenericResult(tx,ty,'special');
+  if(!result)return null;
   if(!(await encodeResult(result)))return null;
-  window.__killlogLastDebug={
-   topBand,bottomBand,tabletBand:sourceCanvas!==view,fire,darkRed,largeOrnament,upperDecorCount,lowerRedCount,body:[leftBand*sx,topBand*sy,970*sx,bottomBand*sy],bounds:[x0+minX,y0+minY,cropW,cropH],touch:[tx,ty]};
   return result;
  }
-
- // Tablets: handle finger and pen taps directly; ignore panning/pinch and duplicate synthetic clicks.
- let gesturePointer=null,gestureTouch=null,lastHandledTouch=0;
- const TAP_DRIFT=18,TAP_SCROLL_DRIFT=6,TAP_MAX_MS=1750;
- const gestureStart=(id,x,y)=>({id,x,y,at:Date.now(),scrollX:viewport.scrollLeft,scrollY:viewport.scrollTop});
- function validTap(start,x,y){
-  return !!start && Date.now()-start.at<=TAP_MAX_MS &&
-   Math.hypot(x-start.x,y-start.y)<=TAP_DRIFT &&
-   Math.abs(viewport.scrollLeft-start.scrollX)<=TAP_SCROLL_DRIFT &&
-   Math.abs(viewport.scrollTop-start.scrollY)<=TAP_SCROLL_DRIFT &&
-   !pinch && Date.now()>=suppressClickUntil;
+ async function tweakResult(idx,kind){
+  const r=results[idx];if(!r)return;const stepX=Math.max(1,Math.round(view.width/420)),stepY=Math.max(1,Math.round(view.height/420));
+  const limX=r.master.width, limY=r.master.height; let ch=true;
+  if(kind==='left')r.inner.x=clamp(r.inner.x-stepX,0,Math.max(0,limX-r.inner.w));
+  else if(kind==='right')r.inner.x=clamp(r.inner.x+stepX,0,Math.max(0,limX-r.inner.w));
+  else if(kind==='up')r.inner.y=clamp(r.inner.y-stepY,0,Math.max(0,limY-r.inner.h));
+  else if(kind==='down')r.inner.y=clamp(r.inner.y+stepY,0,Math.max(0,limY-r.inner.h));
+  else if(kind==='wider'){r.inner.x=clamp(r.inner.x-stepX,0,limX-1);r.inner.w=clamp(r.inner.w+stepX*2,2,limX-r.inner.x);} 
+  else if(kind==='narrower'){r.inner.x=clamp(r.inner.x+stepX,0,limX-2);r.inner.w=clamp(r.inner.w-stepX*2,2,limX-r.inner.x);} 
+  else if(kind==='taller'){r.inner.y=clamp(r.inner.y-stepY,0,limY-1);r.inner.h=clamp(r.inner.h+stepY*2,2,limY-r.inner.y);} 
+  else if(kind==='shorter'){r.inner.y=clamp(r.inner.y+stepY,0,limY-2);r.inner.h=clamp(r.inner.h-stepY*2,2,limY-r.inner.y);} 
+  else if(kind==='reset'){r.inner={...r.baseInner};}
+  else ch=false;
+  if(!ch)return;
+  await encodeResult(r);drawSelections();resultView();editStatus('미세 조정 내용을 반영했어요.');
  }
- function handleTouchSelection(x,y){
+ function deleteResult(idx){
+  if(idx<0||!results[idx])return;URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
+  if(editingIndex===idx)editingIndex=-1; else if(editingIndex>idx)editingIndex--;
+  resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');
+ }
+ [['kl-box-left','left'],['kl-box-right','right'],['kl-box-up','up'],['kl-box-down','down'],['kl-box-wider','wider'],['kl-box-narrower','narrower'],['kl-box-taller','taller'],['kl-box-shorter','shorter'],['kl-box-reset','reset']].forEach(([id,kind])=>$(id).onclick=()=>editingIndex>=0&&tweakResult(editingIndex,kind));
+ $('kl-box-delete').onclick=()=>editingIndex>=0&&deleteResult(editingIndex);
+ 
+ stage.addEventListener('click',async e=>{
   if(Date.now()<suppressClickUntil)return;
-  lastHandledTouch=Date.now();
-  void chooseKilllog(x,y);
- }
- // Modern Safari/Chrome: pointerup is more reliable than a delayed click on a scrollable canvas.
- stage.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse')return;
-  gesturePointer=(e.isPrimary&&e.button===0&&!pinch)?gestureStart(e.pointerId,e.clientX,e.clientY):null;
- },{passive:true});
- stage.addEventListener('pointermove',e=>{
-  if(!gesturePointer||e.pointerId!==gesturePointer.id)return;
-  if(Math.hypot(e.clientX-gesturePointer.x,e.clientY-gesturePointer.y)>TAP_DRIFT)gesturePointer=null;
- },{passive:true});
- stage.addEventListener('pointercancel',()=>{gesturePointer=null;},{passive:true});
- stage.addEventListener('pointerup',e=>{
-  if(e.pointerType==='mouse')return;
-  const start=gesturePointer;gesturePointer=null;
-  if(!start||e.pointerId!==start.id||lastHandledTouch>=start.at||!validTap(start,e.clientX,e.clientY))return;
-  e.preventDefault();
-  handleTouchSelection(e.clientX,e.clientY);
- });
- // iPad Safari fallback on browsers that don't deliver a usable pointerup.
- stage.addEventListener('touchstart',e=>{
-  if(e.touches.length!==1){gestureTouch=null;gesturePointer=null;return;}
-  const t=e.touches[0];gestureTouch=gestureStart(t.identifier,t.clientX,t.clientY);
- },{passive:true});
- stage.addEventListener('touchmove',e=>{
-  if(!gestureTouch||e.touches.length!==1){gestureTouch=null;return;}
-  const t=e.touches[0];
-  if(t.identifier!==gestureTouch.id||Math.hypot(t.clientX-gestureTouch.x,t.clientY-gestureTouch.y)>TAP_DRIFT)gestureTouch=null;
- },{passive:true});
- stage.addEventListener('touchcancel',()=>{gestureTouch=null;gesturePointer=null;},{passive:true});
- stage.addEventListener('touchend',e=>{
-  const start=gestureTouch;gestureTouch=null;
-  if(!start||e.touches.length||lastHandledTouch>=start.at)return;
-  const t=Array.from(e.changedTouches).find(p=>p.identifier===start.id);
-  if(!t||!validTap(start,t.clientX,t.clientY))return;
-  e.preventDefault();
-  handleTouchSelection(t.clientX,t.clientY);
- },{passive:false});
- // Mouse click remains supported. Ignore the extra click some mobile browsers emit after a tap.
- stage.addEventListener('click',e=>{
-  if(Date.now()-lastHandledTouch<850 || Date.now()<suppressClickUntil)return;
-  void chooseKilllog(e.clientX,e.clientY);
- });
- async function chooseKilllog(clientX,clientY){
-  if(Date.now()<suppressClickUntil || active<0 || busy)return;
+  if(active<0||busy)return;
   const rect=view.getBoundingClientRect(),W=view.width,H=view.height;
-  if(!rect.width||!rect.height||W<2||H<2)return;
-  if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return;
-  // Map CSS-rendered canvas dimensions to source pixels; works after pinch zoom and scrolling.
-  const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
-  const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
-  if(results.some(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h)){
-   const selectedIndex=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
-   if(selectedIndex>=0){URL.revokeObjectURL(results[selectedIndex].url);results.splice(selectedIndex,1);resultView();drawSelections();updatePhotoCounts();status('킬로그 선택을 해제했어요.');}
-   return;
-  }
+  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;
+  const tx=clamp(Math.round((e.clientX-rect.left)*W/rect.width),0,W-1);
+  const ty=clamp(Math.round((e.clientY-rect.top)*H/rect.height),0,H-1);
+  const already=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
+  if(already>=0){setEditingIndex(already);status('선택한 킬로그를 미세 조정할 수 있어요.');return;}
   busy=true;status('킬로그를 자르는 중…');
   try{
-   // Native tablet screenshots are often taller (1536x1059) but the game HUD
-   // remains in the same top-image coordinates. Normalize the recognition
-   // input without resizing image pixels or modifying the original PNG cropper.
-   let recognitionCanvas=view;
-   if(W/H>=1.25 && W/H<1.98){
-    const h=Math.min(H,Math.round(W*709/1536));
-    recognitionCanvas=document.createElement('canvas');
-    recognitionCanvas.width=W;recognitionCanvas.height=h;
-    recognitionCanvas.getContext('2d',{willReadFrequently:true}).drawImage(view,0,0,W,h,0,0,W,h);
-   }
-   const picked=await extractKilllog(tx,ty,recognitionCanvas);
-   if(!picked){status('킬로그를 인식하지 못했어요. 사진 위쪽 ‘킬 알림’ 막대를 눌러주세요.');return;}
-   results.push({...picked,photo:active});resultView();drawSelections();updatePhotoCounts();
-   status('킬로그 추출 완료! 아래에서 확인하고 저장하세요.');
-   window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h});
+   const picked=await extractKilllog(tx,ty,killlogMode);
+   if(!picked){status('킬로그를 인식하지 못했어요. 막대 중앙이나 장식 부분을 조금 더 정확히 눌러주세요.');return;}
+   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();setEditingIndex(results.length-1);drawSelections();
+   status('킬로그 추출 완료! 필요하면 위 미세 조정 버튼으로 바로 다듬으세요.');
+   window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
- }
- redraw();resultView();
+ });
+ setMode('normal');redraw();resultView();
 })();
 </script>
 
