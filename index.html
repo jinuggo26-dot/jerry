@@ -2046,7 +2046,7 @@ window.closeAdmin=()=>{
     <button type="button" id="kl-mode-special" class="photo-button">고번 킬로그</button>
     <span id="kl-mode-label" style="font-size:11px;color:#9fb2cc">일반 킬로그: 기존 막대형 / 고번 킬로그: 다른 형태의 킬로그 전용</span>
    </div>
-   <p style="font-size:12px;color:#9eb6d8;line-height:1.55;margin:3px 0 10px">사진에서 킬로그 막대를 한 번 눌러 추출하세요. 기기 크기와 관계없이 원본 사진의 픽셀 좌표로 인식합니다.</p>
+   <p style="font-size:12px;color:#9eb6d8;line-height:1.55;margin:3px 0 10px">확인된 킬로그 막대나 장식 부분을 눌러 추출하세요. 빈 배경·메뉴·총기에는 반응하지 않으며, 모든 기기에서 원본 픽셀 기준으로 동일하게 잘립니다.</p>
    <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
     <button type="button" id="kl-zoom-out" class="photo-button" style="min-width:48px;width:48px" aria-label="사진 축소">−</button>
     <span id="kl-zoom-percent" style="font-size:13px;font-weight:800;min-width:50px;text-align:center;color:#cfe1ff">100%</span>
@@ -5976,8 +5976,8 @@ saveBtn.addEventListener("click",async()=>{
   if(maxX<minX||maxY<minY)return null;
   master.getContext('2d').putImageData(img,0,0);
   const sx=view.width/1536,sy=(view.width/view.height<1.98?view.width/1536:view.height/709);
-  const marginX=Math.max(5,Math.round((mode==='special'?12:35)*sx));
-  const marginY=Math.max(5,Math.round((mode==='special'?14:23)*sy));
+  const marginX=meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.18)):Math.max(5,Math.round((mode==='special'?12:35)*sx));
+  const marginY=meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.15)):Math.max(5,Math.round((mode==='special'?14:23)*sy));
   const inner={x:clamp(minX-marginX,0,w-1),y:clamp(minY-marginY,0,h-1)};
   inner.w=clamp(maxX+marginX,inner.x,w-1)-inner.x+1;
   inner.h=clamp(maxY+marginY,inner.y,h-1)-inner.y+1;
@@ -6249,42 +6249,257 @@ saveBtn.addEventListener("click",async()=>{
  }
  // 손가락으로 눌렀다는 이유만으로 인식 성공으로 처리하지 않는다.
  // 게임 화면의 다른 글자·총·창고 카드가 막대로 잘려 나가는 것을 막는 사전 검증.
- function isConfirmedKilllogTap(tx,ty,mode){
-  const W=view.width,H=view.height,scale=W/1536;
-  if(W<430||H<220)return false;
-  const px=tx/W,py=ty/H;
-  // 화면 중앙 위쪽의 긴 배너에서만 추출한다. 화면 아래/우측 카드에서는 실패 처리.
-  if(px<.12||px>.77||py<.105||py>.385)return false;
-  const image=ctx.getImageData(0,0,W,H).data;
-  const pixel=(x,y)=>{
-   x=clamp(Math.round(x),0,W-1);y=clamp(Math.round(y),0,H-1);
-   const p=(y*W+x)*4;return [image[p],image[p+1],image[p+2]];
-  };
-  let contrast=0,centerContrast=0;
-  const offsets=[-100,-75,-50,-25,0,25,50,75,100,125,150];
-  const refGap=(mode==='special'?42:48)*scale;
-  for(const off of offsets){
-   const xx=tx+off*scale,c=pixel(xx,ty),top=pixel(xx,ty-refGap),bottom=pixel(xx,ty+refGap);
-   const v=Math.max(...c.map((q,k)=>Math.abs(q-(top[k]+bottom[k])/2)));
-   if(v>23){contrast++;if(off>=-100&&off<=50)centerContrast++;}
+/* Content-relative banner detection. No reference screenshot dimensions. */
+function extractTapRelativeKilllog(tx,ty,mode){
+ const W=view.width,H=view.height;
+ if(W<240||H<160||tx<3||ty<3)return null;
+ const img=ctx.getImageData(0,0,W,H).data;
+ const rgb=(x,y)=>{x=clamp(Math.round(x),0,W-1);y=clamp(Math.round(y),0,H-1);const p=(y*W+x)*4;return [img[p],img[p+1],img[p+2]];};
+ const diff=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+ const maxH=Math.min(160,Math.round(Math.min(W,H)*.23));
+ const maxX=Math.min(W-1,Math.round(tx+Math.max(120,maxH*5)));
+ // Measure horizontal edge energy at multiple offsets around the tapped text.
+ // Vertical bounds are the two strongest roughly parallel edges bracketing tap.
+ const candidate=[];
+ const scanTop=Math.max(4,Math.round(ty-maxH)),scanBot=Math.min(H-5,Math.round(ty+maxH));
+ const columns=[];
+ for(let dx=-22;dx<=170;dx+=12){let x=Math.round(tx+dx);if(x>=0&&x<W)columns.push(x);}
+ for(let y=scanTop;y<=scanBot;y++){
+  const ds=[];
+  for(const x of columns){const a=rgb(x,y-2),b=rgb(x,y+2);ds.push(diff(a,b));}
+  ds.sort((a,b)=>a-b);
+  const val=ds[Math.floor(ds.length*.55)]||0;
+  candidate.push({y,edge:val});
+ }
+ // Search the edge pair, giving preference to the banner just around the touch.
+ let best=null;
+ const spanLimit=Math.min(150,Math.round(Math.min(H,W)*.18));
+ for(let i=0;i<candidate.length;i++){
+  const a=candidate[i];if(a.y>ty-5||a.y<ty-spanLimit||a.edge<7)continue;
+  for(let j=i+6;j<candidate.length;j++){
+   const b=candidate[j],height=b.y-a.y;
+   if(height>spanLimit||b.y<ty+3||b.edge<7)continue;
+   if(ty-a.y<height*.11||b.y-ty<height*.11)continue;
+   // Interior against outside, sampled from columns right of the touch to avoid decorations.
+   const outsideOffset=Math.max(6,Math.round(height*.5));
+   let signal=0,samples=0;
+   for(const xx of columns.filter(x=>x>=tx+18)){
+    const inside=rgb(xx,Math.round((a.y+b.y)/2));
+    const top=rgb(xx,a.y-outsideOffset),bottom=rgb(xx,b.y+outsideOffset);
+    const background=[(top[0]+bottom[0])/2,(top[1]+bottom[1])/2,(top[2]+bottom[2])/2];
+    signal+=diff(inside,background);samples++;
+   }
+   if(!samples)continue;
+   const avg=signal/samples;
+   const edge=a.edge+b.edge;
+   const offsetPenalty=Math.abs((a.y+b.y)/2-ty)/Math.max(1,height);
+   const score=avg*.72+edge*.24-height*.08-offsetPenalty*4;
+   if(avg<17||score<16)continue;
+   if(!best||score>best.score)best={top:a.y,bottom:b.y,score,signal:avg};
   }
-  // 열두 번째 이상의 단순 배경 인식 대신 가로 띠의 반복 색상 변화를 확인.
-  if(contrast<3||centerContrast<2)return false;
-  // 작은 '킬 알림' 글자와 밝은 무기 아이콘은 실제 배너의 강한 증거.
-  // 배너 장식만 눌렀을 때도 주변 영역을 함께 검사해 터치가 너무 민감해지지 않게 한다.
-  const left=clamp(Math.floor(tx-175*scale),0,W-1),right=clamp(Math.ceil(tx+145*scale),left+1,W);
-  const top=clamp(Math.floor(ty-21*scale),0,H-1),bottom=clamp(Math.ceil(ty+23*scale),top+1,H);
-  const step=Math.max(1,Math.round(scale));
-  let whites=0,samples=0;
-  for(let y=top;y<bottom;y+=step){
-   for(let x=left;x<right;x+=step){
-    const p=(y*W+x)*4,r=image[p],g=image[p+1],b=image[p+2];
-    if(Math.min(r,g,b)>151&&Math.max(r,g,b)-Math.min(r,g,b)<72)whites++;
-    samples++;
+ }
+ if(!best)return null;
+ let top=best.top,bottom=best.bottom,bandH=bottom-top;
+ // Do not confuse a line / menu / weapon card with a genuine short horizontal banner.
+ if(bandH<9||bandH>Math.min(150,H*.16))return null;
+ const centerY=Math.round((top+bottom)/2);
+ const nearTop=Math.max(0,Math.round(top-bandH*.55));
+ const nearBot=Math.min(H-1,Math.round(bottom+bandH*.60));
+ // Contrast between the banner and immediately surrounding game scene across X.
+ const xMin=Math.max(0,Math.round(tx-bandH*13));
+ const xMax=Math.min(W-1,Math.round(tx+bandH*18));
+ const scoreX=[];
+ const rowYs=[top+bandH*.22,top+bandH*.45,top+bandH*.72].map(Math.round);
+ for(let x=xMin;x<=xMax;x+=2){
+  let sum=0;
+  for(const y of rowYs){
+   const p=rgb(x,y),a=rgb(x,nearTop),b=rgb(x,nearBot);
+   sum+=diff(p,[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2]);
+  }
+  scoreX.push(sum/rowYs.length);
+ }
+ const smooth=[];
+ const k=Math.max(2,Math.round(bandH/7));
+ for(let i=0;i<scoreX.length;i++){
+  let sum=0,count=0;
+  for(let j=Math.max(0,i-k);j<=Math.min(scoreX.length-1,i+k);j++){sum+=scoreX[j];count++;}
+  smooth.push(sum/count);
+ }
+ const at=i=>Math.round(xMin+i*2);
+ const anchor=Math.round((tx-xMin)/2);
+ let bestAnchor=anchor;
+ for(let i=Math.max(0,anchor-18);i<=Math.min(smooth.length-1,anchor+18);i++){
+  if(smooth[i]>smooth[bestAnchor])bestAnchor=i;
+ }
+ if(smooth[bestAnchor]<17)return null;
+ const threshold=Math.max(12,Math.min(25,smooth[bestAnchor]*.28));
+ const minGap=Math.max(3,Math.round(bandH*.62/2));
+ let l=bestAnchor,r=bestAnchor,miss=0;
+ for(let i=bestAnchor;i>=0;i--){
+  if(smooth[i]<threshold)miss++;else miss=0;
+  if(miss>=minGap){l=i+miss;break;}l=i;
+ }
+ miss=0;
+ for(let i=bestAnchor;i<smooth.length;i++){
+  if(smooth[i]<threshold)miss++;else miss=0;
+  if(miss>=minGap){r=i-miss;break;}r=i;
+ }
+ let xLeft=at(l),xRight=at(r);
+ // At the right end banners often intentionally fade into the background.
+ if(xRight-xLeft<bandH*2.5||xRight-xLeft>bandH*28)return null;
+ let confidence=0;
+ for(let i=l;i<=r;i+=Math.max(1,Math.round((r-l)/40)))if(smooth[i]>threshold)confidence++;
+ if(confidence<12)return null;
+ // A clicked banner body extends to the left decoration: use nearby ornament pixels
+ // but don't preserve the entire rectangular background around it.
+ const headWindow=bandH*(mode==='special'?4.5:4.2);
+ const left=Math.max(0,Math.floor(xLeft-headWindow));
+ const right=Math.min(W,Math.ceil(xRight+bandH*.30));
+ const cropTop=Math.max(0,Math.floor(top-bandH*1.5));
+ const cropBottom=Math.min(H,Math.ceil(bottom+bandH*1.5));
+ const w=right-left,h=cropBottom-cropTop;
+ const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
+ const samplesTop=new Uint8Array(w*3),samplesBot=new Uint8Array(w*3);
+ for(let x=0;x<w;x++){
+  const a=rgb(left+x,Math.max(0,Math.floor(top-bandH*.65))),b=rgb(left+x,Math.min(H-1,Math.ceil(bottom+bandH*.7)));
+  for(let k=0;k<3;k++){samplesTop[x*3+k]=a[k];samplesBot[x*3+k]=b[k];}
+ }
+ const barLeft=Math.max(xLeft,Math.round(tx-bandH*8));
+ const xCoreRight=xRight;
+ for(let y=0;y<h;y++){
+  const ay=cropTop+y;
+  for(let x=0;x<w;x++){
+   const ax=left+x,src=(ay*W+ax)*4,dst=(y*w+x)*4;
+   const R=img[src],G=img[src+1],B=img[src+2];raw[dst]=R;raw[dst+1]=G;raw[dst+2]=B;raw[dst+3]=255;
+   let a=0;
+   // Solid contiguous bar, never subtract letters or weapon icons.
+   const inside=ay>=top&&ay<=bottom&&ax>=barLeft&&ax<=xCoreRight;
+   if(inside){
+    a=255;
+    // Tap-relative fade only at last part of bar, not across its text.
+    const fadeWidth=Math.max(5,bandH*.7);
+    if(ax>xCoreRight-fadeWidth){const t=clamp((xCoreRight-ax)/fadeWidth,0,1);a=Math.round(255*t*t*(3-2*t));}
+   }
+   const deco=ax<barLeft+bandH*.65 && ax>=left && ay>=cropTop && ay<=cropBottom;
+   if(deco){
+    const bg=[(samplesTop[x*3]+samplesBot[x*3])/2,(samplesTop[x*3+1]+samplesBot[x*3+1])/2,(samplesTop[x*3+2]+samplesBot[x*3+2])/2];
+    const d=diff([R,G,B],bg),max=Math.max(R,G,B),sat=max-Math.min(R,G,B);
+    if(d>Math.max(25,Math.min(42,best.signal*.75)) && (sat>24||max>160))a=Math.max(a,255);
+   }
+   alpha[y*w+x]=a;
+  }
+ }
+ const rResult=createMaskedResult(left,cropTop,w,h,raw,alpha,mode,{dynamicLocal:true,barHeight:bandH,local:[xLeft,xRight,top,bottom],score:best.score});
+ return rResult;
+}
+
+
+ /*
+  * 기기 독립적인 킬로그 인증: 원본 픽셀만 사용합니다.
+  * 사용자 터치는 최종적인 '킬로그 마스크에 닿았는지' 판단할 때만 쓰고,
+  * 텍스트 위치 탐색/크롭 좌표는 사진별로 한 번 결정해서 캐시합니다.
+  * 템플릿은 실제 원본 스크린샷에 있는 '킬 알림' 글자 형태의 픽셀 특징입니다.
+  */
+const KLG_TEMPLATES={normal:[],special:[]};
+KLG_TEMPLATES.normal.push({w:29,h:14,hex:"0000000000050000021000000000000000000000000000000000000304000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000060000001b7c7086001e8d000000000a6f801c007f0000187e80940000c1000000354232a8001f8d00000000af0500ae00a53200000000a90000af000000002fa45d00178600000000952b0f9a009b00000b95717b0000ad0000005aa0400000007c00000000001b2500001e0000008f46413d00a20000000040322934493500000000004d595c5e8d000000000000000035000000000010140f4a8b00000000000000000099000000008c6663759e000000007666262a2c1d0000000000a05d2e2f26000000008a000000b40000000051787878826600000000007d8d888370000000007b787b8794000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"});
+KLG_TEMPLATES.special.push({w:21,h:10,hex:"000000000000000000000000000000220000000000020000000b284903030a1c23252825251f222922194633341c000000000000000000000000000b140e13000000061f2a060000000000000000000000000000000000000000000000000000000000000000000000000019090000000000000000000000000000000700000000000000000000000000000000000000000000a2a54e00000000717933690000002987710e31006793001e0000000064a1005c0000009f009e0072001d9b0000000000169d28005d000000004b0000000092"});
+KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000000252c2d313236363738393738383738383a3a3a3a0c11181b1f262829292828292929292a2a2a2a2a0000000000000000000000000000000000000000820000000000000000000000000000000000000090000000000000000000000000000000000000009f770500000000000000000000000000000000003a0000000000006c707b0f3000000087910078000000000000000060a222021f000075005a00900000000000000000a954000024000000301c002500"});
+
+ for(const group of Object.values(KLG_TEMPLATES))for(const tpl of group){
+  tpl.pixels=new Uint8Array(tpl.hex.length/2);
+  for(let i=0;i<tpl.pixels.length;i++)tpl.pixels[i]=parseInt(tpl.hex.slice(i*2,i*2+2),16);
+  delete tpl.hex;
+ }
+ function killlogSignature(mode){
+  const photo=photos[active];
+  if(!photo)return null;
+  photo._verifiedKilllog??={};
+  if(Object.prototype.hasOwnProperty.call(photo._verifiedKilllog,mode))return photo._verifiedKilllog[mode];
+  const W=view.width,H=view.height,virtualW=768,virtualH=Math.round(H*virtualW/W);
+  if(W<420||virtualH<100){photo._verifiedKilllog[mode]=null;return null;}
+  // 모든 디바이스에서 동일한 원본을 동일한 가상 픽셀 격자로 매핑합니다.
+  // 화면 크기, devicePixelRatio, CSS 확대율은 특징 추출에 관여하지 않습니다.
+  const source=ctx.getImageData(0,0,W,H).data;
+  const g=new Uint8Array(virtualW*virtualH);
+  const sampleX=new Int32Array(virtualW);
+  for(let x=0;x<virtualW;x++)sampleX[x]=Math.min(W-1,Math.floor(x*W/virtualW+.5));
+  for(let y=0;y<virtualH;y++){
+   const yy=Math.min(H-1,Math.floor(y*W/virtualW+.5)),base=yy*W*4;
+   for(let x=0;x<virtualW;x++){
+    const k=base+sampleX[x]*4;
+    g[y*virtualW+x]=Math.min(source[k],source[k+1],source[k+2]);
    }
   }
-  return whites>=Math.max(13,Math.round(samples*.0014));
+  // 9x9 평균 밝기를 뺀 양의 성분: 킬로그 글자의 획을 배경·총기 이미지와 구분.
+  const stride=virtualW+1,integ=new Float64Array(stride*(virtualH+1));
+  for(let y=0;y<virtualH;y++){
+   let accum=0;
+   for(let x=0;x<virtualW;x++){
+    accum+=g[y*virtualW+x];
+    integ[(y+1)*stride+x+1]=integ[y*stride+x+1]+accum;
+   }
+  }
+  const feature=new Uint8Array(virtualW*virtualH);
+  for(let y=0;y<virtualH;y++)for(let x=0;x<virtualW;x++){
+   const x0=Math.max(0,x-4),x1=Math.min(virtualW-1,x+4),y0=Math.max(0,y-4),y1=Math.min(virtualH-1,y+4);
+   const sum=integ[(y1+1)*stride+x1+1]-integ[y0*stride+x1+1]-integ[(y1+1)*stride+x0]+integ[y0*stride+x0];
+   feature[y*virtualW+x]=Math.round(Math.max(0,g[y*virtualW+x]-sum/((x1-x0+1)*(y1-y0+1))));
+  }
+  const range=mode==='normal'?{x0:210,x1:560,y0:42,y1:148}:{x0:90,x1:330,y0:85,y1:240};
+  let best=null;
+  for(const tpl of KLG_TEMPLATES[mode]){
+   // 글자 크기 차이 허용. 위치는 해당 사진에서 점수가 가장 높은 유일한 후보로 고정.
+   const scales=mode==='normal'?[1,.95,1.05]:[1,.9,1.1];
+   for(const factor of scales){
+    const tw=Math.max(8,Math.round(tpl.w*factor)),th=Math.max(6,Math.round(tpl.h*factor));
+    const pixels=new Uint8Array(tw*th);
+    for(let yy=0;yy<th;yy++)for(let xx=0;xx<tw;xx++){
+     const py=(yy+.5)*tpl.h/th-.5,px=(xx+.5)*tpl.w/tw-.5;
+     const y0=Math.max(0,Math.min(tpl.h-1,Math.floor(py))),y1=Math.min(tpl.h-1,y0+1);
+     const x0=Math.max(0,Math.min(tpl.w-1,Math.floor(px))),x1=Math.min(tpl.w-1,x0+1);
+     const fy=Math.max(0,Math.min(1,py-y0)),fx=Math.max(0,Math.min(1,px-x0));
+     pixels[yy*tw+xx]=Math.round(tpl.pixels[y0*tpl.w+x0]*(1-fx)*(1-fy)+tpl.pixels[y0*tpl.w+x1]*fx*(1-fy)+tpl.pixels[y1*tpl.w+x0]*(1-fx)*fy+tpl.pixels[y1*tpl.w+x1]*fx*fy);
+    }
+    const n=pixels.length;
+    let tsum=0,tsq=0;
+    for(const q of pixels){tsum+=q;tsq+=q*q;}
+    const tvar=tsq-tsum*tsum/n;
+    if(tvar<1)continue;
+    const xFrom=range.x0,xTo=Math.min(virtualW-tw,range.x1),yFrom=range.y0,yTo=Math.min(virtualH-th,range.y1);
+    for(let y=yFrom;y<=yTo;y++)for(let x=xFrom;x<=xTo;x++){
+     let sum=0,sq=0,cross=0;
+     for(let dy=0;dy<th;dy++){
+      const at=(y+dy)*virtualW+x;
+      for(let dx=0;dx<tw;dx++){
+       const a=feature[at+dx],b=pixels[dy*tw+dx];
+       sum+=a;sq+=a*a;cross+=a*b;
+      }
+     }
+     const variance=sq-sum*sum/n;
+     if(variance<=1)continue;
+     const score=(cross-sum*tsum/n)/Math.sqrt(variance*tvar);
+     if(!best||score>best.score)best={score,x:(x+tw/2)*W/virtualW,y:(y+th/2)*W/virtualW};
+    }
+   }
+  }
+  // 약한 색상 변화나 인접한 무기/메뉴는 템플릿과 높은 상관을 갖지 않습니다.
+  const minConfidence=mode==='normal'?.67:.67;
+  photo._verifiedKilllog[mode]=best&&best.score>=minConfidence?best:null;
+  return photo._verifiedKilllog[mode];
  }
+ function isTouchedMaskedKilllog(result,tx,ty){
+  if(!result?.master)return false;
+  const dx=Math.round(tx-result.sourceX),dy=Math.round(ty-result.sourceY);
+  const c=result.master,w=c.width,h=c.height;
+  if(dx<0||dy<0||dx>=w||dy>=h)return false;
+  const radius=Math.max(2,Math.round(view.width/1536*4));
+  const x0=Math.max(0,dx-radius),x1=Math.min(w-1,dx+radius);
+  const y0=Math.max(0,dy-radius),y1=Math.min(h-1,dy+radius);
+  const rgba=c.getContext('2d',{willReadFrequently:true}).getImageData(x0,y0,x1-x0+1,y1-y0+1).data;
+  for(let p=3;p<rgba.length;p+=4)if(rgba[p]>=145)return true;
+  return false;
+ }
+
  // 잘못된 오인식의 PNG 저장을 막는 최소 형태 검사. 실패 시 결과 생성 대신 안내한다.
  function validKilllogResult(r){
   if(!r||!r.master||!r.inner||!r.bounds)return false;
@@ -6308,13 +6523,20 @@ saveBtn.addEventListener("click",async()=>{
   return best>.55&&rows>=3;
  }
  async function extractKilllog(tx,ty,mode){
-  // 실패한 곳까지 억지로 자르던 generic fallback 은 비활성화한다.
-  // 정상 아이폰 일반 킬로그는 원래의 검증된 클래식 추출 함수를 유지한다.
-  if(!isConfirmedKilllogTap(tx,ty,mode))return null;
-  let result=null;
-  if(mode==='normal')result=await extractKilllogClassic(tx,ty);
-  else result=buildSpecialMaskedResult(tx,ty);
+  // 글자 특징의 높은 일치도가 없으면 어디를 눌러도 잘라내지 않습니다.
+  const signature=killlogSignature(mode);
+  if(!signature)return null;
+  // 터치한 좌표가 아닌, 원본 사진에서 검출한 동일한 텍스트 기준점으로 추출.
+  // 아이폰 / 삼성패드 / 아이패드의 화면 배율과 터치 위치에 무관하게 동일한 바운드입니다.
+  const cx=Math.round(signature.x),cy=Math.round(signature.y);
+  let result=mode==='normal'
+   ? await extractKilllogClassic(cx,cy)
+   : buildSpecialMaskedResult(cx,cy);
+  // 가로 띠 보조 감지는 검증된 킬로그 중심점에서만 허용; 임의 터치 주변에서는 절대 검색하지 않음.
+  if(!result)result=extractTapRelativeKilllog(cx,cy,mode);
   if(!result)return null;
+  // 실제 킬로그의 불투명한 픽셀/장식을 눌러야 함. 빈 배경을 누르면 중단.
+  if(!isTouchedMaskedKilllog(result,tx,ty))return null;
   if(!(await encodeResult(result)))return null;
   if(!validKilllogResult(result)){
    if(result.url)URL.revokeObjectURL(result.url);
@@ -6386,7 +6608,7 @@ saveBtn.addEventListener("click",async()=>{
   busy=true;status('킬로그를 자르는 중…');
   try{
    const picked=await extractKilllog(tx,ty,killlogMode);
-   if(!picked){status('확실한 킬로그로 확인되지 않아 잘못된 추출을 막았어요. 킬 알림 글자 근처를 누르거나 다른 원본 사진을 이용하세요.');return;}
+   if(!picked){status('킬로그가 감지되지 않았거나 터치한 곳이 킬로그가 아닙니다. 사진 속 ‘킬 알림’ 막대 또는 장식을 눌러주세요.');return;}
    picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();
    status('킬로그 추출 완료! 아래에서 확인하고 저장하세요.');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
@@ -6420,3 +6642,5 @@ saveBtn.addEventListener("click",async()=>{
  }
 })();
 </script>
+</body>
+</html>
