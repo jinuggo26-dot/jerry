@@ -6000,6 +6000,67 @@ saveBtn.addEventListener("click",async()=>{
   if(best.length<minKeep)return null;
   const out=new Uint8Array(w*h);for(const p of best)out[p]=1;return out;
  }
+ // 작은 주황색 '차량 전시' 킬로그: 기기 화면이 아닌 실제 원본 색상 띠를 먼저 감지.
+ // 터치한 위치로 중심을 추정하지 않기 때문에 로고와 글자 중 어디를 눌러도 좌표가 같다.
+ function detectOrangeSpecial(){
+  const photo=photos[active];if(!photo)return null;
+  if(Object.prototype.hasOwnProperty.call(photo,'_klOrange'))return photo._klOrange;
+  const W=view.width,H=view.height;
+  if(W<450||H<250)return photo._klOrange=null;
+  const scanW=Math.min(W,Math.round(W*.65)),scanH=Math.min(H,Math.round(H*.38));
+  const pix=ctx.getImageData(0,0,scanW,scanH).data;
+  const warm=(x,y)=>{const i=(y*scanW+x)*4,R=pix[i],G=pix[i+1],B=pix[i+2];return R>125&&G>66&&R>G*1.16&&G>B*1.25;};
+  let best=null;
+  // 긴 주황색 직선이 충분한 높이로 반복되는지 확인한다. 한 픽셀의 색상만으로 판정하지 않는다.
+  const sx=Math.max(2,Math.round(W/800)),sy=Math.max(2,Math.round(W/850));
+  for(let y=Math.max(8,Math.round(H*.065));y<scanH;y+=sy){
+   let run=0,start=0,hit=0;
+   for(let x=Math.round(W*.085);x<scanW;x+=sx){
+    if(warm(x,y)){if(run===0)start=x;run+=sx;}
+    else {if(run>hit){hit=run;}
+     if(run>W*.045&&(!best||run>best.length))best={x:start,right:x,y,length:run};run=0;}
+   }
+   if(run>W*.045&&(!best||run>best.length))best={x:start,right:scanW,y,length:run};
+  }
+  if(!best)return photo._klOrange=null;
+  const pivot=clamp(Math.round(best.x+Math.min(W*.075,best.length*.40)),0,scanW-1);
+  let top=best.y,bottom=best.y;
+  const threshold=Math.max(3,Math.round(W*.002));
+  const rowHas=y=>{let n=0;for(let dx=-10;dx<=10;dx+=2){const x=clamp(pivot+dx,0,scanW-1);if(warm(x,y))n++;}return n>=4;};
+  for(let y=best.y-1;y>=Math.max(0,best.y-W*.05);y--){if(rowHas(y))top=y;else if(best.y-y>threshold)break;}
+  for(let y=best.y+1;y<Math.min(scanH,best.y+W*.05);y++){if(rowHas(y))bottom=y;else if(y-best.y>threshold)break;}
+  const bh=bottom-top+1;
+  // UI 다른 주황색 버튼처럼 좁거나 두꺼운 면은 제외.
+  if(bh<Math.max(8,W*.009)||bh>W*.055||best.length<bh*2.3)return photo._klOrange=null;
+  const x0=clamp(Math.floor(best.x-bh*2.9),0,W-2);
+  const x1=clamp(Math.ceil(best.right+bh*.7),x0+1,W);
+  const y0=clamp(Math.floor(top-bh*.64),0,H-2);
+  const y1=clamp(Math.ceil(bottom+bh*.63),y0+1,H);
+  // 원본 좌상단의 좁은 가로 띠인지 확인. 전시 차량/무기 몸통을 오인하는 것을 방지.
+  if(x1-x0<bh*4||top>H*.39)return photo._klOrange=null;
+  const w=x1-x0,h=y1-y0,src=ctx.getImageData(x0,y0,w,h).data;
+  const bgT=ctx.getImageData(x0,clamp(y0,0,H-1),w,1).data;
+  const bgB=ctx.getImageData(x0,clamp(y1-1,0,H-1),w,1).data;
+  const raw=new Uint8Array(src),alpha=new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const i=(y*w+x)*4,j=x*4,X=x+x0,Y=y+y0;
+   const R=src[i],G=src[i+1],B=src[i+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+   const t=y/Math.max(1,h-1);
+   const d=Math.max(Math.abs(R-(bgT[j]*(1-t)+bgB[j]*t)),Math.abs(G-(bgT[j+1]*(1-t)+bgB[j+1]*t)),Math.abs(B-(bgT[j+2]*(1-t)+bgB[j+2]*t)));
+   let a=0;
+   if(X>=best.x-2&&Y>=top-1&&Y<=bottom+1){
+    // 밝은 주황 띠와 글씨는 구멍 없이 연속적으로 유지하되 흐려지는 꼬리는 투명 처리.
+    if(d>21&&(R>75||hi>160))a=Math.round(255*clamp((d-14)/34,0,1));
+    if(X<=best.right-5&&d>46)a=255;
+   }
+   if(X<best.x+bh*.25&&X>=x0&&Y>=y0&&Y<y1&&d>36&&(hi>103||hi-lo>39))a=255;
+   // 어두운 바닥이나 게임 배경 픽셀의 유입 방지
+   if(d<22)a=0;
+   alpha[y*w+x]=a;
+  }
+  const result=createMaskedResult(x0,y0,w,h,raw,alpha,'special',{orangeVehicle:true,band:{x:best.x,y:top,w:best.right-best.x,h:bh}});
+  return photo._klOrange=result||null;
+ }
  // 고번(전시/차량 화면)은 일반 킬로그와 별도의 색상·경계 기반 마스크를 사용한다.
  // 화면비율 대신 원본 가로 픽셀 비율을 기준으로 확대하므로 패드/폰 인치에 영향받지 않는다.
  function buildSpecialMaskedResult(tx,ty){
@@ -6007,8 +6068,8 @@ saveBtn.addEventListener("click",async()=>{
   if(W<250||H<200)return null;
   const s=W/1536;
   // Preserve the whole decorative head even on 1536x1059 tablet screenshots.
-  const x0=clamp(Math.floor(tx-195*s),0,W-2),x1=clamp(Math.ceil(tx+193*s),x0+1,W);
-  const y0=clamp(Math.floor(ty-45*s),0,H-2),y1=clamp(Math.ceil(ty+48*s),y0+1,H);
+  const x0=clamp(Math.floor(tx-285*s),0,W-2),x1=clamp(Math.ceil(tx+193*s),x0+1,W);
+  const y0=clamp(Math.floor(ty-56*s),0,H-2),y1=clamp(Math.ceil(ty+58*s),y0+1,H);
   const w=x1-x0,h=y1-y0;
   const src=ctx.getImageData(x0,y0,w,h).data;
   const top=ctx.getImageData(x0,clamp(Math.round(ty-47*s),0,H-1),w,1).data;
@@ -6081,7 +6142,7 @@ saveBtn.addEventListener("click",async()=>{
     // A contiguous opaque banner: no holes in letters or icons, and no lost
     // dark-blue/purple left half caused by per-pixel foreground thresholds.
     const core=dx>=-116&&dx<=156&&dy>=barTop&&dy<=barBottom;
-    const ornament=dx>=-145&&dx<-105&&dy>=-33&&dy<=34;
+    const ornament=dx>=-262&&dx<-95&&dy>=-44&&dy<=45;
     let a=0;
     if(core){
       a=255;
@@ -6090,31 +6151,16 @@ saveBtn.addEventListener("click",async()=>{
     // The ornament is not always saturated or bright: the blue winged logo
     // includes nearly-black pieces against dark gray scenery. Compare the
     // pixel with background above/below, without punching holes in the bar.
-    if(ornament&&d>29&&maxv>78&&(sat>28||maxv>178))a=255;
+    if(ornament&&d>22&&maxv>58&&(sat>17||maxv>126))a=Math.max(a,Math.round(255*clamp((d-15)/24,0,1)));
     // Preserve detached small ornaments immediately above/below the head.
-    if(dx>=-145&&dx<-64&&!core&&dy>=barTop-16&&dy<=barBottom+12&&d>42&&(sat>32||maxv>185))a=Math.max(a,240);
+    if(dx>=-260&&dx<-64&&!core&&dy>=barTop-26&&dy<=barBottom+20&&d>28&&(sat>20||maxv>150))a=Math.max(a,Math.round(255*clamp((d-17)/30,0,1)));
     // 화면 상단 하이라이트는 장식과 오인하지 않도록 외곽 보호 구간에서 제외
     alpha[y*w+x]=a;
     if(a>=16)kept++;
    }
   }
-  // Identify the decorative head by its saturated/bright pixels. This avoids
-  // retaining the dark wall stripe to the left of the actual special banner.
-  let actualLeft=-1;
-  for(let gx=Math.max(x0,Math.round(tx-184*s));gx<Math.min(x1,Math.round(tx-62*s));gx++){
-   let strong=0;
-   for(let gy=Math.max(y0,Math.round(ty-29*s));gy<Math.min(y1,Math.round(ty+38*s));gy+=Math.max(1,Math.round(2*s))){
-    const ii=4*((gy-y0)*w+(gx-x0));
-    const R=src[ii],G=src[ii+1],B=src[ii+2];
-    const hi=Math.max(R,G,B),sat=hi-Math.min(R,G,B);
-    if((hi>95&&sat>42)||hi>190)strong++;
-   }
-   if(strong>=3){actualLeft=gx;break;}
-  }
-  if(actualLeft>=0){
-   const cutoff=Math.max(x0,Math.round(actualLeft-8*s));
-   for(let x=0;x<cutoff-x0;x++)for(let y=0;y<h;y++)alpha[y*w+x]=0;
-  }
+  // Dark skull ornaments extend farther left than bright pixels. Never cut them
+  // by the first bright column: only an independently verified background mask decides alpha.
   if(kept<200*s*s)return null;
   // 복잡한 배경을 마스크로 복구하지 않는다. 작은 단독 픽셀만 정리.
   const seen=new Uint8Array(w*h),stack=[];
@@ -6246,6 +6292,126 @@ saveBtn.addEventListener("click",async()=>{
    if(comp.length<(largeOrnament?40:16))for(const p of comp)alpha[p]=0;
   }
   return createMaskedResult(x0,y0,w,h,raw,alpha,'normal',{fire,darkRed,largeOrnament});
+ }
+ // 보라색 얼굴 장식형 킬로그: 실제 원본의 아래 금색 라인/이빨까지 보존한다.
+ // 배경과 가까운 픽셀 색차를 마스킹하므로 고정 직사각형 배경이나 끊긴 장식이 생기지 않는다.
+ function buildPurpleMascotResult(){
+  const W=view.width,H=view.height;
+  const sx=W/1536,sy=(W/H<1.98?W/1536:H/709);
+  if(W<500||H<240)return null;
+  const probe=(ux,uy)=>{
+   const x=clamp(Math.round(ux*sx),0,W-1),y=clamp(Math.round(uy*sy),0,H-1);
+   const a=ctx.getImageData(x,y,1,1).data;
+   return [a[0],a[1],a[2]];
+  };
+  // 다른 빨강/보라 킬로그에 영향을 주지 않도록 두 지점 모두 보라색일 때만 적용.
+  const a=probe(700,195),b=probe(800,195);
+  if(!(a[2]>a[1]+37&&a[0]>a[1]+37&&b[2]>b[1]+35&&b[0]>b[1]+30))return null;
+  const x0=clamp(Math.floor(458*sx),0,W-2),x1=clamp(Math.ceil(1010*sx),x0+1,W);
+  const y0=clamp(Math.floor(88*sy),0,H-2),y1=clamp(Math.ceil(242*sy),y0+1,H);
+  const w=x1-x0,h=y1-y0;
+  const pix=ctx.getImageData(x0,y0,w,h).data;
+  const raw=new Uint8Array(pix),alpha=new Uint8Array(w*h);
+  // 배경 표본도 원본 이미지 좌표로만 수집하여 디바이스 화면 배율의 영향을 제거.
+  const topRows=ctx.getImageData(x0,clamp(Math.round(95*sy),0,H-1),w,Math.max(1,Math.round(11*sy))).data;
+  const botRows=ctx.getImageData(x0,clamp(Math.round(238*sy),0,H-1),w,Math.max(1,Math.min(H-Math.round(238*sy),Math.round(13*sy)))).data;
+  const tr=topRows.length/(w*4),br=botRows.length/(w*4);
+  const bgTop=new Float32Array(w*3),bgBot=new Float32Array(w*3);
+  for(let x=0;x<w;x++)for(let c=0;c<3;c++){
+   const aa=[],bb=[];
+   for(let j=0;j<tr;j++)aa.push(topRows[(j*w+x)*4+c]);
+   for(let j=0;j<br;j++)bb.push(botRows[(j*w+x)*4+c]);
+   aa.sort((u,v)=>u-v);bb.sort((u,v)=>u-v);
+   bgTop[x*3+c]=aa[(aa.length/2)|0];bgBot[x*3+c]=bb[(bb.length/2)|0];
+  }
+  const filled=(x,y)=>{
+   let n=0;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    const xx=x+dx,yy=y+dy;
+    if(xx>=0&&xx<w&&yy>=0&&yy<h&&alpha[yy*w+xx]>175)n++;
+   }
+   return n;
+  };
+  for(let y=0;y<h;y++){
+   const ay=(y+y0)/sy,t=clamp((ay-101)/140,0,1);
+   for(let x=0;x<w;x++){
+    const ax=(x+x0)/sx,p=(y*w+x)*4;
+    let d=0;
+    for(let c=0;c<3;c++){
+     const v=bgTop[x*3+c]*(1-t)+bgBot[x*3+c]*t;
+     d=Math.max(d,Math.abs(raw[p+c]-v));
+    }
+    const R=raw[p],G=raw[p+1],B=raw[p+2];
+    const brightness=Math.max(R,G,B),sat=brightness-Math.min(R,G,B);
+    // 어두운 게임 배경은 얇은 밝기 차이만으로 남기지 않는다.
+    // 실제 보라색·금색 막대, 얼굴 장식, 밝은 글씨만 보존한다.
+    const violet=B>G+17&&R>G+12&&B>48;
+    const gold=R>105&&G>58&&R>B*1.13&&R>G*1.12;
+    const text=brightness>155&&d>46;
+    let opacity=(d>24&&(sat>24||text))?Math.round(255*clamp((d-22)/29,0,1)):0;
+    // 실제 금색 하단 테두리는 y=200~209 부근에 가늘게 이어진다.
+    // 몸통의 어두운 부분과 독립적으로 추출하여 밑줄에 구멍이 생기지 않게 한다.
+    const purpleBody=(ax>=648&&ax<=896&&ay>=157&&ay<=206&&violet&&d>17);
+    const gildedEdge=(ax>=623&&ax<=967&&ay>=199&&ay<=211&&
+     R>58&&R>G+8&&R>B+4&&d>16);
+    if(purpleBody)opacity=Math.max(opacity,255*clamp((d-12)/27,0,1));
+    if(gildedEdge)opacity=Math.max(opacity,255*clamp((d-12)/28,0,1));
+    if(ax>=485&&ax<=650&&ay>=109&&ay<=230&&d>18&&(sat>18||brightness>105))opacity=255;
+    if(ax>646&&!violet&&!gold&&!text&&!gildedEdge)opacity=0;
+    // 오른쪽 흐린 색은 서서히 지우되 금색 밑줄은 더 늦게 사라지도록 분리한다.
+    if(ax>=857){const right=gildedEdge?990:946;
+     const k=clamp((right-ax)/(right-830),0,1);
+     opacity*=k*k*(3-2*k);
+    }
+    if(ax>=848&&(ay<154||ay>213)&&!gildedEdge)opacity=0;
+    if(ax>=981)opacity=0;
+    alpha[y*w+x]=Math.round(opacity);
+   }
+  }
+  // 하단 금색 밑줄의 1~4px 틈만 메운다. 바깥 배경이나 다른 조각은 연결하지 않는다.
+  for(let y=0;y<h;y++){
+   const ay=(y+y0)/sy;if(ay<201||ay>208)continue;
+   let prior=-1;
+   for(let x=0;x<w;x++){
+    const ax=(x+x0)/sx;if(ax<639||ax>960)continue;
+    const i=y*w+x,p=4*i;
+    const gold=raw[p]>85&&raw[p]>raw[p+1]+8&&raw[p]>raw[p+2]+6;
+    if(alpha[i]>=145&&gold){
+     if(prior>=0&&x-prior<=Math.max(3,Math.round(11*sx))){
+      for(let fill=prior+1;fill<x;fill++){
+       const j=y*w+fill,k=4*j;
+       const related=raw[k]>60&&raw[k]>raw[k+1]+5&&raw[k]>raw[k+2];
+       if(related)alpha[j]=Math.max(alpha[j],195);
+      }
+     }
+     prior=x;
+    }
+   }
+  }
+  // 얼굴 장식의 작은 구멍은 막되 바깥 배경까지 잇지 않는다.
+  const next=new Uint8Array(alpha);
+  for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+   const ax=(x+x0)/sx,ay=(y+y0)/sy;
+   if(ax<485||ax>643||ay<113||ay>226||alpha[y*w+x]>=200)continue;
+   if(filled(x,y)>=7)next[y*w+x]=255;
+  }
+  // 딴 배경의 점 잡음 제거: 분리된 작은 조각만 지운다.
+  const seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
+  for(let i=0;i<next.length;i++){
+   if(seen[i]||next[i]<65)continue;
+   let head=0,tail=1;seen[i]=1;queue[0]=i;
+   while(head<tail){
+    const k=queue[head++],x=k%w,y=(k/w)|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;
+     const pos=yy*w+xx;if(!seen[pos]&&next[pos]>=65){seen[pos]=1;queue[tail++]=pos;}
+    }
+   }
+   if(tail<( ( (i%w+x0)/sx>810 )?15:5))for(let j=0;j<tail;j++)next[queue[j]]=0;
+  }
+  // 알파가 이미 희미한 잡음은 뭉쳐 보이지 않게 제거한다.
+  for(let i=0;i<next.length;i++)if(next[i]<65)next[i]=0;
+  return createMaskedResult(x0,y0,w,h,raw,next,'normal',{purpleMascot:true});
  }
  // 손가락으로 눌렀다는 이유만으로 인식 성공으로 처리하지 않는다.
  // 게임 화면의 다른 글자·총·창고 카드가 막대로 잘려 나가는 것을 막는 사전 검증.
@@ -6410,89 +6576,205 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   for(let i=0;i<tpl.pixels.length;i++)tpl.pixels[i]=parseInt(tpl.hex.slice(i*2,i*2+2),16);
   delete tpl.hex;
  }
- function killlogSignature(mode){
-  const photo=photos[active];
-  if(!photo)return null;
+ function isPurpleBarPhoto(){
+  const W=view.width,H=view.height,sx=W/1536,sy=(W/H<1.98?W/1536:H/709);
+  if(W<500||H<240)return false;
+  const c=(x,y)=>{const a=ctx.getImageData(clamp(Math.round(x*sx),0,W-1),clamp(Math.round(y*sy),0,H-1),1,1).data;return a;};
+  const a=c(700,195),b=c(800,195);
+  return a[2]>a[1]+37&&a[0]>a[1]+37&&b[2]>b[1]+35&&b[0]>b[1]+30;
+ }
+ function killlogSignature(mode,tx,ty){
+  const photo=photos[active];if(!photo)return null;
   photo._verifiedKilllog??={};
   if(Object.prototype.hasOwnProperty.call(photo._verifiedKilllog,mode))return photo._verifiedKilllog[mode];
-  const W=view.width,H=view.height,virtualW=768,virtualH=Math.round(H*virtualW/W);
-  if(W<420||virtualH<100){photo._verifiedKilllog[mode]=null;return null;}
-  // 모든 디바이스에서 동일한 원본을 동일한 가상 픽셀 격자로 매핑합니다.
-  // 화면 크기, devicePixelRatio, CSS 확대율은 특징 추출에 관여하지 않습니다.
-  const source=ctx.getImageData(0,0,W,H).data;
-  const g=new Uint8Array(virtualW*virtualH);
-  const sampleX=new Int32Array(virtualW);
-  for(let x=0;x<virtualW;x++)sampleX[x]=Math.min(W-1,Math.floor(x*W/virtualW+.5));
-  for(let y=0;y<virtualH;y++){
-   const yy=Math.min(H-1,Math.floor(y*W/virtualW+.5)),base=yy*W*4;
-   for(let x=0;x<virtualW;x++){
-    const k=base+sampleX[x]*4;
-    g[y*virtualW+x]=Math.min(source[k],source[k+1],source[k+2]);
-   }
-  }
-  // 9x9 평균 밝기를 뺀 양의 성분: 킬로그 글자의 획을 배경·총기 이미지와 구분.
-  const stride=virtualW+1,integ=new Float64Array(stride*(virtualH+1));
-  for(let y=0;y<virtualH;y++){
-   let accum=0;
-   for(let x=0;x<virtualW;x++){
-    accum+=g[y*virtualW+x];
-    integ[(y+1)*stride+x+1]=integ[y*stride+x+1]+accum;
-   }
-  }
-  const feature=new Uint8Array(virtualW*virtualH);
-  for(let y=0;y<virtualH;y++)for(let x=0;x<virtualW;x++){
-   const x0=Math.max(0,x-4),x1=Math.min(virtualW-1,x+4),y0=Math.max(0,y-4),y1=Math.min(virtualH-1,y+4);
-   const sum=integ[(y1+1)*stride+x1+1]-integ[y0*stride+x1+1]-integ[(y1+1)*stride+x0]+integ[y0*stride+x0];
-   feature[y*virtualW+x]=Math.round(Math.max(0,g[y*virtualW+x]-sum/((x1-x0+1)*(y1-y0+1))));
-  }
-  const range=mode==='normal'?{x0:210,x1:560,y0:42,y1:148}:{x0:90,x1:330,y0:85,y1:240};
-  let best=null;
-  for(const tpl of KLG_TEMPLATES[mode]){
-   // 글자 크기 차이 허용. 위치는 해당 사진에서 점수가 가장 높은 유일한 후보로 고정.
-   const scales=mode==='normal'?[1,.95,1.05]:[1,.9,1.1];
-   for(const factor of scales){
-    const tw=Math.max(8,Math.round(tpl.w*factor)),th=Math.max(6,Math.round(tpl.h*factor));
-    const pixels=new Uint8Array(tw*th);
-    for(let yy=0;yy<th;yy++)for(let xx=0;xx<tw;xx++){
-     const py=(yy+.5)*tpl.h/th-.5,px=(xx+.5)*tpl.w/tw-.5;
-     const y0=Math.max(0,Math.min(tpl.h-1,Math.floor(py))),y1=Math.min(tpl.h-1,y0+1);
-     const x0=Math.max(0,Math.min(tpl.w-1,Math.floor(px))),x1=Math.min(tpl.w-1,x0+1);
-     const fy=Math.max(0,Math.min(1,py-y0)),fx=Math.max(0,Math.min(1,px-x0));
-     pixels[yy*tw+xx]=Math.round(tpl.pixels[y0*tpl.w+x0]*(1-fx)*(1-fy)+tpl.pixels[y0*tpl.w+x1]*fx*(1-fy)+tpl.pixels[y1*tpl.w+x0]*(1-fx)*fy+tpl.pixels[y1*tpl.w+x1]*fx*fy);
+  const W=view.width,H=view.height,vW=768,vH=Math.round(H*768/W);
+  if(W<420||vH<100)return photo._verifiedKilllog[mode]=null;
+  // 캐시: 원본 크기·픽셀로 만든 에지 특징은 한 장당 단 한 번만 생성.
+  if(!photo._klFeatures){
+   const src=ctx.getImageData(0,0,W,H).data,g=new Uint8Array(vW*vH);
+   for(let y=0;y<vH;y++){
+    const yy=Math.min(H-1,Math.round(y*W/vW)),off=yy*W*4;
+    for(let x=0;x<vW;x++){
+     const k=off+Math.min(W-1,Math.round(x*W/vW))*4;
+     g[y*vW+x]=Math.min(src[k],src[k+1],src[k+2]);
     }
-    const n=pixels.length;
-    let tsum=0,tsq=0;
-    for(const q of pixels){tsum+=q;tsq+=q*q;}
-    const tvar=tsq-tsum*tsum/n;
-    if(tvar<1)continue;
-    const xFrom=range.x0,xTo=Math.min(virtualW-tw,range.x1),yFrom=range.y0,yTo=Math.min(virtualH-th,range.y1);
-    for(let y=yFrom;y<=yTo;y++)for(let x=xFrom;x<=xTo;x++){
-     let sum=0,sq=0,cross=0;
+   }
+   const stride=vW+1,sum=new Uint32Array(stride*(vH+1));
+   for(let y=0;y<vH;y++){
+    let row=0;
+    for(let x=0;x<vW;x++){row+=g[y*vW+x];sum[(y+1)*stride+x+1]=sum[y*stride+x+1]+row;}
+   }
+   const feat=new Uint8Array(vW*vH);
+   for(let y=0;y<vH;y++)for(let x=0;x<vW;x++){
+    const x0=Math.max(0,x-4),x1=Math.min(vW-1,x+4),y0=Math.max(0,y-4),y1=Math.min(vH-1,y+4);
+    const bg=sum[(y1+1)*stride+x1+1]-sum[y0*stride+x1+1]-sum[(y1+1)*stride+x0]+sum[y0*stride+x0];
+    feat[y*vW+x]=Math.max(0,Math.round(g[y*vW+x]-bg/((x1-x0+1)*(y1-y0+1))));
+   }
+   photo._klFeatures=feat;
+  }
+  const f=photo._klFeatures;
+  const range=mode==='normal'?{x0:105,x1:630,y0:35,y1:220}:{x0:65,x1:540,y0:40,y1:315};
+  const topMatches=[];
+  for(const tpl of KLG_TEMPLATES[mode]){
+   for(const factor of [1]){
+    const tw=Math.max(8,Math.round(tpl.w*factor)),th=Math.max(6,Math.round(tpl.h*factor));
+    const pixels=new Uint8Array(tw*th);let T=0,TT=0;
+    for(let yy=0;yy<th;yy++)for(let xx=0;xx<tw;xx++){
+     const px=Math.min(tpl.w-1,Math.floor((xx+.5)*tpl.w/tw)),py=Math.min(tpl.h-1,Math.floor((yy+.5)*tpl.h/th));
+     const q=tpl.pixels[py*tpl.w+px];pixels[yy*tw+xx]=q;T+=q;TT+=q*q;
+    }
+    const N=pixels.length,Tvar=TT-T*T/N;if(Tvar<1)continue;
+    const tapX=Math.round(tx*vW/W),tapY=Math.round(ty*vW/W);
+    const xStart=Math.max(range.x0,tapX-175),xEnd=Math.min(vW-tw,range.x1,tapX+175);
+    const yStart=Math.max(range.y0,tapY-80),yEnd=Math.min(vH-th,range.y1,tapY+80);
+    if(xStart>xEnd||yStart>yEnd)continue;
+    const scoreAt=(x,y)=>{
+     let A=0,AA=0,AB=0;
      for(let dy=0;dy<th;dy++){
-      const at=(y+dy)*virtualW+x;
+      const base=(y+dy)*vW+x,offset=dy*tw;
       for(let dx=0;dx<tw;dx++){
-       const a=feature[at+dx],b=pixels[dy*tw+dx];
-       sum+=a;sq+=a*a;cross+=a*b;
+       const a=f[base+dx],b=pixels[offset+dx];A+=a;AA+=a*a;AB+=a*b;
       }
      }
-     const variance=sq-sum*sum/n;
-     if(variance<=1)continue;
-     const score=(cross-sum*tsum/n)/Math.sqrt(variance*tvar);
-     if(!best||score>best.score)best={score,x:(x+tw/2)*W/virtualW,y:(y+th/2)*W/virtualW};
+     const varA=AA-A*A/N;
+     return varA>1?(AB-A*T/N)/Math.sqrt(varA*Tvar):0;
+    };
+    // 픽셀 4칸 간격으로 후보를 찾고 상위 후보만 1px 정밀 검사.
+    // 이전에는 최대 수만 위치 × 400픽셀 비교를 매번 수행해 모바일이 멈췄다.
+    const seeds=[];
+    for(let y=yStart;y<=yEnd;y+=4)for(let x=xStart;x<=xEnd;x+=4){
+     const sc=scoreAt(x,y);
+     if(sc>.24&&(seeds.length<5||sc>seeds[seeds.length-1].score)){
+      seeds.push({score:sc,x,y});seeds.sort((a,b)=>b.score-a.score);
+      if(seeds.length>5)seeds.pop();
+     }
     }
+    let chosen=null;
+    for(const seed of seeds){
+     for(let y=Math.max(yStart,seed.y-5);y<=Math.min(yEnd,seed.y+5);y++)
+      for(let x=Math.max(xStart,seed.x-5);x<=Math.min(xEnd,seed.x+5);x++){
+       const sc=scoreAt(x,y);
+       if(!chosen||sc>chosen.score)chosen={score:sc,x,y};
+      }
+    }
+    if(chosen)topMatches.push({...chosen,cx:(chosen.x+tw/2)*W/vW,cy:(chosen.y+th/2)*W/vW});
    }
   }
-  // 약한 색상 변화나 인접한 무기/메뉴는 템플릿과 높은 상관을 갖지 않습니다.
-  const minConfidence=mode==='normal'?.67:.67;
-  photo._verifiedKilllog[mode]=best&&best.score>=minConfidence?best:null;
-  return photo._verifiedKilllog[mode];
+  topMatches.sort((a,b)=>b.score-a.score);
+  const best=topMatches[0];
+  // 보라색 장식형은 글자가 광원에 겹쳐 상관도가 낮으므로 색상 확인이 있을 때만 완화.
+  const purple=mode==='normal'&&isPurpleBarPhoto();
+  const matched=best&&best.score>=(purple?.58:mode==='normal'?.64:.65)?{score:best.score,x:best.cx,y:best.cy}:null;
+  if(matched)photo._verifiedKilllog[mode]=matched;
+  return matched;
+ }
+ // Metallic blue/red killlog with a red eye and protruding wings.
+ // Detect the artwork once from the ORIGINAL image, not from where the tap landed.
+ // Do not interpret arbitrary text or dark pixels as a killlog.
+ function detectBlueMechanicalNormal(){
+  const photo=photos[active];if(!photo)return null;
+  if(Object.prototype.hasOwnProperty.call(photo,'_klBlueMechanical'))return photo._klBlueMechanical;
+  const W=view.width,H=view.height;
+  if(W<400||H<240)return photo._klBlueMechanical=null;
+  const maxX=Math.floor(W*.51),maxY=Math.floor(Math.min(H*.40,W*.37));
+  const scan=ctx.getImageData(0,0,maxX,maxY).data;
+  const at=(x,y)=>{const p=(y*maxX+x)*4;return [scan[p],scan[p+1],scan[p+2]];};
+  const step=Math.max(2,Math.round(W/600));
+  let top=null;
+  // red circular eye gives a strong compact spot; red weapon decoration elsewhere is rejected
+  // unless this spot is surrounded by blue metal and followed by a white label.
+  for(let y=Math.round(H*.065);y<maxY-25;y+=step*2)
+   for(let x=Math.round(W*.09);x<Math.min(maxX-25,Math.round(W*.30));x+=step*2){
+    let red=0,blue=0,hot=0;
+    const rad=Math.max(11,Math.round(W*.019));
+    for(let yy=y-rad;yy<=y+rad;yy+=step)
+     for(let xx=x-rad;xx<=x+rad;xx+=step){
+      if(xx<1||yy<1||xx>=maxX||yy>=maxY)continue;
+      const [R,G,B]=at(xx,yy);
+      if(R>130&&R>G*1.38&&R>B*1.15&&G>17)red++;
+      if(B>R+21&&B>G+5&&B>90)blue++;
+      if(R>196&&G>104&&B>105)hot++;
+     }
+    // blue/red metal must occur together, near the same local object.
+    const score=red+blue*.75+hot*.28;
+    if(red>9&&blue>11&&(!top||score>top.score))top={x,y,score};
+   }
+  if(!top)return photo._klBlueMechanical=null;
+  // The same line must contain a sufficiently long decorated bar and bright text.
+  const sy=Math.max(1,Math.round(W/700));
+  let letters=0,chroma=0;
+  const lx0=Math.round(top.x+W*.15),lx1=Math.min(W-1,Math.round(top.x+W*.49));
+  const ly0=Math.max(0,Math.round(top.y-W*.028)),ly1=Math.min(H-1,Math.round(top.y+W*.035));
+  const bandPatch=ctx.getImageData(lx0,ly0,Math.max(1,lx1-lx0+1),Math.max(1,ly1-ly0+1));
+  const arr=bandPatch.data,bw=bandPatch.width,bh=bandPatch.height;
+  for(let y=0;y<bh;y+=sy*2)for(let x=0;x<bw;x+=sy*2){
+   const i=(y*bw+x)*4,R=arr[i],G=arr[i+1],B=arr[i+2];
+   const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+   if(lo>153&&hi-lo<87)letters++;
+   if(hi-lo>40&&hi>83)chroma++;
+  }
+  if(letters<7||chroma<15)return photo._klBlueMechanical=null;
+  const x0=Math.max(0,Math.floor(top.x-W*.145)),x1=Math.min(W,Math.ceil(top.x+W*.60));
+  const y0=Math.max(0,Math.floor(top.y-W*.071)),y1=Math.min(H,Math.ceil(top.y+W*.084));
+  const w=x1-x0,h=y1-y0;
+  if(w<140||h<30)return photo._klBlueMechanical=null;
+  const src=ctx.getImageData(x0,y0,w,h).data;
+  const refT=ctx.getImageData(x0,Math.max(0,Math.round(top.y-W*.065)),w,1).data;
+  const refB=ctx.getImageData(x0,Math.min(H-1,Math.round(top.y+W*.071)),w,1).data;
+  const alpha=new Uint8Array(w*h);
+  const coreLeft=top.x+W*.11,coreRight=Math.min(W,top.x+W*.555);
+  const coreTop=top.y-W*.020,coreBottom=top.y+W*.031;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const X=x+x0,Y=y+y0,i=(y*w+x)*4,j=x*4;
+   const R=src[i],G=src[i+1],B=src[i+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+   const t=y/Math.max(1,h-1);
+   const bgR=refT[j]*(1-t)+refB[j]*t,bgG=refT[j+1]*(1-t)+refB[j+1]*t,bgB=refT[j+2]*(1-t)+refB[j+2]*t;
+   const d=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
+   let a=0;
+   if(X>=coreLeft&&X<=coreRight&&Y>=coreTop&&Y<=coreBottom){
+    a=255;
+    const fadeFrom=top.x+W*.40;
+    if(X>fadeFrom){const k=clamp((coreRight-X)/(coreRight-fadeFrom),0,1);a=Math.round(255*k*k*(3-2*k));}
+   }
+   // All protruding wings and dark skull pieces: local image contrast, not a hard left edge.
+   if(X<coreLeft+W*.055&&X>=x0&&Y>=y0&&Y<y1&&d>19&&(hi-lo>14||hi>121))
+    a=Math.max(a,Math.round(255*clamp((d-13)/25,0,1)));
+   alpha[y*w+x]=a;
+  }
+  const out=createMaskedResult(x0,y0,w,h,new Uint8Array(src),alpha,'normal',{blueMechanical:true});
+  return photo._klBlueMechanical=out||null;
+ }
+ // 일부 블루/레드 스킨에서 글자 모양이 달라 템플릿 일치도가 낮은 경우만 사용.
+ // 화면 아무 곳이나 자르지 않도록 위쪽 가로 막대+밝은 글자+색상 영역을 모두 검사.
+ function verifyNonTemplateBanner(result,tx,ty){
+  if(!result?.meta?.dynamicLocal||!result.inner)return false;
+  const W=view.width,H=view.height,b=result.inner;
+  const x0=result.sourceX+b.x,y0=result.sourceY+b.y;
+  if(ty<H*.065||ty>H*.38||tx<W*.10||tx>W*.77)return false;
+  if(x0<W*.045||y0>H*.36||b.w<W*.18||b.w>W*.70||b.h>W*.15||b.h<W*.015)return false;
+  const src=ctx.getImageData(result.sourceX,result.sourceY,result.master.width,result.master.height).data;
+  const out=result.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,result.master.width,result.master.height).data;
+  const w=result.master.width,h=result.master.height;
+  let chroma=0,white=0,seen=0;
+  const dy=Math.max(1,Math.round(b.h/12)),dx=Math.max(1,Math.round(b.w/80));
+  for(let y=Math.floor(b.y+b.h*.27);y<Math.min(h,b.y+b.h*.74);y+=dy){
+   for(let x=Math.floor(b.x+b.w*.12);x<Math.min(w,b.x+b.w*.89);x+=dx){
+    const k=4*(y*w+x),R=src[k],G=src[k+1],B=src[k+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B);
+    if(out[k+3]<130)continue;
+    seen++;
+    if(mx-mn>37&&mx>92)chroma++;
+    if(mn>152&&mx-mn<82)white++;
+   }
+  }
+  // 숫자·버튼·총기 그림도 많지만, 긴 킬로그에서는 채색한 띠와 흰 글자가 함께 나타남.
+  return seen>60&&chroma>seen*.14&&white>7;
  }
  function isTouchedMaskedKilllog(result,tx,ty){
   if(!result?.master)return false;
   const dx=Math.round(tx-result.sourceX),dy=Math.round(ty-result.sourceY);
   const c=result.master,w=c.width,h=c.height;
   if(dx<0||dy<0||dx>=w||dy>=h)return false;
-  const radius=Math.max(2,Math.round(view.width/1536*4));
+  const radius=Math.max(5,Math.round(view.width/1536*11));
   const x0=Math.max(0,dx-radius),x1=Math.min(w-1,dx+radius);
   const y0=Math.max(0,dy-radius),y1=Math.min(h-1,dy+radius);
   const rgba=c.getContext('2d',{willReadFrequently:true}).getImageData(x0,y0,x1-x0+1,y1-y0+1).data;
@@ -6523,14 +6805,72 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   return best>.55&&rows>=3;
  }
  async function extractKilllog(tx,ty,mode){
+  const photo=photos[active];
+  const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
+  const cached=photo&&photo[cacheKey];
+  if(cached){
+   if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
+   if(!(await encodeResult(cached)))return null;
+   return validKilllogResult(cached)?cached:null;
+  }
   // 글자 특징의 높은 일치도가 없으면 어디를 눌러도 잘라내지 않습니다.
-  const signature=killlogSignature(mode);
-  if(!signature)return null;
+  if(mode==='special'){
+   const orange=detectOrangeSpecial();
+   if(orange){
+    const b=orange.meta?.band||orange.band;
+    // 실제 결과의 투명 영역은 클릭 판정에서 제외하되 로고 근처에서는 조금 관대하게 검사.
+    if(isTouchedMaskedKilllog(orange,tx,ty)){
+     if(!(await encodeResult(orange)))return null;
+     return validKilllogResult(orange)?orange:null;
+    }
+    return null;
+   }
+  }
+  // Known original-purple template is identifiable from actual image pixels in O(1).
+  // It is insensitive to screen zoom and allows left-head taps before slow OCR.
+  if(mode==='normal'&&isPurpleBarPhoto()){
+   const ready=buildPurpleMascotResult();
+   if(ready&&isTouchedMaskedKilllog(ready,tx,ty)){
+    if(await encodeResult(ready)&&validKilllogResult(ready)){
+     photo[cacheKey]=ready;return ready;
+    }
+   }
+   return null;
+  }
+  if(mode==='normal'){
+   const metallic=detectBlueMechanicalNormal();
+   if(metallic&&isTouchedMaskedKilllog(metallic,tx,ty)){
+    if(await encodeResult(metallic)&&validKilllogResult(metallic)){
+     photo[cacheKey]=metallic;return metallic;
+    }
+   }
+  }
+  const signature=killlogSignature(mode,tx,ty);
+  if(!signature){
+   if(mode!=='normal')return null;
+   const photo=photos[active];
+   // 오인식 위험이 있는 비템플릿 추출은 색상·글자 검증을 통과할 때만 생성한다.
+   let candidate=photo._klFallbackNormal;
+   if(!candidate){
+    if(ty<view.height*.065||ty>view.height*.38||tx<view.width*.1||tx>view.width*.77)return null;
+    candidate=extractTapRelativeKilllog(tx,ty,'normal');
+    if(!verifyNonTemplateBanner(candidate,tx,ty))return null;
+   }
+   if(!isTouchedMaskedKilllog(candidate,tx,ty))return null;
+   if(!(await encodeResult(candidate)))return null;
+   if(!validKilllogResult(candidate)){
+    if(candidate.url)URL.revokeObjectURL(candidate.url);
+    return null;
+   }
+   photo._klFallbackNormal=candidate;
+   photo[cacheKey]=candidate;
+   return candidate;
+  }
   // 터치한 좌표가 아닌, 원본 사진에서 검출한 동일한 텍스트 기준점으로 추출.
   // 아이폰 / 삼성패드 / 아이패드의 화면 배율과 터치 위치에 무관하게 동일한 바운드입니다.
   const cx=Math.round(signature.x),cy=Math.round(signature.y);
   let result=mode==='normal'
-   ? await extractKilllogClassic(cx,cy)
+   ? (buildPurpleMascotResult()||await extractKilllogClassic(cx,cy))
    : buildSpecialMaskedResult(cx,cy);
   // 가로 띠 보조 감지는 검증된 킬로그 중심점에서만 허용; 임의 터치 주변에서는 절대 검색하지 않음.
   if(!result)result=extractTapRelativeKilllog(cx,cy,mode);
@@ -6542,10 +6882,16 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    if(result.url)URL.revokeObjectURL(result.url);
    return null;
   }
+  photo[cacheKey]=result;
   return result;
  }
  function deleteResult(idx){
-  if(idx<0||!results[idx])return;URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
+  if(idx<0||!results[idx])return;
+  const deleting=results[idx],photo=photos[deleting.photo];
+  if(photo){if(photo._klReadyNormal===deleting)delete photo._klReadyNormal;
+   if(photo._klReadySpecial===deleting)delete photo._klReadySpecial;
+   if(photo._klFallbackNormal===deleting)delete photo._klFallbackNormal;}
+  URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
   if(editingIndex===idx)editingIndex=-1; else if(editingIndex>idx)editingIndex--;
   resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');
  }
