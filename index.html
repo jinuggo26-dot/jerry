@@ -777,22 +777,44 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
  const overlay=document.getElementById('auth-consent-screen');
  const check=document.getElementById('auth-consent-check');
  const message=document.getElementById('auth-consent-error');
+ // Keep the same key across subsequent app updates. Consent is not an account password.
  const key='dp_editor_privacy_ack_20261020';
+ const cookieName='dp_editor_privacy_ack';
+ const hasCookie=()=>document.cookie.split(';').some(part=>part.trim()===cookieName+'=yes');
+ function rememberConsent(){
+  try{localStorage.setItem(key,'yes');}catch(_){}
+  try{
+   const secure=location.protocol==='https:'?'; Secure':'';
+   document.cookie=cookieName+'=yes; Path=/; Max-Age=34560000; SameSite=Lax'+secure;
+  }catch(_){}
+ }
  let accepted=false;
- try{accepted=localStorage.getItem(key)==='yes';}catch(_){/* private browsing */}
- if(!accepted)overlay.style.display='flex';
+ try{accepted=localStorage.getItem(key)==='yes';}catch(_){}
+ if(!accepted){try{accepted=hasCookie();}catch(_){}}
+ if(accepted){
+  // If one store is temporarily unavailable, restore it from the other.
+  rememberConsent();
+  overlay.style.display='none';
+ }else{
+  overlay.style.display='flex';
+ }
  document.getElementById('auth-consent-continue').addEventListener('click',()=>{
   if(!check.checked){message.textContent='내용 확인 후 동의에 체크해 주세요.';return;}
-  accepted=true;try{localStorage.setItem(key,'yes');}catch(_){}
+  accepted=true;
+  rememberConsent();
   overlay.style.display='none';
+  message.textContent='';
  });
  window.hasEditorPrivacyAgreement=()=>accepted;
- window.showEditorPrivacyNotice=()=>{overlay.style.display='flex';check.checked=accepted;message.textContent='';};
+ window.showEditorPrivacyNotice=()=>{
+  if(accepted)return; // Never show the first-visit notice again in this browser.
+  overlay.style.display='flex';check.checked=false;message.textContent='';
+ };
 })();
 </script>
 <div id="auth-screen">
  <div class="auth-box" id="view-user-form">
-  <h2>🔐 대필 편집기 로그인</h2>
+  <h2>🔐 대필 편집기 로그인 / 회원가입</h2>
   <p>이메일과 비밀번호로 로그인해 주세요. 새 회원은 가입 후 관리자 승인이 필요합니다.</p>
   <input type="email" id="auth-email" class="auth-input" placeholder="이메일 주소" autocomplete="email" maxlength="254">
   <input type="password" id="auth-password" class="auth-input" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" minlength="6">
@@ -5953,8 +5975,8 @@ saveBtn.addEventListener("click",async()=>{
   }
   if(maxX<minX||maxY<minY)return null;
   master.getContext('2d').putImageData(img,0,0);
-  const sx=view.width/1536,sy=view.height/709;
-  const marginX=Math.max(5,Math.round((mode==='special'?20:35)*sx));
+  const sx=view.width/1536,sy=(view.width/view.height<1.98?view.width/1536:view.height/709);
+  const marginX=Math.max(5,Math.round((mode==='special'?12:35)*sx));
   const marginY=Math.max(5,Math.round((mode==='special'?14:23)*sy));
   const inner={x:clamp(minX-marginX,0,w-1),y:clamp(minY-marginY,0,h-1)};
   inner.w=clamp(maxX+marginX,inner.x,w-1)-inner.x+1;
@@ -5984,8 +6006,9 @@ saveBtn.addEventListener("click",async()=>{
   const W=view.width,H=view.height;
   if(W<250||H<200)return null;
   const s=W/1536;
-  const x0=clamp(Math.floor(tx-163*s),0,W-2),x1=clamp(Math.ceil(tx+193*s),x0+1,W);
-  const y0=clamp(Math.floor(ty-39*s),0,H-2),y1=clamp(Math.ceil(ty+43*s),y0+1,H);
+  // Preserve the whole decorative head even on 1536x1059 tablet screenshots.
+  const x0=clamp(Math.floor(tx-195*s),0,W-2),x1=clamp(Math.ceil(tx+193*s),x0+1,W);
+  const y0=clamp(Math.floor(ty-45*s),0,H-2),y1=clamp(Math.ceil(ty+48*s),y0+1,H);
   const w=x1-x0,h=y1-y0;
   const src=ctx.getImageData(x0,y0,w,h).data;
   const top=ctx.getImageData(x0,clamp(Math.round(ty-47*s),0,H-1),w,1).data;
@@ -6054,21 +6077,43 @@ saveBtn.addEventListener("click",async()=>{
     const d=rgbDelta(R,G,B,bgR,bgG,bgB);
     // 별도 방식: 고번 막대 본체를 한 덩어리로 보존해 중간에 구멍이 생기지 않도록 합니다.
     // 장식 영역은 주변 픽셀과 다른 색·밝기일 때만 남깁니다.
-    const barTop=detected?Math.max(-34,detectedTop-1):-10,barBottom=detected?Math.min(39,detectedBottom+1):22;
-    const core=dx>=-88&&dx<=156&&dy>=barTop&&dy<=barBottom;
-    const ornament=dx>=-157&&dx<-81&&dy>=-29&&dy<=32;
+    const barTop=detected?Math.max(-19,detectedTop-1):-10,barBottom=detected?Math.min(29,detectedBottom+1):22;
+    // A contiguous opaque banner: no holes in letters or icons, and no lost
+    // dark-blue/purple left half caused by per-pixel foreground thresholds.
+    const core=dx>=-116&&dx<=156&&dy>=barTop&&dy<=barBottom;
+    const ornament=dx>=-145&&dx<-105&&dy>=-33&&dy<=34;
     let a=0;
     if(core){
       a=255;
       if(dx>112){const fade=clamp((165-dx)/53,0,1);a=Math.round(a*fade*fade*(3-2*fade));}
     }
-    if(ornament&&d>43&&maxv>108&&(sat>29||maxv>200))a=255;
-    // 막대 위아래에 붙은 광택/장식: 본체 주변의 강한 전경 신호만 살림
-    if(dx>=-116&&dx<-52&&!core&&dy>=barTop-13&&dy<=barBottom+10&&d>63&&sat>47&&maxv>145)a=Math.max(a,225);
+    // The ornament is not always saturated or bright: the blue winged logo
+    // includes nearly-black pieces against dark gray scenery. Compare the
+    // pixel with background above/below, without punching holes in the bar.
+    if(ornament&&d>29&&maxv>78&&(sat>28||maxv>178))a=255;
+    // Preserve detached small ornaments immediately above/below the head.
+    if(dx>=-145&&dx<-64&&!core&&dy>=barTop-16&&dy<=barBottom+12&&d>42&&(sat>32||maxv>185))a=Math.max(a,240);
     // 화면 상단 하이라이트는 장식과 오인하지 않도록 외곽 보호 구간에서 제외
     alpha[y*w+x]=a;
     if(a>=16)kept++;
    }
+  }
+  // Identify the decorative head by its saturated/bright pixels. This avoids
+  // retaining the dark wall stripe to the left of the actual special banner.
+  let actualLeft=-1;
+  for(let gx=Math.max(x0,Math.round(tx-184*s));gx<Math.min(x1,Math.round(tx-62*s));gx++){
+   let strong=0;
+   for(let gy=Math.max(y0,Math.round(ty-29*s));gy<Math.min(y1,Math.round(ty+38*s));gy+=Math.max(1,Math.round(2*s))){
+    const ii=4*((gy-y0)*w+(gx-x0));
+    const R=src[ii],G=src[ii+1],B=src[ii+2];
+    const hi=Math.max(R,G,B),sat=hi-Math.min(R,G,B);
+    if((hi>95&&sat>42)||hi>190)strong++;
+   }
+   if(strong>=3){actualLeft=gx;break;}
+  }
+  if(actualLeft>=0){
+   const cutoff=Math.max(x0,Math.round(actualLeft-8*s));
+   for(let x=0;x<cutoff-x0;x++)for(let y=0;y<h;y++)alpha[y*w+x]=0;
   }
   if(kept<200*s*s)return null;
   // 복잡한 배경을 마스크로 복구하지 않는다. 작은 단독 픽셀만 정리.
@@ -6139,8 +6184,10 @@ saveBtn.addEventListener("click",async()=>{
  }
  async function extractKilllogClassic(tx,ty){
   const W=view.width,H=view.height;
-  const sx=W/1536,sy=H/709;
-  if(W<500||H<240||W/H<1.98||W/H>2.45)return null;
+  // Killlog location scales with screenshot width. Tablets often add vertical area
+  // instead of stretching the killlog, so H/709 must NOT scale Y for tall images.
+  const sx=W/1536,sy=(W/H<1.98 ? W/1536 : H/709);
+  if(W<500||H<240||W/H<1.32||W/H>2.65)return null;
   const rgba=ctx.getImageData(0,0,W,H).data;
   function rgb(x,y){x=clamp(Math.round(x*sx),0,W-1);y=clamp(Math.round(y*sy),0,H-1);const p=4*(y*W+x);return [rgba[p],rgba[p+1],rgba[p+2]];}
   function delta(a,b){return Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));}
@@ -6200,12 +6247,79 @@ saveBtn.addEventListener("click",async()=>{
   }
   return createMaskedResult(x0,y0,w,h,raw,alpha,'normal',{fire,darkRed,largeOrnament});
  }
+ // 손가락으로 눌렀다는 이유만으로 인식 성공으로 처리하지 않는다.
+ // 게임 화면의 다른 글자·총·창고 카드가 막대로 잘려 나가는 것을 막는 사전 검증.
+ function isConfirmedKilllogTap(tx,ty,mode){
+  const W=view.width,H=view.height,scale=W/1536;
+  if(W<430||H<220)return false;
+  const px=tx/W,py=ty/H;
+  // 화면 중앙 위쪽의 긴 배너에서만 추출한다. 화면 아래/우측 카드에서는 실패 처리.
+  if(px<.12||px>.77||py<.105||py>.385)return false;
+  const image=ctx.getImageData(0,0,W,H).data;
+  const pixel=(x,y)=>{
+   x=clamp(Math.round(x),0,W-1);y=clamp(Math.round(y),0,H-1);
+   const p=(y*W+x)*4;return [image[p],image[p+1],image[p+2]];
+  };
+  let contrast=0,centerContrast=0;
+  const offsets=[-100,-75,-50,-25,0,25,50,75,100,125,150];
+  const refGap=(mode==='special'?42:48)*scale;
+  for(const off of offsets){
+   const xx=tx+off*scale,c=pixel(xx,ty),top=pixel(xx,ty-refGap),bottom=pixel(xx,ty+refGap);
+   const v=Math.max(...c.map((q,k)=>Math.abs(q-(top[k]+bottom[k])/2)));
+   if(v>23){contrast++;if(off>=-100&&off<=50)centerContrast++;}
+  }
+  // 열두 번째 이상의 단순 배경 인식 대신 가로 띠의 반복 색상 변화를 확인.
+  if(contrast<3||centerContrast<2)return false;
+  // 작은 '킬 알림' 글자와 밝은 무기 아이콘은 실제 배너의 강한 증거.
+  // 배너 장식만 눌렀을 때도 주변 영역을 함께 검사해 터치가 너무 민감해지지 않게 한다.
+  const left=clamp(Math.floor(tx-175*scale),0,W-1),right=clamp(Math.ceil(tx+145*scale),left+1,W);
+  const top=clamp(Math.floor(ty-21*scale),0,H-1),bottom=clamp(Math.ceil(ty+23*scale),top+1,H);
+  const step=Math.max(1,Math.round(scale));
+  let whites=0,samples=0;
+  for(let y=top;y<bottom;y+=step){
+   for(let x=left;x<right;x+=step){
+    const p=(y*W+x)*4,r=image[p],g=image[p+1],b=image[p+2];
+    if(Math.min(r,g,b)>151&&Math.max(r,g,b)-Math.min(r,g,b)<72)whites++;
+    samples++;
+   }
+  }
+  return whites>=Math.max(13,Math.round(samples*.0014));
+ }
+ // 잘못된 오인식의 PNG 저장을 막는 최소 형태 검사. 실패 시 결과 생성 대신 안내한다.
+ function validKilllogResult(r){
+  if(!r||!r.master||!r.inner||!r.bounds)return false;
+  const {w,h}=r.inner,ratio=w/Math.max(1,h);
+  if(!Number.isFinite(ratio)||ratio<2.5||ratio>19||w<45||h<9)return false;
+  const c=r.master.getContext('2d',{willReadFrequently:true});
+  const im=c.getImageData(0,0,r.master.width,r.master.height),data=im.data;
+  let best=0,rows=0;
+  const x0=clamp(Math.floor(r.inner.x),0,r.master.width-1);
+  const x1=clamp(Math.ceil(r.inner.x+w),x0+1,r.master.width);
+  const y0=clamp(Math.floor(r.inner.y),0,r.master.height-1);
+  const y1=clamp(Math.ceil(r.inner.y+h),y0+1,r.master.height);
+  const step=Math.max(1,Math.floor((x1-x0)/220));
+  for(let y=y0;y<y1;y+=2){
+   let count=0,total=0;
+   for(let x=x0;x<x1;x+=step){if(data[(y*r.master.width+x)*4+3]>=160)count++;total++;}
+   const fraction=count/Math.max(1,total);
+   best=Math.max(best,fraction);
+   if(fraction>.45)rows++;
+  }
+  return best>.55&&rows>=3;
+ }
  async function extractKilllog(tx,ty,mode){
+  // 실패한 곳까지 억지로 자르던 generic fallback 은 비활성화한다.
+  // 정상 아이폰 일반 킬로그는 원래의 검증된 클래식 추출 함수를 유지한다.
+  if(!isConfirmedKilllogTap(tx,ty,mode))return null;
   let result=null;
-  if(mode==='normal'){result=await extractKilllogClassic(tx,ty);if(!result)result=buildGenericResult(tx,ty,'normal');}
+  if(mode==='normal')result=await extractKilllogClassic(tx,ty);
   else result=buildSpecialMaskedResult(tx,ty);
   if(!result)return null;
   if(!(await encodeResult(result)))return null;
+  if(!validKilllogResult(result)){
+   if(result.url)URL.revokeObjectURL(result.url);
+   return null;
+  }
   return result;
  }
  function deleteResult(idx){
@@ -6272,7 +6386,7 @@ saveBtn.addEventListener("click",async()=>{
   busy=true;status('킬로그를 자르는 중…');
   try{
    const picked=await extractKilllog(tx,ty,killlogMode);
-   if(!picked){status('킬로그를 인식하지 못했어요. 막대 중앙이나 장식 부분을 조금 더 정확히 눌러주세요.');return;}
+   if(!picked){status('확실한 킬로그로 확인되지 않아 잘못된 추출을 막았어요. 킬 알림 글자 근처를 누르거나 다른 원본 사진을 이용하세요.');return;}
    picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();
    status('킬로그 추출 완료! 아래에서 확인하고 저장하세요.');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
@@ -6306,5 +6420,3 @@ saveBtn.addEventListener("click",async()=>{
  }
 })();
 </script>
-</body>
-</html>
