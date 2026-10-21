@@ -750,6 +750,103 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 #clothes-tab #c_imageCanvas{touch-action:manipulation;-webkit-user-select:none;user-select:none;}
 #clothes-tab #c_selectionCanvas{pointer-events:none!important;}
 
+
+/* ===== 관리자 업데이트 관리 / 제작자 소개 실시간 내역 ===== */
+#admin-release-panel{margin:16px 0 20px;padding:17px;border-radius:16px;background:#172940;border:1px solid #3b5678;color:#e6f0ff}
+#admin-release-panel h3{font-size:16px;margin:0 0 6px}
+#admin-release-panel .release-help{color:#b1c5df;font-size:12px;line-height:1.6;margin:0 0 15px}
+.release-edit-form{display:grid;grid-template-columns:minmax(120px,170px) 1fr;gap:10px}
+.release-edit-form .release-full{grid-column:1/-1}
+.release-edit-form label{font-size:12px;color:#bdd2ef;font-weight:750;display:block;margin:0 0 5px}
+.release-edit-form input,.release-edit-form textarea{width:100%;background:#101b2e;color:#eff6ff;border:1px solid #405a7c;border-radius:10px;padding:12px;min-height:43px;font:inherit;font-size:14px;user-select:text;-webkit-user-select:text}
+.release-edit-form textarea{min-height:87px;resize:vertical;line-height:1.5}
+.release-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 3px}
+.release-actions button,.release-row-actions button{border-radius:10px;padding:9px 14px;border:1px solid #546e91;background:#263a58;color:#edf4ff;font:inherit;font-size:13px;font-weight:800;min-height:40px;cursor:pointer}
+.release-actions .release-primary{background:#82b5fc;color:#0b1a31;border:0}
+.release-actions button:disabled,.release-row-actions button:disabled{opacity:.55;cursor:wait}
+.release-status{font-size:12px;color:#bdcde5;line-height:1.5;min-height:18px;margin-top:7px;overflow-wrap:anywhere}
+.release-list{display:flex;flex-direction:column;gap:9px;margin:12px 0 0}
+.release-row{background:#101d32;border:1px solid #344e72;border-radius:12px;padding:12px;min-width:0}
+.release-row-date{font-size:11px;color:#a2c7ff;font-weight:900;margin-bottom:5px}
+.release-row-title{font-size:14px;font-weight:850;color:#f1f6ff;overflow-wrap:anywhere}
+.release-row-detail{font-size:12px;color:#b0c0d9;line-height:1.55;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+.release-row-actions{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.release-row-actions button{padding:7px 13px;min-height:34px}
+.release-row-actions .release-danger{color:#ffc8c8;border-color:#98545c}
+#creator-release-notes-list{padding-left:27px}
+#creator-release-notes-list li{padding:2px 0;overflow-wrap:anywhere}
+.creator-release-description{display:block;white-space:pre-wrap;color:#95acca;line-height:1.65;margin:4px 0 2px}
+.creator-release-status{color:#e9b992;font-size:11px;padding:0 13px 12px}
+.creator-release-status:empty{display:none}
+@media(max-width:500px){.release-edit-form{grid-template-columns:1fr}.release-edit-form .release-full{grid-column:1}.release-actions button{flex:1}}
+
+/* ===== 스나 · 제작자 소개창 (기존 편집/저장 로직과 독립) ===== */
+.global-tabs > #btn-creator-about{
+  flex:0 0 auto;min-width:108px;min-height:58px;
+  padding:10px 14px;border:1px solid #5876a6;
+  background:linear-gradient(145deg,#233653,#1b2943);
+  color:#e9f1ff;font-size:14px;font-weight:850;white-space:nowrap;
+}
+.global-tabs > #btn-creator-about:focus-visible{outline:2px solid #b8ccff;outline-offset:2px}
+.creator-login-link{
+  margin-top:12px;width:100%;border:1px solid #405b85;border-radius:12px;
+  background:#182a44;color:#cddcff;min-height:42px;font-size:13px;font-weight:800;
+  cursor:pointer;
+}
+#creator-about-overlay[hidden]{display:none!important}
+#creator-about-overlay{
+ position:fixed;inset:0;z-index:2147483641;
+ display:flex;align-items:center;justify-content:center;
+ padding:max(14px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+ background:rgba(3,9,20,.84);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+ overscroll-behavior:contain;
+}
+.creator-about-panel{
+ color:#edf3ff;background:linear-gradient(155deg,#1d2e49 0%,#111c30 75%);
+ border:1px solid #496389;box-shadow:0 22px 78px #000a;
+ width:min(100%,490px);max-height:min(92dvh,800px);overflow-x:hidden;overflow-y:auto;
+ border-radius:23px;-webkit-overflow-scrolling:touch;
+ overscroll-behavior:contain;
+ scrollbar-width:thin;scrollbar-color:#51698e transparent;
+}
+.creator-about-top{padding:22px 22px 15px;position:relative}
+.creator-about-topline{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.creator-about-overline{font-size:11px;letter-spacing:.17em;color:#a8c4f2;font-weight:900}
+.creator-about-close{
+  display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;
+  border:1px solid #466080;border-radius:12px;background:#273952;color:#e7f1ff;
+  font-weight:900;font-size:22px;cursor:pointer;
+}
+.creator-about-brand{display:flex;gap:13px;align-items:center;margin-top:18px}
+.creator-about-mark{
+  width:58px;height:58px;flex-shrink:0;border-radius:17px;display:grid;place-items:center;
+  font-size:26px;color:#f9fbff;background:linear-gradient(140deg,#557bb6,#243c68);
+  box-shadow:inset 0 1px 0 #ffffff50,0 9px 25px #0004;
+}
+.creator-about-brand h2{font-size:24px;letter-spacing:-.04em;line-height:1.15;margin:0 0 6px;font-weight:900}
+.creator-about-brand p{font-size:12px;color:#acc0dc;line-height:1.5;margin:0}
+.creator-about-body{padding:0 22px 18px}
+.creator-about-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:15px 0 18px}
+.creator-about-stat{background:#15243c;border:1px solid #334b6b;border-radius:13px;padding:12px}
+.creator-about-stat small{display:block;color:#a1b4d0;font-size:11px;margin-bottom:7px}
+.creator-about-stat strong{display:block;font-size:15px;font-weight:900;color:#eef5ff}
+.creator-about-section{border-top:1px solid #344761;padding:16px 0 0;margin-top:16px}
+.creator-about-section h3{font-size:14px;font-weight:900;color:#e7f0ff;margin:0 0 10px;letter-spacing:-.01em}
+.creator-about-description{font-size:12px;line-height:1.75;color:#b9c9e2;word-break:keep-all}
+.creator-about-features{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.creator-about-feature{font-size:12px;font-weight:750;color:#d7e7ff;background:#1c304e;border:1px solid #38577e;border-radius:10px;padding:10px 8px}
+.creator-about-history{border:1px solid #3a5478;border-radius:12px;background:#162841;overflow:hidden}
+.creator-about-history summary{cursor:pointer;font-size:12px;padding:13px;color:#deebff;font-weight:850;list-style-position:inside}
+.creator-about-history ul{margin:0;padding:0 16px 13px 30px;color:#b7c8e1;font-size:12px;line-height:1.85}
+.creator-about-history li+li{margin-top:5px}
+.creator-about-warning{background:#15233a;border:1px solid #2e4766;padding:11px;border-radius:11px;color:#afc1dc;font-size:11px;line-height:1.7;margin-top:10px}
+.creator-about-bottom{position:sticky;bottom:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:9px;padding:13px 22px 19px;border-top:1px solid #344761;background:#121e32}
+.creator-about-copy{font-size:11px;color:#93a9c8;line-height:1.5}
+.creator-about-done{border:1px solid #a0b9ee;color:#10213f;background:linear-gradient(130deg,#8db5f4,#becaff);border-radius:11px;min-height:42px;padding:9px 20px;font-size:13px;font-weight:900;cursor:pointer}
+@media(max-width:690px){.global-tabs > #btn-creator-about{flex:0 0 auto;min-width:122px;min-height:62px;padding:11px 14px;font-size:14px}}
+@media(max-width:390px){.creator-about-top{padding:18px 15px 12px}.creator-about-body{padding:0 15px 14px}.creator-about-bottom{padding:12px 15px 17px}.creator-about-brand h2{font-size:21px}.creator-about-features{gap:6px}.creator-about-feature{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.creator-about-panel{scroll-behavior:auto}}
+
 </style>
 </head>
 
@@ -822,6 +919,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
   <button class="auth-btn" id="auth-login" type="button" onclick="window.requestAccess()">로그인</button>
   <button class="auth-btn" id="auth-signup" type="button" onclick="window.registerMember()" style="margin-top:8px;background:#233954">새 계정 회원가입</button>
   <button class="auth-btn" id="auth-reset-password" type="button" onclick="window.resetLoginPassword()" style="margin-top:8px;background:#263242">비밀번호 재설정 이메일 받기</button>
+  <button type="button" class="creator-login-link" data-open-creator>ℹ 제작자 소개 · 스나</button>
   <p class="member-tip" id="auth-error" role="status">기존 회원은 가입 후 관리자에게 기존 이용권 연결을 요청하세요. 닉네임만으로 이전 권한이 연결되지 않습니다.</p>
  </div>
  <div class="auth-box" id="view-waiting" style="display:none">
@@ -853,6 +951,22 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
  <div class="member-controls"><button class="member-btn primary" id="admin-notice-publish" type="button">공지 등록</button><span id="admin-notice-message" class="member-tip"></span></div>
  <div id="admin-notice-list"></div>
 </div>
+<!-- Firebase에 저장되는 관리자 전용 업데이트 내역 -->
+<section id="admin-release-panel" aria-labelledby="admin-release-heading">
+ <h3 id="admin-release-heading">🗓️ 업데이트 내역 관리</h3>
+ <p class="release-help">제작자 소개창에 표시되는 업데이트를 추가·수정·삭제합니다. 저장하면 다른 기기에도 자동 반영됩니다. 관리자 권한이 있어야 변경할 수 있습니다.</p>
+ <div class="release-edit-form">
+  <div><label for="admin-release-date">업데이트 날짜</label><input id="admin-release-date" type="text" maxlength="10" placeholder="예: 2026.10.21" autocomplete="off" spellcheck="false"></div>
+  <div><label for="admin-release-title">업데이트 제목 (필수)</label><input id="admin-release-title" type="text" maxlength="90" placeholder="예: 킬로그 인식 개선" autocomplete="off"></div>
+  <div class="release-full"><label for="admin-release-details">자세한 내용 (선택)</label><textarea id="admin-release-details" maxlength="1400" placeholder="어떤 부분을 수정했는지 적어 주세요."></textarea></div>
+ </div>
+ <div class="release-actions">
+  <button id="admin-release-save" class="release-primary" type="button">업데이트 추가</button>
+  <button id="admin-release-cancel" type="button" hidden>수정 취소</button>
+ </div>
+ <p id="admin-release-status" class="release-status" role="status" aria-live="polite"></p>
+ <div id="admin-release-list" class="release-list" aria-label="등록된 업데이트 목록"></div>
+</section>
 <div class="member-panel"><h3>🖼 대필 전시관 관리</h3><p>공개된 작품을 검토하고 필요한 경우 삭제할 수 있습니다.</p><div id="admin-gallery-list"></div></div>
 <div class="member-controls" style="margin-bottom:10px"><input id="admin-user-search" type="search" placeholder="회원 이름 검색" aria-label="회원 검색" style="flex:1"><select id="admin-user-grade-filter" aria-label="등급 검색"><option value="">모든 등급</option><option value="silver">실버</option><option value="gold">골드</option><option value="vip">VIP</option></select></div>
 <div id="admin-user-list"></div>
@@ -1044,6 +1158,161 @@ document.getElementById('admin-save-grades').onclick=async()=>{
   await setDoc(doc(db,'appSettings','gradeRights'),{rights:gradeRights,updatedAt:Date.now()},{merge:true});el.textContent='등급별 기능 권한을 저장했어요.';window.logActivity?.('관리자: 등급 권한 변경',{});}
  catch(e){el.textContent='저장 실패: Firestore 보안 규칙을 확인해 주세요.';console.error(e);}
 };
+// ===== 업데이트 관리: Firestore appSettings/updateHistory (관리자만 쓰기, 사용자 실시간 읽기) =====
+// 첫 저장 전에는 기존 소개창 기록을 보여주며, 첫 변경부터 Firebase 문서가 기준이 됩니다.
+const RELEASE_HISTORY_REF=doc(db,'appSettings','updateHistory');
+const RELEASE_DEFAULTS=Object.freeze([
+ {id:'default-202608',date:'2026.08',title:'옷 사진 선택·추출 도구 개발 시작',details:'',createdAt:1},
+ {id:'default-202610-integrated',date:'2026.10',title:'옷·총기·합치기·대필판 기능을 통합 편집기로 구성',details:'',createdAt:2},
+ {id:'default-202610-kill',date:'2026.10',title:'킬로그 인식과 장식 보정·복원 기능 개선 진행',details:'',createdAt:3}
+]);
+let releaseNotes=RELEASE_DEFAULTS.map(x=>({...x}));
+let releaseEditingId=null,releaseWorking=false;
+const releaseStatus=document.getElementById('admin-release-status');
+const releaseDate=document.getElementById('admin-release-date');
+const releaseTitle=document.getElementById('admin-release-title');
+const releaseDetails=document.getElementById('admin-release-details');
+const releaseSave=document.getElementById('admin-release-save');
+const releaseCancel=document.getElementById('admin-release-cancel');
+function releaseMake(tag,cls,content){
+ const element=document.createElement(tag);
+ if(cls)element.className=cls;
+ if(content!==undefined)element.textContent=String(content);
+ return element;
+}
+const releaseAdminList=document.getElementById('admin-release-list');
+const releasePublicList=document.getElementById('creator-release-notes-list');
+const releasePublicStatus=document.getElementById('creator-release-status');
+function koreanToday(){
+ const parts=new Intl.DateTimeFormat('en-US',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Seoul'}).formatToParts(new Date());
+ const field=x=>parts.find(p=>p.type===x)?.value||'';
+ return `${field('year')}.${field('month')}.${field('day')}`;
+}
+function validReleaseDate(s){
+ if(!/^20\d{2}\.(0[1-9]|1[0-2])(\.(0[1-9]|[12]\d|3[01]))?$/.test(s))return false;
+ const [y,m,d]=s.split('.').map(Number);
+ return !d||new Date(Date.UTC(y,m,0)).getUTCDate()>=d;
+}
+function normalizeReleaseEntries(v){
+ if(!Array.isArray(v))return [];
+ return v.slice(0,100).filter(x=>x&&typeof x==='object')
+  .map(x=>({id:String(x.id||''),date:String(x.date||''),title:String(x.title||''),
+    details:String(x.details||''),createdAt:Number(x.createdAt)||0}))
+  .filter(x=>x.id.length>0&&x.id.length<=100&&validReleaseDate(x.date)&&x.title.trim()&&x.title.length<=90&&x.details.length<=1400);
+}
+function releaseSort(items){
+ return [...items].sort((a,b)=>{
+  const ad=a.date.replaceAll('.','').padEnd(8,'0');
+  const bd=b.date.replaceAll('.','').padEnd(8,'0');
+  return bd.localeCompare(ad)||Number(b.createdAt||0)-Number(a.createdAt||0)||b.id.localeCompare(a.id);
+ });
+}
+function renderReleaseHistory(){
+ releasePublicList.replaceChildren();
+ releaseAdminList.replaceChildren();
+ const sorted=releaseSort(releaseNotes);
+ if(!sorted.length){
+  releasePublicList.append(releaseMake('li',null,'등록된 업데이트 내역이 없습니다.'));
+  releaseAdminList.append(releaseMake('p','release-status','등록된 업데이트가 없습니다. 위에서 새 항목을 추가해 주세요.'));
+  return;
+ }
+ for(const item of sorted){
+  // 내용을 HTML로 해석하지 않고 텍스트로 삽입하여 스크립트 삽입을 막습니다.
+  const li=releaseMake('li');
+  li.append(releaseMake('strong',null,item.date),document.createTextNode(' — '+item.title));
+  if(item.details)li.append(releaseMake('span','creator-release-description',item.details));
+  releasePublicList.append(li);
+  const row=releaseMake('article','release-row');
+  row.append(releaseMake('div','release-row-date',item.date),releaseMake('div','release-row-title',item.title));
+  if(item.details)row.append(releaseMake('p','release-row-detail',item.details));
+  const actions=releaseMake('div','release-row-actions');
+  const edit=releaseMake('button',null,'수정');edit.type='button';
+  edit.disabled=releaseWorking;
+  edit.onclick=()=>{
+   if(!isAdminMode||releaseWorking)return;
+   releaseEditingId=item.id;releaseDate.value=item.date;releaseTitle.value=item.title;releaseDetails.value=item.details;
+   releaseSave.textContent='변경사항 저장';releaseCancel.hidden=false;
+   releaseStatus.textContent=`「${item.title}」 수정 중입니다.`;
+   document.getElementById('admin-release-panel').scrollIntoView({behavior:'smooth',block:'start'});
+   releaseTitle.focus({preventScroll:true});
+  };
+  const del=releaseMake('button','release-danger','삭제');del.type='button';
+  del.disabled=releaseWorking;
+  del.onclick=async()=>{
+   if(!isAdminMode||releaseWorking||!await window.uiConfirm(`「${item.title}」 업데이트 내역을 삭제할까요?`))return;
+   await commitReleaseHistory('delete',{id:item.id,title:item.title});
+  };
+  actions.append(edit,del);row.append(actions);releaseAdminList.append(row);
+ }
+}
+function resetReleaseForm(){
+ releaseEditingId=null;releaseDate.value=koreanToday();releaseTitle.value='';releaseDetails.value='';
+ releaseSave.textContent='업데이트 추가';releaseCancel.hidden=true;
+}
+function setReleaseBusy(busy){
+ releaseWorking=busy;releaseSave.disabled=busy;releaseCancel.disabled=busy;
+ for(const b of releaseAdminList.querySelectorAll('button'))b.disabled=busy;
+}
+async function commitReleaseHistory(action,data){
+ if(!isAdminMode||!auth.currentUser){releaseStatus.textContent='최고 관리자 로그인 후 수정할 수 있습니다.';return;}
+ if(releaseWorking)return;
+ setReleaseBusy(true);releaseStatus.textContent='Firebase에 저장 중…';
+ try{
+  // 브라우저 플래그만으로 권한을 허용하지 않습니다. 최종 권한은 Firestore 보안 규칙에서 강제해야 합니다.
+  const token=await getIdTokenResult(auth.currentUser,true);
+  if(token.claims.admin!==true)throw new Error('최고 관리자 권한이 없습니다.');
+  await runTransaction(db,async tx=>{
+   const snap=await tx.get(RELEASE_HISTORY_REF);
+   const items=snap.exists()?normalizeReleaseEntries(snap.data().items):RELEASE_DEFAULTS.map(x=>({...x}));
+   let next;
+   if(action==='add'){
+    if(items.length>=100)throw new Error('업데이트 내역은 최대 100개까지 등록할 수 있습니다.');
+    next=[...items,{id:data.id,date:data.date,title:data.title,details:data.details,createdAt:Date.now()}];
+   }else if(action==='edit'){
+    if(!items.some(x=>x.id===data.id))throw new Error('해당 항목이 다른 기기에서 삭제되었어요.');
+    next=items.map(x=>x.id===data.id?{...x,date:data.date,title:data.title,details:data.details}:x);
+   }else if(action==='delete'){
+    if(!items.some(x=>x.id===data.id))throw new Error('해당 항목이 이미 삭제되었어요.');
+    next=items.filter(x=>x.id!==data.id);
+   }else throw new Error('허용되지 않는 작업입니다.');
+   tx.set(RELEASE_HISTORY_REF,{items:next,updatedAt:Date.now(),updatedBy:auth.currentUser.uid});
+  });
+  releaseStatus.textContent=action==='add'?'업데이트를 등록했습니다. 다른 기기에도 자동 반영됩니다.':action==='edit'?'수정 사항을 저장했습니다.':'업데이트를 삭제했습니다.';
+  window.logActivity?.('관리자: 업데이트 '+({add:'추가',edit:'수정',delete:'삭제'}[action]),{title:data.title||''});
+  if(action!=='delete'||releaseEditingId===data.id)resetReleaseForm();
+ }catch(error){
+  console.error('업데이트 관리 실패',error);
+  releaseStatus.textContent=error.code==='permission-denied'?'저장할 권한이 없습니다. Firebase 보안 규칙에서 관리자 쓰기를 허용해야 합니다.':`저장 실패: ${error.message||'네트워크 연결과 Firebase 규칙을 확인해 주세요.'}`;
+ }finally{setReleaseBusy(false);renderReleaseHistory();}
+}
+releaseDate.value=koreanToday();
+releaseCancel.onclick=()=>{resetReleaseForm();releaseStatus.textContent='수정을 취소했습니다.';};
+releaseSave.onclick=async()=>{
+ if(!isAdminMode||releaseWorking)return;
+ const date=releaseDate.value.trim().replaceAll('-','.');
+ const title=releaseTitle.value.trim(),details=releaseDetails.value.trim();
+ if(!validReleaseDate(date)){releaseStatus.textContent='날짜를 YYYY.MM 또는 YYYY.MM.DD 형식으로 입력해 주세요.';releaseDate.focus();return;}
+ if(!title){releaseStatus.textContent='업데이트 제목을 입력해 주세요.';releaseTitle.focus();return;}
+ const data={date,title,details};
+ if(releaseEditingId){data.id=releaseEditingId;await commitReleaseHistory('edit',data);}
+ else{
+  // Firestore가 생성한 무작위 문서 ID를 항목 ID로 재사용합니다.
+  data.id=doc(collection(db,'releaseHistoryIds')).id;
+  await commitReleaseHistory('add',data);
+ }
+};
+renderReleaseHistory();
+// 승인 전 로그인 페이지에서도 최신 내역을 볼 수 있도록, 읽기 구독은 공개 기록 한 문서에만 수행합니다.
+onSnapshot(RELEASE_HISTORY_REF,snap=>{
+ releaseNotes=snap.exists()?normalizeReleaseEntries(snap.data().items):RELEASE_DEFAULTS.map(x=>({...x}));
+ releasePublicStatus.textContent='';
+ renderReleaseHistory();
+},error=>{
+ console.warn('업데이트 내역 읽기 실패',error);
+ releasePublicStatus.textContent='실시간 업데이트를 불러오지 못했습니다. Firebase 읽기 권한을 확인해 주세요. 현재는 기본 개발 기록을 표시합니다.';
+ releaseStatus.textContent='업데이트 불러오기 실패: Firebase 보안 규칙을 확인해 주세요.';
+});
+
 // ========= 공지사항 (공지별 · 사용자별 24시간 보지 않기) =========
 let noticeItems=[],currentNotice=null;
 const noticeSessionHidden=new Set();
@@ -1797,6 +2066,71 @@ window.closeAdmin=()=>{
 };
 </script>
 
+
+<!-- 개발자 소개: 별도 인증·결제·저장 기능에 관여하지 않음 -->
+<div id="creator-about-overlay" role="presentation" hidden>
+ <section class="creator-about-panel" role="dialog" aria-modal="true" aria-labelledby="creator-about-title" aria-describedby="creator-about-description" tabindex="-1">
+  <header class="creator-about-top">
+   <div class="creator-about-topline">
+    <span class="creator-about-overline">ABOUT THE CREATOR</span>
+    <button type="button" class="creator-about-close" data-close-creator aria-label="제작자 소개 닫기">×</button>
+   </div>
+   <div class="creator-about-brand">
+    <div class="creator-about-mark" aria-hidden="true">✦</div>
+    <div>
+     <h2 id="creator-about-title">대필 편집기</h2>
+     <p>스나가 제작한 통합 이미지 편집 프로그램</p>
+    </div>
+   </div>
+  </header>
+  <div class="creator-about-body">
+   <div class="creator-about-grid">
+    <div class="creator-about-stat"><small>제작자</small><strong>스나</strong></div>
+    <div class="creator-about-stat"><small>최초 제작</small><strong>2026년 8월</strong></div>
+    <div class="creator-about-stat"><small>통합 편집기 개발</small><strong>2026년 10월</strong></div>
+    <div class="creator-about-stat"><small>최근 수정</small><strong>2026년 10월 21일</strong></div>
+   </div>
+   <div class="creator-about-section">
+    <h3>프로그램 소개</h3>
+    <p id="creator-about-description" class="creator-about-description">게임 스크린샷에서 필요한 이미지를 선택하고 추출·편집·합칠 수 있도록 만든 도구입니다. 휴대폰, 태블릿과 PC의 웹 브라우저에서 사용할 수 있도록 개발하고 있습니다.</p>
+   </div>
+   <div class="creator-about-section">
+    <h3>주요 기능</h3>
+    <div class="creator-about-features">
+     <div class="creator-about-feature">👕 옷 사진 추출</div>
+     <div class="creator-about-feature">✂️ 총기 사진 자르기</div>
+     <div class="creator-about-feature">🎯 킬로그 커팅</div>
+     <div class="creator-about-feature">🖼️ 사진 합치기</div>
+     <div class="creator-about-feature">📝 대필판 편집</div>
+     <div class="creator-about-feature">🏛️ 대필 전시관</div>
+    </div>
+   </div>
+   <div class="creator-about-section">
+    <h3>지원 환경 및 개발 목표</h3>
+    <p class="creator-about-description">대상 기기: 아이폰 · 아이패드 · 삼성 갤럭시 탭 · PC</p>
+    <p class="creator-about-warning">같은 원본 사진은 기기 화면 크기와 관계없이 동일하게 추출하는 것을 목표로 인식 기능을 계속 개선하고 있습니다.</p>
+   </div>
+   <div class="creator-about-section">
+    <h3>개발 기록</h3>
+    <details class="creator-about-history">
+     <summary>업데이트 내역 펼쳐보기</summary>
+     <ul id="creator-release-notes-list">
+      <li><strong>2026.08</strong> — 옷 사진 선택·추출 도구 개발 시작</li>
+      <li><strong>2026.10</strong> — 옷·총기·합치기·대필판 기능을 통합 편집기로 구성</li>
+      <li><strong>2026.10</strong> — 킬로그 인식과 장식 보정·복원 기능 개선 진행</li>
+     </ul>
+     <p id="creator-release-status" class="creator-release-status" role="status"></p>
+    </details>
+    <p class="creator-about-warning">일부 사진은 킬로그·장식의 디자인과 화질에 따라 자동 추출 결과가 달라질 수 있습니다. 저장 전에 미리보기를 확인해 주세요.</p>
+   </div>
+  </div>
+  <footer class="creator-about-bottom">
+   <div class="creator-about-copy">© 2026 스나<br>개인 제작 이미지 편집 프로그램</div>
+   <button type="button" class="creator-about-done" data-close-creator>확인</button>
+  </footer>
+ </section>
+</div>
+
 <div class="global-tabs">
 
  <button id="btn-clothes" class="active" onclick="switchTab('clothes')">
@@ -1820,6 +2154,7 @@ window.closeAdmin=()=>{
  </button>
 
  <button id="btn-gallery" onclick="switchTab('gallery')">🏛️ 전시관</button>
+ <button id="btn-creator-about" type="button" data-open-creator title="제작자 스나 · 프로그램 정보" aria-haspopup="dialog">ℹ 제작자</button>
  <button id="btn-logout" onclick="window.confirmSignOutMember()" title="로그아웃" style="flex:0 0 auto;min-width:80px;font-size:12px;padding:10px 12px">로그아웃</button>
   <button id="btn-member-info" onclick="window.openMemberInfo()" title="내 등급 · 공지사항" style="flex:0 0 48px;font-size:19px;padding:0">👤</button>
  <button id="btn-admin" onclick="window.openAdminPrompt()" title="최고 관리자 전용" style="display:none;flex:0 0 auto;min-width:76px;font-size:12px;padding:10px 12px">⚙ 관리자</button>
@@ -5879,6 +6214,7 @@ saveBtn.addEventListener("click",async()=>{
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
         mk('개별 저장',()=>saveFiles([r],i)),
+    mk('장식 복원·지우기',()=>openMaskEditor(i)),
     mk('삭제',()=>deleteResult(i))
    );
    card.append(btnRow);wrap.append(card);
@@ -5965,7 +6301,8 @@ saveBtn.addEventListener("click",async()=>{
   }
  }
  function createMaskedResult(sourceX,sourceY,w,h,raw,alpha,mode,meta={}){
-  if(mode==='normal')cleanupDetachedBelow(alpha,w,h,raw);
+  // 장식으로부터 분리된 불꽃·반짝임 조각을 임의로 제거하지 않음.
+  // 이미지가 아니라 원본의 마스크를 기준으로 필요한 조각만 출력한다.
   const master=document.createElement('canvas');master.width=w;master.height=h;
   const img=master.getContext('2d').createImageData(w,h);
   let minX=w,minY=h,maxX=-1,maxY=-1;
@@ -6261,7 +6598,7 @@ saveBtn.addEventListener("click",async()=>{
   const topBand=darkRed?153:fire?146:149;
   const bottomBand=darkRed?195:fire?192:190;
   const sourceX0=fire?460:(largeOrnament?455:510),sourceX1=fire?990:(largeOrnament?995:978);
-  const sourceY0=fire?86:(largeOrnament?75:130),sourceY1=fire?237:(largeOrnament?243:224);
+  const sourceY0=fire?65:(largeOrnament?63:110),sourceY1=fire?264:(largeOrnament?271:247);
   const x0=clamp(Math.floor(sourceX0*sx),0,W-2),x1=clamp(Math.ceil(sourceX1*sx),x0+1,W),y0=clamp(Math.floor(sourceY0*sy),0,H-2),y1=clamp(Math.ceil(sourceY1*sy),y0+1,H);
   const w=x1-x0,h=y1-y0;
   const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
@@ -6279,8 +6616,8 @@ saveBtn.addEventListener("click",async()=>{
     const inStripe=yRef>=topBand&&yRef<=bottomBand&&bx>=leftBand&&bx<=975;
     let a=0;
     if(inStripe){a=255;if(bx>860){const t=clamp((970-bx)/110,0,1);a=Math.round(255*t*t*(3-2*t));}}
-    if(fire){const warm=R>115&&R>B*1.25&&G>45&&d>30;const bright=R>110&&R>B*1.08&&sat>55&&d>55;if(bx>=465&&bx<980&&yRef>=96&&yRef<=221&&(warm||bright))a=255;}
-    else{const decorative=largeOrnament?d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=94&&yRef<=(bx<615?203:221):d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-20&&yRef<=bottomBand+8;const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;if(decorative||(purple&&pinkExtra)||redFlame)a=255;}
+    if(fire){const warm=R>115&&R>B*1.25&&G>45&&d>30;const bright=R>110&&R>B*1.08&&sat>55&&d>55;if(bx>=465&&bx<980&&yRef>=75&&yRef<=246&&(warm||bright))a=255;}
+    else{const decorative=largeOrnament?d>36&&sat>27&&maxv>95&&bx>=478&&bx<810&&yRef>=79&&yRef<=(bx<615?242:246):d>32&&sat>22&&maxv>95&&bx<Math.max(710,leftBand+215)&&yRef>=topBand-34&&yRef<=bottomBand+31;const pinkExtra=R>G*1.25&&sat>35&&d>38&&bx>=545&&bx<=815&&yRef>=bottomBand&&yRef<=220;const redFlame=largeOrnament&&lowerRedCount>13&&R>118&&R>G*1.20&&R>B*1.30&&d>33&&bx>=540&&bx<=980&&yRef>=120&&yRef<=210;const cc=rgb(710,170),purple=cc[2]>cc[0]*1.35&&cc[0]>cc[1]*1.2;if(decorative||(purple&&pinkExtra)||redFlame)a=255;}
     alpha[y*w+x]=a;
    }
   }
@@ -6358,6 +6695,10 @@ saveBtn.addEventListener("click",async()=>{
     if(gildedEdge)opacity=Math.max(opacity,255*clamp((d-12)/28,0,1));
     if(ax>=485&&ax<=650&&ay>=109&&ay<=230&&d>18&&(sat>18||brightness>105))opacity=255;
     if(ax>646&&!violet&&!gold&&!text&&!gildedEdge)opacity=0;
+    // 장식의 아래 선은 본체보다 약하고 주변 배경과 비슷해서 끊기기 쉬움.
+    // 형태가 가늘고 금색인 부분만 선 영역 안에서 복원한다.
+    if(ax>=633&&ax<=974&&ay>=198&&ay<=213&&R>69&&R>G+6&&R>B+3&&d>12)
+      opacity=Math.max(opacity,Math.round(255*clamp((d-8)/23,0,1)));
     // 오른쪽 흐린 색은 서서히 지우되 금색 밑줄은 더 늦게 사라지도록 분리한다.
     if(ax>=857){const right=gildedEdge?990:946;
      const k=clamp((right-ax)/(right-830),0,1);
@@ -6518,16 +6859,16 @@ function extractTapRelativeKilllog(tx,ty,mode){
  if(confidence<12)return null;
  // A clicked banner body extends to the left decoration: use nearby ornament pixels
  // but don't preserve the entire rectangular background around it.
- const headWindow=bandH*(mode==='special'?4.5:4.2);
+ const headWindow=bandH*(mode==='special'?5.4:6.4);
  const left=Math.max(0,Math.floor(xLeft-headWindow));
  const right=Math.min(W,Math.ceil(xRight+bandH*.30));
- const cropTop=Math.max(0,Math.floor(top-bandH*1.5));
- const cropBottom=Math.min(H,Math.ceil(bottom+bandH*1.5));
+ const cropTop=Math.max(0,Math.floor(top-bandH*2.7));
+ const cropBottom=Math.min(H,Math.ceil(bottom+bandH*2.7));
  const w=right-left,h=cropBottom-cropTop;
  const raw=new Uint8Array(w*h*4),alpha=new Uint8Array(w*h);
  const samplesTop=new Uint8Array(w*3),samplesBot=new Uint8Array(w*3);
  for(let x=0;x<w;x++){
-  const a=rgb(left+x,Math.max(0,Math.floor(top-bandH*.65))),b=rgb(left+x,Math.min(H-1,Math.ceil(bottom+bandH*.7)));
+  const a=rgb(left+x,Math.max(0,Math.floor(top-bandH*2.30))),b=rgb(left+x,Math.min(H-1,Math.ceil(bottom+bandH*2.30)));
   for(let k=0;k<3;k++){samplesTop[x*3+k]=a[k];samplesBot[x*3+k]=b[k];}
  }
  const barLeft=Math.max(xLeft,Math.round(tx-bandH*8));
@@ -6550,7 +6891,10 @@ function extractTapRelativeKilllog(tx,ty,mode){
    if(deco){
     const bg=[(samplesTop[x*3]+samplesBot[x*3])/2,(samplesTop[x*3+1]+samplesBot[x*3+1])/2,(samplesTop[x*3+2]+samplesBot[x*3+2])/2];
     const d=diff([R,G,B],bg),max=Math.max(R,G,B),sat=max-Math.min(R,G,B);
-    if(d>Math.max(25,Math.min(42,best.signal*.75)) && (sat>24||max>160))a=Math.max(a,255);
+    // 캡처의 막대 위/아래까지 솟은 장식은 원본 픽셀의 색 대비로 따로 보존.
+    // 긴 막대 자체는 위의 inCore 판정으로 남기고 장식만 투명도를 결정한다.
+    const threshold=Math.max(21,Math.min(39,best.signal*.57));
+    if(d>threshold && (sat>25||max>163))a=Math.max(a,Math.round(255*clamp((d-threshold+13)/26,0,1)));
    }
    alpha[y*w+x]=a;
   }
@@ -6837,18 +7181,23 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    }
    return null;
   }
-  if(mode==='normal'){
-   const metallic=detectBlueMechanicalNormal();
-   if(metallic&&isTouchedMaskedKilllog(metallic,tx,ty)){
-    if(await encodeResult(metallic)&&validKilllogResult(metallic)){
-     photo[cacheKey]=metallic;return metallic;
-    }
-   }
-  }
+  // 먼저 텍스트가 실제 킬로그인지 확인. 금속 장식 검색이 붉은 총기 스킨이나 메뉴를
+  // 파란 킬로그로 잘못 판단하는 경우가 있어 템플릿 인식보다 앞에서 실행하지 않는다.
   const signature=killlogSignature(mode,tx,ty);
   if(!signature){
+   if(mode==='normal'){
+    const classic=await extractKilllogClassic(tx,ty);
+    if(classic&&isTouchedMaskedKilllog(classic,tx,ty)&&await encodeResult(classic)&&validKilllogResult(classic)){
+     photo[cacheKey]=classic;return classic;
+    }
+    const metallic=detectBlueMechanicalNormal();
+    if(metallic&&isTouchedMaskedKilllog(metallic,tx,ty)){
+     if(await encodeResult(metallic)&&validKilllogResult(metallic)){
+      photo[cacheKey]=metallic;return metallic;
+     }
+    }
+   }
    if(mode!=='normal')return null;
-   const photo=photos[active];
    // 오인식 위험이 있는 비템플릿 추출은 색상·글자 검증을 통과할 때만 생성한다.
    let candidate=photo._klFallbackNormal;
    if(!candidate){
@@ -6884,6 +7233,96 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   photo[cacheKey]=result;
   return result;
+ }
+
+ // 장식 자동 감지가 어려운 디자인을 위한 원본 픽셀 마스크 보정.
+ // 화면에 보이는 미리보기 좌표가 아닌 원본 사진 좌표로 마스크를 저장한다.
+ let maskEditor=null;
+ function openMaskEditor(index){
+  const r=results[index];if(!r)return;
+  active=r.photo;redraw();
+  const W=view.width,H=view.height;
+  const b=r.bounds;
+  if(!b)return;
+  const padX=Math.max(90,Math.round(b.w*.72));
+  const padY=Math.max(42,Math.round(b.h*1.6));
+  const x0=Math.max(0,Math.floor(b.x-padX)),y0=Math.max(0,Math.floor(b.y-padY));
+  const x1=Math.min(W,Math.ceil(b.x+b.w+padX*.36)),y1=Math.min(H,Math.ceil(b.y+b.h+padY));
+  const w=x1-x0,h=y1-y0;if(w<2||h<2)return;
+  const source=ctx.getImageData(x0,y0,w,h).data;
+  const old=r.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,r.master.width,r.master.height).data;
+  const alpha=new Uint8ClampedArray(w*h);
+  for(let y=0;y<r.master.height;y++){
+   const Y=y+r.sourceY-y0;if(Y<0||Y>=h)continue;
+   for(let x=0;x<r.master.width;x++){
+    const X=x+r.sourceX-x0;if(X<0||X>=w)continue;
+    alpha[Y*w+X]=old[(y*r.master.width+x)*4+3];
+   }
+  }
+  const startAlpha=alpha.slice();let undo=null,paint=false,last=null;
+  const dialog=document.createElement('div');dialog.style.cssText='position:fixed;inset:0;z-index:10000002;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px;background:#060a12f5;color:#f6f8ff;overflow:auto';
+  const h3=document.createElement('strong');h3.textContent='장식 복원 · 원본 픽셀 수정';h3.style.cssText='font-size:17px';
+  const hint=document.createElement('div');hint.textContent='옅게 보이는 원본 장식을 손가락으로 칠하면 복원됩니다. 잘못 남은 부분은 지우기로 정리하세요.';hint.style.cssText='font-size:12px;color:#b3c8e4;max-width:720px;line-height:1.6';
+  const tools=document.createElement('div');tools.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center';
+  const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 13px;background:#1d2a42;border:1px solid #60739c;border-radius:9px;color:white;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
+  let mode='restore';
+  const restore=mk('복원',()=>{mode='restore';highlight()});
+  const erase=mk('지우기',()=>{mode='erase';highlight()});
+  function highlight(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#3966c2':'#1d2a42';}
+  highlight();
+  const slider=document.createElement('input');slider.type='range';slider.min='2';slider.max='42';slider.value='10';slider.step='1';slider.setAttribute('aria-label','브러시 크기');
+  const sizeLabel=document.createElement('span');sizeLabel.textContent='브러시 10px';sizeLabel.style.cssText='font-size:12px;color:#d4e2ff';slider.oninput=()=>{sizeLabel.textContent='브러시 '+slider.value+'px'};
+  tools.append(restore,erase,sizeLabel,slider);
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  canvas.style.cssText='width:100%;max-width:min(98vw,1050px);height:auto;touch-action:none;border:1px solid #53657f;border-radius:8px;cursor:crosshair;background:#222;';
+  const g=canvas.getContext('2d',{willReadFrequently:true});
+  const image=g.createImageData(w,h);const srcFrame=g.createImageData(w,h);
+  const checker=()=>{
+   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const k=(y*w+x)*4,s=((x>>4)+(y>>4))%2?36:57;
+    for(let c=0;c<3;c++)image.data[k+c]=s;
+    const a=alpha[y*w+x]/255;
+    for(let c=0;c<3;c++){
+     const raw=source[k+c];
+     image.data[k+c]=Math.round(s*(1-.22)+raw*.22);
+     image.data[k+c]=Math.round(image.data[k+c]*(1-a)+raw*a);
+    }
+    image.data[k+3]=255;
+   }
+   g.putImageData(image,0,0);
+  };
+  checker();
+  function point(e){const rect=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(w-1,(e.clientX-rect.left)*w/rect.width)),y:Math.max(0,Math.min(h-1,(e.clientY-rect.top)*h/rect.height))};}
+  function dot(x,y){
+   const radius=+slider.value,loX=Math.max(0,Math.floor(x-radius)),hiX=Math.min(w-1,Math.ceil(x+radius));
+   const loY=Math.max(0,Math.floor(y-radius)),hiY=Math.min(h-1,Math.ceil(y+radius));
+   for(let Y=loY;Y<=hiY;Y++)for(let X=loX;X<=hiX;X++){
+    const d=Math.hypot(X-x,Y-y),edge=Math.max(0,Math.min(1,radius-d));if(edge<=0)continue;
+    const k=Y*w+X,target=mode==='restore'?255:0;
+    alpha[k]=Math.round(alpha[k]*(1-edge)+target*edge);
+   }
+  }
+  function stroke(a,b){const n=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,(+slider.value)/3)));for(let i=0;i<=n;i++){const t=i/n;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}checker();}
+  canvas.addEventListener('pointerdown',e=>{paint=true;undo=alpha.slice();last=point(e);canvas.setPointerCapture(e.pointerId);stroke(last,last);e.preventDefault();});
+  canvas.addEventListener('pointermove',e=>{if(!paint)return;const p=point(e);stroke(last,p);last=p;e.preventDefault();});
+  const stop=()=>{paint=false;last=null;};canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:9px;flex-wrap:wrap;justify-content:center';
+  actions.append(mk('실행 취소',()=>{if(undo){alpha.set(undo);undo=null;checker();}}),mk('자동 추출로 초기화',()=>{undo=alpha.slice();alpha.set(startAlpha);checker();}),mk('닫기',()=>dialog.remove()),mk('보정 적용',async()=>{
+   let left=w,top=h,right=-1,bottom=-1;
+   for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}}
+   if(right<left||bottom<top){alert('남은 킬로그 픽셀이 없습니다.');return;}
+   const c=document.createElement('canvas');c.width=w;c.height=h;const context=c.getContext('2d');
+   const out=context.createImageData(w,h);
+   for(let i=0;i<alpha.length;i++){const k=i*4;out.data[k]=source[k];out.data[k+1]=source[k+1];out.data[k+2]=source[k+2];out.data[k+3]=alpha[i];}
+   context.putImageData(out,0,0);
+   r.master=c;r.sourceX=x0;r.sourceY=y0;
+   const m=Math.max(3,Math.round(w*.009));
+   r.inner={x:Math.max(0,left-m),y:Math.max(0,top-m),w:1,h:1};
+   r.inner.w=Math.min(w-1,right+m)-r.inner.x+1;r.inner.h=Math.min(h-1,bottom+m)-r.inner.y+1;
+   r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true};
+   if(await encodeResult(r)){dialog.remove();resultView();drawSelections();editStatus('원본 픽셀 기준으로 장식을 수정했습니다.');}
+  }));
+  dialog.append(h3,hint,tools,canvas,actions);document.body.append(dialog);maskEditor=dialog;
  }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;
@@ -6988,5 +7427,50 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  }
 })();
 </script>
+
+<script>
+// 제작자 정보창: 편집 엔진 / 회원 인증 / 저장 로직과 독립적으로 동작합니다.
+(()=>{
+ const overlay=document.getElementById('creator-about-overlay');
+ const panel=overlay?.querySelector('.creator-about-panel');
+ if(!overlay||!panel)return;
+ let previousFocus=null;
+ let previousOverflow='';
+ const close=()=>{
+  if(overlay.hidden)return;
+  overlay.hidden=true;
+  document.body.style.overflow=previousOverflow;
+  document.removeEventListener('keydown',onKey);
+  if(previousFocus?.isConnected)previousFocus.focus({preventScroll:true});
+ };
+ const open=()=>{
+  if(!overlay.hidden)return;
+  previousFocus=document.activeElement;
+  previousOverflow=document.body.style.overflow;
+  overlay.hidden=false;
+  document.body.style.overflow='hidden';
+  document.addEventListener('keydown',onKey);
+  overlay.querySelector('.creator-about-close')?.focus({preventScroll:true});
+ };
+ function onKey(e){
+  if(e.key==='Escape'){
+   e.preventDefault();e.stopPropagation();close();return;
+  }
+  if(e.key!=='Tab')return;
+  const controls=[...panel.querySelectorAll('button:not([disabled]),summary,a[href],input:not([disabled])')].filter(el=>el.getClientRects().length);
+  if(!controls.length){e.preventDefault();panel.focus();return;}
+  const first=controls[0],last=controls[controls.length-1];
+  if(e.shiftKey&&(document.activeElement===first||!panel.contains(document.activeElement))){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&(document.activeElement===last||!panel.contains(document.activeElement))){e.preventDefault();first.focus();}
+ }
+ document.querySelectorAll('[data-open-creator]').forEach(btn=>btn.addEventListener('click',open));
+ overlay.querySelectorAll('[data-close-creator]').forEach(btn=>btn.addEventListener('click',close));
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+ window.openCreatorAbout=open;
+ window.closeCreatorAbout=close;
+})();
+</script>
+
 </body>
 </html>
+
