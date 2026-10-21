@@ -7115,6 +7115,15 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  }
  function isTouchedMaskedKilllog(result,tx,ty){
   if(!result?.master)return false;
+  if(result.meta?.scaleFree && result.meta.band){
+   const b=result.meta.band;
+   const pixelPerCss=view.width/Math.max(1,view.getBoundingClientRect().width);
+   const touchPad=clamp(Math.round(pixelPerCss*7),4,34);
+   // The artwork/text and the narrow bar were already verified from image data.
+   // On a phone the bar can be only 6–8 CSS px tall: allow a finger-size hit target.
+   return tx>=b.left-Math.max(touchPad,b.bottom-b.top)*1.5 &&
+     tx<=b.right+touchPad && ty>=b.top-touchPad && ty<=b.bottom+touchPad;
+  }
   const dx=Math.round(tx-result.sourceX),dy=Math.round(ty-result.sourceY);
   const c=result.master,w=c.width,h=c.height;
   if(dx<0||dy<0||dx>=w||dy>=h)return false;
@@ -7148,6 +7157,140 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   return best>.55&&rows>=3;
  }
+ // Small-screen/native-resolution killlog detector: measures the banner itself,
+ // rather than predicting its size/location from phone or tablet resolution.
+ function detectLocalBannerFromTap(tx,ty){
+  const W=view.width,H=view.height;
+  if(!photos[active]||tx<5||ty<5||tx>=W-5||ty>=H-5)return null;
+  // Avoid exhaustive template correlation on a mobile phone: bounded local patch only.
+  const scanX0=Math.max(0,Math.floor(tx-450)),scanX1=Math.min(W,Math.ceil(tx+450));
+  const scanY0=Math.max(0,Math.floor(ty-115)),scanY1=Math.min(H,Math.ceil(ty+115));
+  const pw=scanX1-scanX0,ph=scanY1-scanY0;
+  const pix=ctx.getImageData(scanX0,scanY0,pw,ph).data;
+  const rgb=(x,y)=>{
+   x=clamp(Math.round(x)-scanX0,0,pw-1);y=clamp(Math.round(y)-scanY0,0,ph-1);
+   const i=(y*pw+x)*4;return [pix[i],pix[i+1],pix[i+2]];
+  };
+  const dif=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+  const edge=[];
+  const yStart=Math.max(scanY0+5,Math.round(ty-88)),yEnd=Math.min(scanY1-6,Math.round(ty+88));
+  for(let y=yStart;y<=yEnd;y++){
+   let vals=[];
+   for(let x=Math.max(scanX0+4,Math.round(tx-50));x<=Math.min(scanX1-5,Math.round(tx+50));x+=4){
+    vals.push(dif(rgb(x,y-3),rgb(x,y+3)));
+   }
+   if(!vals.length)continue;
+   vals.sort((a,b)=>a-b);
+   edge.push({y,score:vals[Math.floor(vals.length*.55)]});
+  }
+  // Finger contact can be larger than a 7px-high banner on a narrow phone.
+  // CSS-pixel tolerance is ONLY for selecting an already verified bar;
+  // the exported crop remains strictly in original image pixels.
+  const touchScale=W/Math.max(1,view.getBoundingClientRect().width);
+  const hitPad=clamp(Math.round(8*touchScale),5,40);
+  const tops=edge.filter(p=>p.y<=ty+hitPad-4&&p.score>=28).sort((a,b)=>b.score-a.score).slice(0,11);
+  const bots=edge.filter(p=>p.y>=ty-hitPad+4&&p.score>=28).sort((a,b)=>b.score-a.score).slice(0,11);
+  let best=null;
+  for(const a of tops)for(const b of bots){
+   const height=b.y-a.y;
+   if(height<9||height>105)continue;
+   if(Math.abs((a.y+b.y)/2-ty)>height*.36+hitPad)continue;
+   let bright=0,contrast=0,total=0;
+   const midY=Math.round((a.y+b.y)/2),bgDy=Math.max(8,Math.round(height*.58));
+   for(let x=Math.max(scanX0+5,tx-48);x<=Math.min(scanX1-6,tx+48);x+=5){
+    const mid=rgb(x,midY),up=rgb(x,a.y-bgDy),down=rgb(x,b.y+bgDy);
+    const avg=mid.map((v,j)=>Math.round((up[j]+down[j])/2));
+    contrast+=dif(mid,avg);
+    const m=Math.min(...mid),mx=Math.max(...mid);
+    if(m>128&&mx-m<94)bright++;
+    total++;
+   }
+   if(!total)continue;
+   const c=contrast/total;
+   if(c<24)continue;
+   const score=(a.score+b.score)*.55+c*.55-height*.18-Math.abs(midY-ty)*.25;
+   if(!best||score>best.score)best={top:a.y,bottom:b.y,height,score};
+  }
+  if(!best||best.score<42)return null;
+  const {top,bottom,height}=best;
+  // Determine the *actual* bar endpoints from differences between its body and the outside.
+  // No assumption such as 'bar width = 18% of screenshot width'.
+  const refTop=Math.max(scanY0,Math.round(top-height*.60));
+  const refBot=Math.min(scanY1-1,Math.round(bottom+height*.60));
+  const sx0=Math.max(scanX0+1,Math.round(tx-Math.min(450,height*18)));
+  const sx1=Math.min(scanX1-2,Math.round(tx+Math.min(450,height*18)));
+  const strengths=[];
+  for(let x=sx0;x<=sx1;x+=2){
+   let acc=0;
+   for(const y of [top+height*.22,top+height*.5,top+height*.78]){
+    const mid=rgb(x,y),up=rgb(x,refTop),dn=rgb(x,refBot);
+    acc+=dif(mid,mid.map((v,j)=>(up[j]+dn[j])*.5));
+   }
+   strengths.push(acc/3);
+  }
+  if(strengths.length<25)return null;
+  const smooth=new Float32Array(strengths.length),radius=Math.max(2,Math.round(height/9));
+  for(let i=0;i<strengths.length;i++){
+   let s=0,n=0;for(let j=Math.max(0,i-radius);j<=Math.min(strengths.length-1,i+radius);j++){s+=strengths[j];n++;}
+   smooth[i]=s/n;
+  }
+  const near=clamp(Math.round((tx-sx0)/2),0,smooth.length-1);
+  let anchor=near;
+  for(let j=Math.max(0,near-Math.round(height*.6));j<=Math.min(smooth.length-1,near+Math.round(height*.6));j++)if(smooth[j]>smooth[anchor])anchor=j;
+  if(smooth[anchor]<23)return null;
+  const threshold=Math.max(19,Math.min(35,smooth[anchor]*.29));
+  const allowance=Math.max(3,Math.round(height*.23));
+  let l=anchor,r=anchor,miss=0;
+  for(let j=anchor;j>=0;j--){if(smooth[j]<threshold)miss++;else miss=0;if(miss>=allowance){l=j+miss;break;}l=j;}
+  miss=0;
+  for(let j=anchor;j<smooth.length;j++){if(smooth[j]<threshold)miss++;else miss=0;if(miss>=allowance){r=j-miss;break;}r=j;}
+  const left=sx0+l*2,right=sx0+r*2,barW=right-left;
+  if(barW<height*4||barW>height*28||barW<58)return null;
+  // Two separated bright groups (gun silhouette and Korean label) plus a continuous bar.
+  let whiteLeft=0,whiteRight=0,coreContrast=0,n=0;
+  for(let yy=Math.ceil(top+height*.18);yy<=bottom-height*.12;yy+=3){
+   for(let xx=Math.max(scanX0+1,left+height);xx<=Math.min(scanX1-2,right-height*.35);xx+=4){
+    const pix=rgb(xx,yy),hi=Math.max(...pix),lo=Math.min(...pix);
+    if(lo>135&&hi-lo<83){if(xx<left+barW*.55)whiteLeft++;else whiteRight++;}
+    n++;
+   }
+  }
+  const midX=Math.round((left+right)/2);
+  for(let yy=Math.ceil(top+height*.25);yy<bottom-height*.15;yy+=4){
+   coreContrast+=dif(rgb(midX,yy),rgb(midX,refTop));
+  }
+  if(whiteLeft<3||whiteRight<3)return null;
+  // A user's touch must lie in the detected art/bar, never elsewhere on the screen.
+  if(tx<left-Math.max(height*2.6,hitPad)||tx>right+hitPad||ty<top-hitPad||ty>bottom+hitPad)return null;
+  // Crop around the measured banner, preserving small ornaments without selecting the gun below.
+  const x0=Math.max(0,Math.floor(left-height*2.55)),x1=Math.min(W,Math.ceil(right+height*.38));
+  const y0=Math.max(0,Math.floor(top-height*.48)),y1=Math.min(H,Math.ceil(bottom+height*.68));
+  const w=x1-x0,h=y1-y0;
+  if(w<40||h<10)return null;
+  const raw=ctx.getImageData(x0,y0,w,h).data;
+  const alpha=new Uint8Array(w*h);
+  const barEnd=right;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const X=x+x0,Y=y+y0,i=(y*w+x)*4;
+   const R=raw[i],G=raw[i+1],B=raw[i+2];
+   let a=0;
+   if(X>=left&&X<=right&&Y>=top+1&&Y<=bottom-1){
+    a=255;
+    if(X>barEnd-height*.70){const t=clamp((barEnd-X)/(height*.70),0,1);a=Math.round(255*t*t*(3-2*t));}
+   }
+   // Distinctive protruding artwork: contrast against the same column outside the banner.
+   if(X<left+height*1.0&&X>=left-height*2.6&&Y>=top-height*.48&&Y<=bottom+height*.67){
+    const bg=rgb(X,Y<top?refTop:refBot);
+    const d=dif([R,G,B],bg),hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+    if(d>32&&(hi-lo>18||hi>130))a=Math.max(a,Math.round(255*clamp((d-24)/24,0,1)));
+   }
+   alpha[y*w+x]=a;
+  }
+  return createMaskedResult(x0,y0,w,h,new Uint8Array(raw),alpha,'normal',{
+   scaleFree:true,band:{left,right,top,bottom},edgeScore:best.score,bright:[whiteLeft,whiteRight]
+  });
+ }
+
  async function extractKilllog(tx,ty,mode){
   const photo=photos[active];
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
@@ -7198,6 +7341,12 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     }
    }
    if(mode!=='normal')return null;
+   // Only fall back to the scale-free detector when earlier verified styles do not match.
+   // This preserves long decorated killlogs that the legacy design-specific masks handle well.
+   const small=detectLocalBannerFromTap(tx,ty);
+   if(small && isTouchedMaskedKilllog(small,tx,ty) && await encodeResult(small) && validKilllogResult(small)){
+    photo[cacheKey]=small;return small;
+   }
    // 오인식 위험이 있는 비템플릿 추출은 색상·글자 검증을 통과할 때만 생성한다.
    let candidate=photo._klFallbackNormal;
    if(!candidate){
@@ -7551,3 +7700,4 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
 
 </body>
 </html>
+
