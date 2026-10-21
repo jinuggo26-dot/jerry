@@ -8335,6 +8335,191 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   return result;
  }
+ // Rebuild an already VERIFIED game kill alert using physical pixels and
+ // parallel horizontal top/bottom edges. This does NOT infer a location or
+ // expected size from screenshot dimensions or the browser viewport.
+ function rebuildVerifiedBanner(r){
+  if(!r?.meta||!(r.meta.band||r.meta.measuredBand)||r.meta.icyBlueComplete||r.meta.compactBlueSpecial)return r;
+  const b=r.meta.band||r.meta.measuredBand;
+  const W=view.width,H=view.height;
+  const l=clamp(Math.round(b.left),0,W-1),rr=clamp(Math.round(b.right),0,W-1);
+  const width=rr-l+1,centreY=(b.top+b.bottom)/2;
+  if(width<55||centreY<12||centreY>H-13)return r;
+  const range=Math.max(24,Math.min(115,width*.24));
+  const yl=clamp(Math.floor(centreY-range),5,H-7),yr=clamp(Math.ceil(centreY+range),yl+6,H-6);
+  // More of the right half of the ribbon and less of the large ornaments.
+  const probeX=clamp(Math.round(l+width*.59),2,W-3);
+  const probeEnd=clamp(Math.round(l+width*1.11),probeX+8,W-3);
+  const stepX=Math.max(1,Math.round((probeEnd-probeX)/90));
+  const srcX=Math.max(0,l-Math.round(width*.35)),srcR=Math.min(W,rr+Math.round(width*.95));
+  const srcY=Math.max(0,yl-4),srcB=Math.min(H,yr+5);
+  const sw=srcR-srcX,sh=srcB-srcY;
+  if(sw<55||sh<25||sw*sh>2600000)return r;
+  const original=ctx.getImageData(srcX,srcY,sw,sh).data;
+  function get(x,y){
+   x=clamp(Math.round(x),srcX,srcR-1)-srcX;
+   y=clamp(Math.round(y),srcY,srcB-1)-srcY;
+   return (y*sw+x)*4;
+  }
+  function dif(a,c){return Math.max(Math.abs(original[a]-original[c]),Math.abs(original[a+1]-original[c+1]),Math.abs(original[a+2]-original[c+2]));}
+  const scores=[];
+  for(let y=yl;y<=yr;y++){
+   let n=0,hit=0,s=0;
+   for(let x=probeX;x<=probeEnd;x+=stepX){
+    const d=dif(get(x,y-2),get(x,y+2));
+    hit+=d>23?1:0;s+=Math.min(150,d);n++;
+   }
+   scores[y-yl]=(hit/n)*.75+(s/n/125)*.25;
+  }
+  // Select a matched long-edge pair; internal weapon/letter strokes aren't
+  // accepted as the main top and bottom because of width and separation tests.
+  let best=null;
+  const minGap=Math.max(10,Math.round(width*.042)),maxGap=Math.max(33,Math.round(width*.22));
+  const minTop=Math.max(yl,Math.floor(centreY-range));
+  const maxBottom=Math.min(yr,Math.ceil(centreY+range));
+  for(let t=minTop;t<=centreY-5;t++){
+   if(scores[t-yl]<.43)continue;
+   for(let bt=Math.max(Math.ceil(centreY+6),t+minGap);bt<=Math.min(maxBottom,t+maxGap);bt++){
+    if(scores[bt-yl]<.43)continue;
+    const h=bt-t;
+    const expected=width*.105;
+    const rating=scores[t-yl]+scores[bt-yl]
+     -.003*Math.abs(h-expected)
+     -.009*Math.abs((t+bt)/2-centreY)
+     +Math.min(h/Math.max(1,width),.13)*.4;
+    if(!best||rating>best.rating)best={top:t,bottom:bt,rating};
+   }
+  }
+  if(!best)return r;
+  let top=best.top,bottom=best.bottom;
+  const bh=bottom-top+1;
+  if(bh<9||bh>Math.max(95,width*.27))return r;
+  const scanLeft=Math.max(srcX+3,l-Math.round(width*.32));
+  const scanRight=Math.min(srcR-4,rr+Math.round(width*.88));
+  // Trace actual horizontal border energy outwards from the candidate centre.
+  const energy=[];
+  for(let x=scanLeft;x<=scanRight;x++){
+   let count=0;
+   for(const dy of [-1,0,1]){
+    const ut=dif(get(x,top-2+dy),get(x,top+2+dy));
+    const db=dif(get(x,bottom-2+dy),get(x,bottom+2+dy));
+    count+=Math.max(ut,db);
+   }
+   energy[x-scanLeft]=count/3;
+  }
+  const seed=clamp(Math.round(l+width*.64),scanLeft,scanRight);
+  const walk=dir=>{
+   let end=seed,lastStrong=seed,gap=0;
+   for(let x=seed;x>=scanLeft&&x<=scanRight;x+=dir){
+    const v=energy[x-scanLeft];
+    if(v>=Math.max(14,energy[seed-scanLeft]*.12)){
+     lastStrong=x;gap=0;
+    }else if(++gap>Math.max(8,Math.round(bh*.31)))break;
+    end=x;
+   }
+   return lastStrong;
+  };
+  let bodyL=walk(-1),bodyR=walk(1);
+  if(bodyR-bodyL<Math.max(42,width*.52))return r;
+  const ornamentL=Math.max(0,Math.floor(bodyL-Math.max(bh*2.65,width*.15)));
+  const ornamentT=Math.max(0,Math.floor(top-Math.round(bh*1.35)));
+  const ornamentB=Math.min(H,Math.ceil(bottom+Math.round(bh*.62)+1));
+  const x0=Math.floor(Math.min(ornamentL,bodyL)),x1=Math.ceil(Math.min(W,bodyR+Math.round(bh*.42)+1));
+  const y0=Math.floor(ornamentT),y1=Math.ceil(ornamentB);
+  const w=x1-x0,h=y1-y0;if(w<50||h<10||w*h>2600000)return r;
+  const raw=ctx.getImageData(x0,y0,w,h).data;
+  const a=new Uint8Array(w*h);
+  const refTop=Math.max(0,top-Math.round(bh*1.65));
+  const bg=ctx.getImageData(x0,refTop,w,1).data;
+  // Filled body restores all missing dark interior pixels; transparent fade
+  // stays only at the physically detected outer tip, not around the text.
+  const fadeWidth=Math.max(7,Math.round(bh*.72));
+  const fadeStart=bodyR-fadeWidth;
+  for(let Y=top;Y<=bottom;Y++){
+   for(let X=bodyL;X<=bodyR;X++){
+    let f=255;
+    if(X>fadeStart){const v=clamp((bodyR+bh*.26-X)/(fadeWidth+bh*.26),0,1);f=Math.round(255*v*v*(3-2*v));}
+    if(Y===top||Y===bottom)f=Math.round(f*.82);
+    // The left ornament is not a solid rectangle. Its dark hollow parts
+    // must stay transparent instead of being filled with game scenery.
+    if(X<bodyL+Math.round(bh*1.65)){
+     const pix=(Y-y0)*w*4+(X-x0)*4,j=(X-x0)*4;
+     const d=Math.max(Math.abs(raw[pix]-bg[j]),Math.abs(raw[pix+1]-bg[j+1]),Math.abs(raw[pix+2]-bg[j+2]));
+     if(d<48)f=0;
+    }
+    a[(Y-y0)*w+(X-x0)]=f;
+   }
+  }
+  // Ornament is a local foreground shape against background sampled in the
+  // same screenshot column, never a rectangular copy of the surrounding scene.
+  const decorRight=Math.min(x1,bodyL+Math.round(bh*2.0));
+  for(let Y=y0;Y<y1;Y++){
+   for(let X=x0;X<decorRight;X++){
+    const ii=((Y-y0)*w+X-x0)*4,j=(X-x0)*4;
+    const R=raw[ii],G=raw[ii+1],B=raw[ii+2];
+    const d=Math.max(Math.abs(R-bg[j]),Math.abs(G-bg[j+1]),Math.abs(B-bg[j+2]));
+    const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+    if(d<20||hi<38)continue;
+    if(Y>bottom+bh*.34&&hi<155)continue;
+    // Soft blue lighting under the game item is scene background, not a
+    // detached hanging ornament. Keep bright jewel edges above this region.
+    if(Y>bottom+bh*.18&&X<bodyL+bh*1.7&&R<100&&G<135&&B>R*1.35&&B>G*1.10)continue;
+    // Dull gray fragments below the ribbon can originate from the gun below.
+    if(Y>bottom+bh*.18&&X<bodyL+bh*1.8&&hi<112&&hi-lo<45)continue;
+    const chroma=hi-lo;
+    let opacity=Math.min(255,Math.round((d-15)*10));
+    if(chroma<13&&hi<110)opacity=Math.round(opacity*.48);
+    const off=(Y-y0)*w+(X-x0);
+    a[off]=Math.max(a[off],opacity);
+   }
+  }
+  // Tiny high-contrast floating effects are only kept very close to the
+  // observed banner, not in the large background below the weapon.
+  const effectBand=Math.round(bh*.35);
+  for(let Y=Math.max(y0,top-effectBand);Y<Math.min(y1,bottom+effectBand+1);Y++){
+   for(let X=bodyL+Math.round(bh*.85);X<x1;X++){
+    if(Y>=top&&Y<=bottom)continue;
+    const ii=((Y-y0)*w+X-x0)*4,j=(X-x0)*4;
+    const R=raw[ii],G=raw[ii+1],B=raw[ii+2];
+    const d=Math.max(Math.abs(R-bg[j]),Math.abs(G-bg[j+1]),Math.abs(B-bg[j+2]));
+    const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+    if(d>60&&hi-lo>53&&hi>122){a[(Y-y0)*w+X-x0]=Math.min(255,(d-45)*5);}
+   }
+  }
+  // Remove detached background fragments below the icon, while retaining
+  // connected headpieces, tail ribbons, and nearby decorative sparks.
+  const seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
+  for(let pos=0;pos<a.length;pos++){
+   if(a[pos]<32||seen[pos])continue;
+   let head=0,tail=1,leftX=w,rightX=0,upperY=h,lowerY=0,hitBody=false;
+   queue[0]=pos;seen[pos]=1;
+   while(head<tail){
+    const q=queue[head++],px=q%w,py=(q/w)|0;
+    if(px<leftX)leftX=px;if(px>rightX)rightX=px;
+    if(py<upperY)upperY=py;if(py>lowerY)lowerY=py;
+    const X=px+x0,Y=py+y0;
+    if(X>=bodyL&&X<=bodyR&&Y>=top&&Y<=bottom)hitBody=true;
+    for(let yy=Math.max(0,py-1);yy<=Math.min(h-1,py+1);yy++)
+     for(let xx=Math.max(0,px-1);xx<=Math.min(w-1,px+1);xx++){
+      const near=yy*w+xx;
+      if(!seen[near]&&a[near]>=32){seen[near]=1;queue[tail++]=near;}
+     }
+   }
+   if(hitBody)continue;
+   const Xmax=rightX+x0,Ymin=upperY+y0,Ymax=lowerY+y0;
+   const nearHead=Xmax<=bodyL+Math.round(bh*2.1)&&Ymax>=top-bh*.95&&Ymin<=bottom+bh*.22;
+   // Detached flashes around a designed head are okay; unknown background
+   // below it, isolated pixels, or faraway screenshot features are not.
+   if((!nearHead||tail<Math.max(8,Math.round(bh*.16)))){
+    for(let j=0;j<tail;j++)a[queue[j]]=0;
+   }
+  }
+  const output=createMaskedResult(x0,y0,w,h,new Uint8Array(raw),a,r.mode,{
+   ...r.meta,rebuiltFromHorizontalEdges:true,
+   band:{left:bodyL,right:bodyR,top,bottom}, measuredEdges:{top,bottom,bodyL,bodyR}
+  });
+  return output||r;
+ }
  async function extractKilllog(tx,ty,mode){
   const photo=photos[active];if(!photo)return null;
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
@@ -8343,8 +8528,12 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
    return cached;
   }
-  const candidate=detectPixelOnlyBanner(tx,ty,mode);
-  if(!candidate||!isTouchedMaskedKilllog(candidate,tx,ty))return null;
+  const found=detectPixelOnlyBanner(tx,ty,mode);
+  if(!found)return null;
+  const candidate=rebuildVerifiedBanner(found);
+  // Validate against the measured foreground: tapping outside the killlog
+  // must never trigger a crop even if it is horizontally near the banner.
+  if(!isTouchedMaskedKilllog(candidate,tx,ty))return null;
   if(!(await encodeResult(candidate))||!validKilllogResult(candidate))return null;
   photo[cacheKey]=candidate;
   return candidate;
