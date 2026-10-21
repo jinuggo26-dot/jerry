@@ -879,6 +879,28 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
  }
 }
 
+
+/* Integrated program guide: one scrollable page, not separate feature popups. */
+#editor-guide[hidden]{display:none!important}
+#editor-guide{position:fixed;inset:0;z-index:10000030;background:#030916d9;display:flex;align-items:center;justify-content:center;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom));}
+.guide-panel{width:min(100%,800px);max-height:min(92dvh,970px);overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;border-radius:20px;background:linear-gradient(160deg,#182942,#0e1829);border:1px solid #4c6485;box-shadow:0 28px 90px #000b;color:#edf5ff;}
+.guide-header{position:sticky;top:0;z-index:2;background:#14233aee;border-bottom:1px solid #3d5477;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;}
+.guide-header h2{font-size:19px;line-height:1.3;margin:0;font-weight:900;}
+.guide-header p{font-size:11px;color:#aebfda;margin:4px 0 0;}
+.guide-close{cursor:pointer;flex:none;min-width:42px;min-height:42px;border-radius:11px;border:1px solid #607897;background:#283f5e;color:#fff;font-size:24px;}
+.guide-body{padding:14px 18px 20px;user-select:text;-webkit-user-select:text;}
+.guide-body h3{font-size:15px;color:#ecf4ff;margin:0 0 9px;}
+.guide-body section{border:1px solid #334969;border-radius:13px;background:#14243c;padding:14px;margin:0 0 11px;}
+.guide-body ol,.guide-body ul{padding-left:20px;margin:0;color:#cfddf2;font-size:13px;line-height:1.85;}
+.guide-body li+li{margin-top:4px;}
+.guide-body p{font-size:13px;color:#c5d5eb;line-height:1.75;margin:0;}
+.guide-body strong{color:#ffffff;}
+.guide-alert{padding:12px 14px;border-radius:12px;border:1px solid #4a6486;background:#1c304b;color:#cfddf1;font-size:12px;line-height:1.8;margin-bottom:12px;}
+.guide-footer{position:sticky;bottom:0;padding:12px 18px 16px;background:#101e34ee;border-top:1px solid #334969;text-align:right;}
+.guide-done{padding:11px 24px;min-height:44px;border-radius:10px;border:1px solid #a8c0e9;background:#a3bfff;color:#10182e;font-weight:900;cursor:pointer;}
+.global-tabs > #btn-guide{width:100%!important;min-width:0!important;max-width:100%!important;min-height:49px!important;white-space:normal!important;}
+@media(max-width:640px){.guide-body{padding:12px}.guide-body section{padding:12px}.guide-header{padding:13px}.guide-footer{padding:10px 12px}.global-tabs > #btn-guide{font-size:clamp(11.5px,3.25vw,14px)!important;min-height:48px!important;}}
+
 </style>
 </head>
 
@@ -952,6 +974,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
   <button class="auth-btn" id="auth-signup" type="button" onclick="window.registerMember()" style="margin-top:8px;background:#233954">새 계정 회원가입</button>
   <button class="auth-btn" id="auth-reset-password" type="button" onclick="window.resetLoginPassword()" style="margin-top:8px;background:#263242">비밀번호 재설정 이메일 받기</button>
   <button type="button" class="creator-login-link" data-open-creator>ℹ 제작자 소개 · 스나</button>
+  <button type="button" class="creator-login-link" data-open-guide>📖 통합 사용방법 보기</button>
   <p class="member-tip" id="auth-error" role="status">기존 회원은 가입 후 관리자에게 기존 이용권 연결을 요청하세요. 닉네임만으로 이전 권한이 연결되지 않습니다.</p>
  </div>
  <div class="auth-box" id="view-waiting" style="display:none">
@@ -2163,6 +2186,24 @@ window.closeAdmin=()=>{
  </section>
 </div>
 
+<!-- All features share ONE accessible usage guide, available before and after login. -->
+<div id="editor-guide" hidden>
+ <article class="guide-panel" role="dialog" aria-modal="true" aria-labelledby="editor-guide-title" tabindex="-1">
+  <header class="guide-header"><div><h2 id="editor-guide-title">📖 대필 편집기 사용방법</h2><p>스나 제작 · 사진 준비부터 저장과 전시까지 한곳에서 안내</p></div><button type="button" class="guide-close" data-close-guide aria-label="사용방법 닫기">×</button></header>
+  <div class="guide-body">
+   <div class="guide-alert"><strong>처음 시작할 때</strong> 회원가입 후 관리자 승인이 완료되면 사용할 수 있어요. 사진은 가급적 게임의 원본 스크린샷을 사용하세요. 이미 한 번 잘린 사진은 빠진 장식을 완전히 복구하지 못할 수 있어요.</div>
+   <section><h3>1. 👕 옷 사진 추출</h3><ol><li><strong>옷 추출</strong>을 선택하고 게임 스크린샷을 추가하세요.</li><li>사진에서 자를 옷 카드를 터치해 선택하세요. 여러 장도 선택할 수 있어요.</li><li><strong>선택한 옷 자르기</strong>를 누르고 결과를 확인하세요.</li><li><strong>개별 저장</strong> 또는 <strong>모두 저장</strong>으로 필요한 사진을 저장하세요.</li></ol></section>
+   <section><h3>2. ✂ 총기 카드 자르기</h3><ol><li><strong>총 자르기</strong>에서 스크린샷을 불러오세요.</li><li>총기 카드를 선택하고 <strong>선택한 카드 자르기</strong>를 누르세요.</li><li>누락되거나 잘못 선택한 카드는 확인 후 다시 선택하세요.</li><li>개별 저장 또는 모두 저장을 사용하세요.</li></ol></section>
+   <section><h3>3. 🎯 킬로그 커팅과 장식 보정</h3><ol><li><strong>킬로그 커팅</strong>에서 일반/고번 모드를 고르고 <strong>자르기 전 원본 스크린샷</strong>을 추가하세요.</li><li>사진 속 <strong>‘킬 알림’ 막대나 장식</strong>을 터치하세요. 작으면 사진 확대(＋) 후 눌러보세요.</li><li>아래 추출 결과에서 <strong>인식 범위·장식 보정</strong>을 눌러 왼쪽·오른쪽·위·아래 인식 범위를 조절하세요.</li><li><strong>↔ 이동</strong>으로 큰 사진을 움직이고 <strong>복원/지우기</strong>와 표시되는 브러쉬 원으로 세부 부분을 보정하세요.</li><li><strong>보정 적용</strong> 후 가운데 정렬된 PNG를 미리보기로 확인하고 저장하세요.</li></ol><p style="margin-top:9px">어두운 네모·잡티가 남으면 지우기로 정리하세요. <strong>이미 제거된 장식은 잘린 PNG만으로 되살릴 수 없으므로</strong> 원본 스크린샷을 다시 불러와야 해요.</p></section>
+   <section><h3>4. 🖼️ 이미지 합치기</h3><ol><li><strong>합치기</strong>에서 여러 사진을 추가하세요.</li><li>배치와 순서를 확인하고 위치 옵션을 선택하세요.</li><li>미리보기에 문제가 없는지 확인한 뒤 <strong>JPG 이미지 저장</strong>을 누르세요.</li></ol></section>
+   <section><h3>5. 📝 대필판 만들기</h3><ol><li><strong>대필판</strong>에서 옷 사진과 총기·차량 사진을 각각 추가하세요.</li><li>저스펙·중스펙·고스펙 판을 선택하고 사진 순서와 배치를 확인하세요.</li><li>문의 문구, 보조 문구, 대필 이름, 옷·총 이름과 레벨을 입력하세요.</li><li>필요하면 글자 크기·위치·색상·그림자를 조절하고 미리보기를 확인하세요.</li><li><strong>PNG 저장</strong>을 누르면 대필판 결과를 저장할 수 있어요.</li></ol></section>
+   <section><h3>6. 🏛️ 전시관과 작품 관리</h3><ol><li>대필판 PNG 저장 시 작품이 <strong>전시관에 자동 등록·공개</strong>될 수 있어요. 저장 전 공개될 내용과 사진을 확인하세요.</li><li><strong>전시관</strong>에서 전체 공개 작품을 확인하거나 <strong>내 작품</strong>을 선택하세요.</li><li>필요하면 본인이 등록한 작품을 찾아 삭제할 수 있어요. 이용 권한·기간에 따라 접근이 제한될 수 있어요.</li></ol></section>
+   <section><h3>7. 📥 저장과 문제 해결</h3><ul><li>기기에 공유·저장 창이 뜨면 사진 또는 파일 앱에 저장할 곳을 선택하세요. 브라우저에 따라 다운로드 방식이 달라질 수 있어요.</li><li>사진이 인식되지 않으면 잘린 결과가 아니라 <strong>원본 스크린샷</strong>을 사용하고, 해당 기능과 일반/고번 모드를 다시 확인하세요.</li><li>장식이 잘렸거나 검은 잔배경이 남으면 보정 기능을 사용하고 저장 전에 PNG를 확대해서 확인하세요.</li><li>프로그램 변경 사항은 <strong>ℹ 제작자 → 업데이트 내역</strong>에서 확인할 수 있어요.</li></ul></section>
+  </div>
+  <footer class="guide-footer"><button type="button" class="guide-done" data-close-guide>이해했어요</button></footer>
+ </article>
+</div>
+
 <div class="global-tabs">
 
  <button id="btn-clothes" class="active" onclick="switchTab('clothes')">
@@ -2186,6 +2227,7 @@ window.closeAdmin=()=>{
  </button>
 
  <button id="btn-gallery" onclick="switchTab('gallery')">🏛️ 전시관</button>
+ <button id="btn-guide" type="button" data-open-guide title="옷·총·킬로그·합치기·대필판·전시관 전체 사용방법" aria-haspopup="dialog">📖 사용방법</button>
  <button id="btn-creator-about" type="button" data-open-creator title="제작자 스나 · 프로그램 정보" aria-haspopup="dialog">ℹ 제작자</button>
  <button id="btn-logout" onclick="window.confirmSignOutMember()" title="로그아웃" style="flex:0 0 auto;min-width:80px;font-size:12px;padding:10px 12px">로그아웃</button>
   <button id="btn-member-info" onclick="window.openMemberInfo()" title="내 등급 · 공지사항" style="flex:0 0 48px;font-size:19px;padding:0">👤</button>
@@ -6181,7 +6223,69 @@ saveBtn.addEventListener("click",async()=>{
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
   applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status(`${killlogMode==='normal'?'일반':'고번'} 킬로그 모드입니다. 사진 속 ‘킬 알림’ 막대를 눌러주세요.`);drawSelections();
  }
+ // Only correct a very specific extraction artifact: a flat, opaque dark rectangle
+ // directly above an icy-blue kill banner. Never erase actual colorful decorations.
+ function removeFlatDarkBlueOverhang(r){
+  if(!r?.master||!r.inner)return false;
+  const c=r.master,w=c.width,h=c.height;
+  const box=r.inner;
+  const lx=Math.max(0,Math.round(box.x)),rx=Math.min(w-1,Math.round(box.x+box.w-1));
+  const ty=Math.max(0,Math.round(box.y)),by=Math.min(h-1,Math.round(box.y+box.h-1));
+  const bw=rx-lx+1,bh=by-ty+1;
+  if(bw<140||bh<25||bw/bh<3)return false;
+  const cx0=lx+Math.round(bw*.26),cx1=lx+Math.round(bw*.75);
+  const step=Math.max(1,Math.round((cx1-cx0)/120));
+  const ctx2=c.getContext('2d',{willReadFrequently:true});
+  const im=ctx2.getImageData(0,0,w,h),px=im.data;
+  const rowStats=y=>{
+   let n=0,dark=0,cyan=0;
+   for(let x=cx0;x<=cx1;x+=step){
+    const k=(y*w+x)*4,R=px[k],G=px[k+1],B=px[k+2],A=px[k+3];n++;
+    if(A>210&&R>=12&&R<=70&&G>=15&&G<=85&&B>=20&&B<=110&&Math.max(R,G,B)-Math.min(R,G,B)<38)dark++;
+    if(A>185&&B>R+50&&G>R+25&&B>115)cyan++;
+   }
+   return {dark:dark/Math.max(1,n),cyan:cyan/Math.max(1,n)};
+  };
+  // Look for a wide, nearly uniform slate strip in the upper half only.
+  let start=-1,end=-1,run=0,bestRun=0;
+  const scanEnd=Math.min(by,ty+Math.floor(bh*.55));
+  for(let y=ty;y<=scanEnd;y++){
+   if(rowStats(y).dark>=.87){
+    if(!run)start=y;
+    run++;
+    if(run>bestRun){bestRun=run;end=y;}
+   }else if(bestRun<4){run=0;}
+   else break;
+  }
+  if(bestRun<Math.max(4,Math.floor(bh*.045))||start<0||end<start)return false;
+  let bright=-1;
+  for(let y=end+1;y<=Math.min(by,end+Math.max(12,Math.floor(bh*.26)));y++){
+   if(rowStats(y).cyan>.55){bright=y;break;}
+  }
+  if(bright<0)return false;
+  let changed=false;
+  for(let y=Math.max(ty,start-2);y<bright;y++)for(let x=lx;x<=rx;x++){
+   const k=(y*w+x)*4,R=px[k],G=px[k+1],B=px[k+2];
+   if(px[k+3]>0&&((R<105&&G<125&&B<155&&Math.max(R,G,B)-Math.min(R,G,B)<70)||(y>=end&&B-R<55&&G-R<50&&R<185))){
+    px[k+3]=0;changed=true;
+   }
+  }
+  if(!changed)return false;
+  ctx2.putImageData(im,0,0);
+  // Recalculate the vertical crop so that the cleaned banner stays centered.
+  let minY=by,maxY=ty;
+  for(let y=ty;y<=by;y++)for(let x=lx;x<=rx;x++){
+   if(px[(y*w+x)*4+3]>=9){minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
+  }
+  if(minY<=maxY){
+   const newTop=Math.max(ty,minY-2),newBottom=Math.min(by,maxY+2);
+   r.inner={...r.inner,y:newTop,h:newBottom-newTop+1};
+  }
+  r.meta={...r.meta,flatBlueOverhangCleaned:true};
+  return true;
+ }
  async function encodeResult(r){
+  removeFlatDarkBlueOverhang(r);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
   const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
@@ -7794,6 +7898,44 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
  window.openCreatorAbout=open;
  window.closeCreatorAbout=close;
+})();
+</script>
+
+
+<script>
+// One integrated guide, independent of Firebase or feature modules.
+(()=>{
+ const overlay=document.getElementById('editor-guide');
+ const panel=overlay?.querySelector('.guide-panel');
+ if(!overlay||!panel)return;
+ let previousFocus=null,oldOverflow='';
+ function close(){
+  if(overlay.hidden)return;
+  overlay.hidden=true;document.body.style.overflow=oldOverflow;
+  document.removeEventListener('keydown',onKey);
+  if(previousFocus?.isConnected)previousFocus.focus({preventScroll:true});
+ }
+ function open(){
+  if(!overlay.hidden)return;
+  previousFocus=document.activeElement;oldOverflow=document.body.style.overflow;
+  overlay.hidden=false;document.body.style.overflow='hidden';
+  panel.scrollTop=0;document.addEventListener('keydown',onKey);
+  overlay.querySelector('.guide-close')?.focus({preventScroll:true});
+ }
+ function onKey(e){
+  if(e.key==='Escape'){e.preventDefault();close();return;}
+  if(e.key!=='Tab')return;
+  const controls=[...panel.querySelectorAll('button:not([disabled]),a[href]')].filter(el=>el.getClientRects().length);
+  if(!controls.length)return;
+  const first=controls[0],last=controls[controls.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+ }
+ document.querySelectorAll('[data-open-guide]').forEach(btn=>btn.addEventListener('click',open));
+ overlay.querySelectorAll('[data-close-guide]').forEach(btn=>btn.addEventListener('click',close));
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+ window.openEditorGuide=open;
+ window.closeEditorGuide=close;
 })();
 </script>
 
