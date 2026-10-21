@@ -2493,6 +2493,7 @@ window.closeAdmin=()=>{
 <button id="c_saveAllButton" class="all-save" onclick="window.c_saveAllCards()" disabled>
  📥 선택한 옷 모두 저장
 </button>
+<p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p>
 
 </div>
 </div>
@@ -2592,6 +2593,7 @@ window.closeAdmin=()=>{
 <button id="g_saveAllButton" class="all-save" onclick="window.g_saveAllCards()" disabled>
  📥 선택한 카드 모두 저장
 </button>
+<p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p>
 
 </div>
 </div>
@@ -2641,7 +2643,8 @@ window.closeAdmin=()=>{
    <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 일부 장식이 누락되면 추출 결과의 ‘인식 범위·장식 보정’을 눌러 인식 범위를 넓히고 필요한 부분만 복원·지우기로 다듬으세요.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
-   <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button></div>
+   <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button>
+   <p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p></div>
  </div>
 </div>
 
@@ -3054,6 +3057,39 @@ async function shareFile(dataURL, filename) {
 async function shareMultipleFiles(dataURLs, prefix) {
   await downloadMultipleFiles(dataURLs, prefix);
 }
+
+// 삼성 기기: 옷/총/킬로그 '모두 저장'에서만 10장 초과 저장을 사전에 차단합니다.
+// 기기 판정에는 Samsung Internet 및 Galaxy 모델 문자열을 사용합니다.
+// Android Chrome이 모델을 숨기는 경우를 위해 UA Client Hints를 미리 확인합니다.
+const snaSamsungSaveLimit = (() => {
+  const ua = navigator.userAgent || '';
+  let isSamsung = /android/i.test(ua) &&
+    /samsungbrowser|samsung|galaxy|sm-[a-z0-9]+|sgh-|sch-|shv-|gt-[a-z0-9]+/i.test(ua);
+  function updateHint() {
+    document.querySelectorAll('.sna-samsung-save-hint').forEach(el => {
+      el.style.display = isSamsung ? 'block' : 'none';
+    });
+  }
+  if (navigator.userAgentData?.getHighEntropyValues) {
+    navigator.userAgentData.getHighEntropyValues(['model'])
+      .then(data => {
+        const model = String(data?.model || '');
+        if (/^(sm-|samsung|galaxy|sgh-|sch-|shv-|gt-)/i.test(model)) {
+          isSamsung = true;
+          updateHint();
+        }
+      })
+      .catch(() => {});
+  }
+  updateHint();
+  return {
+    shouldBlock(count) {
+      if (!isSamsung || count <= 10) return false;
+      alert(`⚠️ 삼성 기기에서는 한 번에 최대 10장까지만 모두 저장할 수 있습니다.\n현재 ${count}장이므로 저장을 진행하지 않았습니다.\n10장 이하로 나누어 저장하거나 개별 저장을 이용해 주세요.`);
+      return true;
+    }
+  };
+})();
 
 
 /* =====================================================
@@ -3848,6 +3884,8 @@ window.c_extractSelected=()=>{
 window.c_saveAllCards=async()=>{
 
  if(croppedCards.length){
+  // 삼성에서 11장 이상이면 경고만 표시하고 공유/다운로드는 실행하지 않습니다.
+  if(snaSamsungSaveLimit.shouldBlock(croppedCards.length)) return;
 
   await shareMultipleFiles(
    croppedCards,
@@ -4620,6 +4658,8 @@ function finalGunHeight(card){
 window.g_saveAllCards=async()=>{
 
  if(croppedCards.length){
+  // 삼성에서 11장 이상이면 경고만 표시하고 공유/다운로드는 실행하지 않습니다.
+  if(snaSamsungSaveLimit.shouldBlock(croppedCards.length)) return;
 
   await shareMultipleFiles(
    croppedCards,
@@ -6602,8 +6642,10 @@ saveBtn.addEventListener("click",async()=>{
  }
 
  async function encodeResult(r){
-  removeFlatDarkBlueOverhang(r);
-  normalizeIcyBlueBannerBody(r);
+  if(!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
+   removeFlatDarkBlueOverhang(r);
+   normalizeIcyBlueBannerBody(r);
+  }
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
   const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
@@ -6712,7 +6754,10 @@ saveBtn.addEventListener("click",async()=>{
    if(files.length>1)await new Promise(resolve=>setTimeout(resolve,180));
   }
  }
- $('kl-save-all').onclick=()=>saveFiles(results,0);
+ $('kl-save-all').onclick=()=>{
+  if(snaSamsungSaveLimit.shouldBlock(results.length))return;
+  return saveFiles(results,0);
+ };
  async function receivePhotos(mode,e){
   const filesToAdd=[...e.target.files];if(!filesToAdd.length)return;
   const target=albums[mode];
@@ -7630,6 +7675,134 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   return best>.55&&rows>=3;
  }
+
+ // Actual source-pixel recognition for long icy-blue banners.
+ // The older fixed 149..190 stripe removed the lower half of this skin.
+ // Measure the source banner edges and keep its whole continuous body instead.
+ function detectCompleteIcyBlueKilllog(tx,ty,canonical=false){
+  const W=view.width,H=view.height;
+  if(!photos[active]||tx<4||ty<4||ty>H*.38)return null;
+  const x0=Math.max(0,Math.floor(tx-780)),x1=Math.min(W,Math.ceil(tx+780));
+  const y0=Math.max(0,Math.floor(ty-145)),y1=Math.min(H,Math.ceil(ty+145));
+  const pw=x1-x0,ph=y1-y0;if(pw<140||ph<85)return null;
+  const pixels=ctx.getImageData(x0,y0,pw,ph).data;
+  const color=(x,y)=>{
+   const xx=clamp(Math.round(x)-x0,0,pw-1),yy=clamp(Math.round(y)-y0,0,ph-1),j=(yy*pw+xx)*4;
+   return [pixels[j],pixels[j+1],pixels[j+2]];
+  };
+  const difference=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+  const above=clamp(Math.round(ty-98),y0,y1-1),below=clamp(Math.round(ty+98),y0,y1-1);
+  const bg=(x)=>{const t=color(x,above),b=color(x,below);return [(t[0]+b[0])/2,(t[1]+b[1])/2,(t[2]+b[2])/2]};
+  const probeL=Math.max(x0+3,Math.round(tx-82)),probeR=Math.min(x1-4,Math.round(tx+82));
+  if(probeR-probeL<65)return null;
+  const rows=[];
+  for(let y=Math.max(y0+3,Math.round(ty-80));y<=Math.min(y1-4,Math.round(ty+80));y++){
+   let hit=0,blue=0,n=0;
+   for(let x=probeL;x<=probeR;x+=5){
+    const p=color(x,y),d=difference(p,bg(x));n++;
+    if(d>28)hit++;
+    if(d>25&&p[2]>p[0]+18&&p[1]>p[0]+5&&p[2]>90)blue++;
+   }
+   rows.push({y,hit:hit/Math.max(1,n),blue:blue/Math.max(1,n)});
+  }
+  let best=null,start=-1;
+  function consider(end){
+   if(start<0)return;
+   const count=end-start+1;
+   if(count<11||count>100){start=-1;return;}
+   let s=0;for(let i=start;i<=end;i++)s+=rows[i].hit+rows[i].blue*.6;
+   const top=rows[start].y,bottom=rows[end].y;
+   const distance=Math.max(0,top-ty,ty-bottom);
+   if(distance>Math.max(13,count*.45)){start=-1;return;}
+   const score=s/count-distance*.015;
+   if(!best||score>best.score)best={top,bottom,height:count,score};
+   start=-1;
+  }
+  for(let i=0;i<rows.length;i++){
+   const ok=rows[i].hit>=.43&&rows[i].blue>=.19;
+   if(ok){if(start<0)start=i;}
+   else if(start>=0)consider(i-1);
+  }
+  if(start>=0)consider(rows.length-1);
+  if(!best||best.score<.69)return null;
+  const top=Math.max(0,best.top-1),bottom=Math.min(H-1,best.bottom+2);
+  const height=bottom-top+1;
+  // Measure the colored horizontal run, not a screenshot-width percentage.
+  const sx0=Math.max(x0+2,Math.round(tx-Math.min(760,height*17)));
+  const sx1=Math.min(x1-2,Math.round(tx+Math.min(760,height*17)));
+  const columns=[];
+  for(let x=sx0;x<=sx1;x+=2){
+   let score=0;
+   for(const t of [.22,.40,.58,.77]){
+    const y=Math.round(top+height*t),p=color(x,y),d=difference(p,bg(x));
+    score+=d;
+   }
+   columns.push(score/4);
+  }
+  const smooth=[];
+  for(let i=0;i<columns.length;i++){
+   let sum=0,n=0;
+   for(let j=Math.max(0,i-3);j<=Math.min(columns.length-1,i+3);j++){sum+=columns[j];n++;}
+   smooth.push(sum/n);
+  }
+  let segments=[],begin=-1,lastHit=-1;
+  for(let i=0;i<smooth.length;i++){
+   if(smooth[i]>=24){if(begin<0)begin=i;lastHit=i;}
+   if(begin>=0&&(i-lastHit>=8||i===smooth.length-1)){
+    segments.push({l:sx0+begin*2,r:sx0+lastHit*2,length:(lastHit-begin+1)*2});
+    begin=-1;lastHit=-1;
+   }
+  }
+  segments=segments.filter(s=>s.length>=Math.max(100,height*4.7)&&s.length<=height*28);
+  segments.sort((a,b)=>b.length-a.length);
+  const band=segments.find(s=>tx>=s.l-Math.max(15,height*1.5)&&tx<=s.r+Math.max(15,height*1.5));
+  if(!band)return null;
+  // The smoothing window extends a few pixels into the dark background.
+  // Trim that overshoot so no dark vertical rectangle is left of the banner.
+  const left=band.l+Math.max(2,Math.round(height*.075));
+  const right=band.r,width=right-left;
+  // White weapon icon and white Korean label must coexist in a cyan bar.
+  let weaponWhite=0,labelWhite=0,cyan=0,seen=0;
+  for(let y=top+4;y<bottom-2;y+=3){
+   for(let x=left+Math.round(width*.12);x<right-Math.round(width*.12);x+=4){
+    const p=color(x,y),hi=Math.max(...p),lo=Math.min(...p),d=difference(p,bg(x));
+    if(d<25)continue;
+    seen++;
+    if(hi-lo<90&&lo>150){if(x<left+width*.47)weaponWhite++;else labelWhite++;}
+    if(p[2]>p[0]+20&&p[1]>p[0]+9&&p[2]>95)cyan++;
+   }
+  }
+  if(seen<85||cyan/seen<.40||weaponWhite<5||labelWhite<5)return null;
+  // Re-check once from the measured bar's own center. This makes the saved
+  // PNG independent of where on the same banner the user touches.
+  if(!canonical){
+   const centered=detectCompleteIcyBlueKilllog(Math.round((left+right)/2),Math.round((top+bottom)/2),true);
+   if(centered)return centered;
+  }
+  const localX0=clamp(Math.floor(left-4),0,W-2),localX1=clamp(Math.ceil(right+height*.60),localX0+1,W);
+  const localY0=clamp(Math.floor(top-4),0,H-2),localY1=clamp(Math.ceil(bottom+3),localY0+1,H);
+  const ww=localX1-localX0,hh=localY1-localY0;
+  const raw=ctx.getImageData(localX0,localY0,ww,hh).data;
+  const mask=new Uint8Array(ww*hh);
+  for(let y=0;y<hh;y++){
+   const Y=y+localY0;
+   for(let x=0;x<ww;x++){
+    const X=x+localX0,k=y*ww+x;
+    if(X<left||X>localX1||Y<top||Y>bottom)continue;
+    let a=255;
+    // Keep the body continuous; taper only the genuinely faded right edge.
+    const fadeStart=right-Math.max(9,width*.13);
+    if(X>fadeStart){const t=clamp((right+height*.25-X)/(right+height*.25-fadeStart),0,1);a=Math.round(255*t*t*(3-2*t));}
+    if(X>right)a=Math.min(a,80);
+    mask[k]=a;
+   }
+  }
+  const result=createMaskedResult(localX0,localY0,ww,hh,new Uint8Array(raw),mask,'normal',{
+   icyBlueComplete:true,measuredBand:{left,right,top,bottom},confidence:best.score
+  });
+  return result;
+ }
+
  // Small-screen/native-resolution killlog detector: measures the banner itself,
  // rather than predicting its size/location from phone or tablet resolution.
  function detectLocalBannerFromTap(tx,ty){
@@ -7796,6 +7969,14 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     }
    }
    return null;
+  }
+  // Blue stripe is recognized from its own source-pixel boundaries before the
+  // old screenshot-scaled crop can cut its lower half. Other designs use old flow.
+  if(mode==='normal'){
+   const blue=detectCompleteIcyBlueKilllog(tx,ty);
+   if(blue&&isTouchedMaskedKilllog(blue,tx,ty)&&await encodeResult(blue)&&validKilllogResult(blue)){
+    photo[cacheKey]=blue;return blue;
+   }
   }
   // 먼저 텍스트가 실제 킬로그인지 확인. 금속 장식 검색이 붉은 총기 스킨이나 메뉴를
   // 파란 킬로그로 잘못 판단하는 경우가 있어 템플릿 인식보다 앞에서 실행하지 않는다.
