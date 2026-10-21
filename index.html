@@ -2395,7 +2395,7 @@ window.closeAdmin=()=>{
      <canvas id="kl-selection-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
     </div>
    </div>
-   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 인식이 조금 틀리면 추출 결과를 선택하고 ‘넓히기/줄이기’로 잘림 여백만 간단히 조절하세요.</p>
+   <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 일부 장식이 누락되면 추출 결과의 ‘인식 범위·장식 보정’을 눌러 인식 범위를 넓히고 필요한 부분만 복원·지우기로 다듬으세요.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button></div>
@@ -6214,7 +6214,7 @@ saveBtn.addEventListener("click",async()=>{
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
         mk('개별 저장',()=>saveFiles([r],i)),
-    mk('장식 복원·지우기',()=>openMaskEditor(i)),
+    mk('인식 범위·장식 보정',()=>openMaskEditor(i)),
     mk('삭제',()=>deleteResult(i))
    );
    card.append(btnRow);wrap.append(card);
@@ -7239,162 +7239,172 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  // 화면에 보이는 미리보기 좌표가 아닌 원본 사진 좌표로 마스크를 저장한다.
  let maskEditor=null;
  function openMaskEditor(index){
-  const r=results[index];if(!r)return;
+  const r=results[index];if(!r?.bounds||!r.master)return;
   active=r.photo;redraw();
-  const W=view.width,H=view.height;
-  const b=r.bounds;
-  if(!b)return;
-  const basePadX=Math.max(90,Math.round(b.w*.72));
-  const basePadY=Math.max(42,Math.round(b.h*1.6));
-  const initialX0=Math.max(0,Math.floor(b.x-basePadX)),initialY0=Math.max(0,Math.floor(b.y-basePadY));
-  const initialX1=Math.min(W,Math.ceil(b.x+b.w+basePadX*.36)),initialY1=Math.min(H,Math.ceil(b.y+b.h+basePadY));
+  const W=view.width,H=view.height,b=r.bounds;
+  // '인식 범위'는 편집 캔버스의 줌/여백이 아니라 실제로 복원될 원본 픽셀의 범위다.
+  // 기기 CSS 크기와 관계없이 원본 사진의 픽셀 단위를 그대로 사용한다.
+  const maxRange=Math.min(220,Math.max(100,Math.round(b.h*2.2)));
+  const x0=Math.max(0,Math.floor(b.x-maxRange));
+  const y0=Math.max(0,Math.floor(b.y-maxRange));
+  const x1=Math.min(W,Math.ceil(b.x+b.w+maxRange));
+  const y1=Math.min(H,Math.ceil(b.y+b.h+maxRange));
+  const w=x1-x0,h=y1-y0;
+  if(w<2||h<2)return;
+  const source=ctx.getImageData(x0,y0,w,h).data;
   const old=r.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,r.master.width,r.master.height).data;
-  let x0=initialX0,y0=initialY0,x1=initialX1,y1=initialY1,w=0,h=0;
-  let source=null,alpha=null,startAlpha=null,undo=null,paint=false,last=null,hover=null;
-  const dialog=document.createElement('div');dialog.style.cssText='position:fixed;inset:0;z-index:10000002;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px;background:#060a12f5;color:#f6f8ff;overflow:auto';
-  const h3=document.createElement('strong');h3.textContent='장식 복원 · 원본 픽셀 수정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('div');hint.innerHTML='옅게 보이는 원본 장식을 손가락으로 칠하면 복원됩니다. 잘못 남은 부분은 지우기로 정리하세요.<br>자동 추출 범위가 좁으면 아래의 <strong>범위 넓히기</strong> 버튼으로 원본 편집 영역을 더 넓힐 수 있습니다. 보정 적용 시 남은 킬로그를 기준으로 결과가 자동 중앙 정렬됩니다.';hint.style.cssText='font-size:12px;color:#b3c8e4;max-width:760px;line-height:1.6;text-align:center';
-  const tools=document.createElement('div');tools.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center';
-  const expandTools=document.createElement('div');expandTools.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center';
-  const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 13px;background:#1d2a42;border:1px solid #60739c;border-radius:9px;color:white;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
-  let mode='restore';
-  const restore=mk('복원',()=>{mode='restore';highlight()});
-  const erase=mk('지우기',()=>{mode='erase';highlight()});
-  function highlight(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#3966c2':'#1d2a42';}
-  highlight();
-  const slider=document.createElement('input');slider.type='range';slider.min='2';slider.max='42';slider.value='10';slider.step='1';slider.setAttribute('aria-label','브러시 크기');
-  const sizeLabel=document.createElement('span');sizeLabel.textContent='브러시 10px';sizeLabel.style.cssText='font-size:12px;color:#d4e2ff';slider.oninput=()=>{sizeLabel.textContent='브러시 '+slider.value+'px';checker();};
-  tools.append(restore,erase,sizeLabel,slider);
-  const rangeAmount=document.createElement('input');rangeAmount.type='range';rangeAmount.min='10';rangeAmount.max='160';rangeAmount.value='40';rangeAmount.step='5';rangeAmount.setAttribute('aria-label','범위 확장 크기');
-  const rangeLabel=document.createElement('span');rangeLabel.textContent='범위 40px';rangeLabel.style.cssText='font-size:12px;color:#d4e2ff';rangeAmount.oninput=()=>{rangeLabel.textContent='범위 '+rangeAmount.value+'px';};
-  const regionInfo=document.createElement('div');regionInfo.style.cssText='font-size:12px;color:#d4e2ff;text-align:center';
-  const canvas=document.createElement('canvas');
-  canvas.style.cssText='width:100%;max-width:min(98vw,1050px);height:auto;touch-action:none;border:1px solid #53657f;border-radius:8px;cursor:crosshair;background:#222;';
-  const g=canvas.getContext('2d',{willReadFrequently:true});
-  let image=null;
-  function updateRegionInfo(){regionInfo.textContent=`현재 편집 범위 ${w}×${h}px · 좌상단 (${x0}, ${y0})`}
-  function copyAlphaFromResult(newX0,newY0,newW,newH){
-   const out=new Uint8ClampedArray(newW*newH);
-   for(let y=0;y<r.master.height;y++){
-    const Y=y+r.sourceY-newY0;if(Y<0||Y>=newH)continue;
-    for(let x=0;x<r.master.width;x++){
-     const X=x+r.sourceX-newX0;if(X<0||X>=newW)continue;
-     out[Y*newW+X]=old[(y*r.master.width+x)*4+3];
-    }
+  const baseAlpha=new Uint8ClampedArray(w*h);
+  for(let y=0;y<r.master.height;y++){
+   const Y=y+r.sourceY-y0;if(Y<0||Y>=h)continue;
+   for(let x=0;x<r.master.width;x++){
+    const X=x+r.sourceX-x0;if(X<0||X>=w)continue;
+    baseAlpha[Y*w+X]=old[(y*r.master.width+x)*4+3];
    }
-   return out;
   }
-  function remapAlpha(oldAlpha,oldX0,oldY0,oldW,oldH,newX0,newY0,newW,newH){
-   const out=new Uint8ClampedArray(newW*newH);
-   for(let y=0;y<oldH;y++){
-    const Y=y+oldY0-newY0;if(Y<0||Y>=newH)continue;
-    const oldRow=y*oldW,newRow=Y*newW;
-    for(let x=0;x<oldW;x++){
-     const X=x+oldX0-newX0;if(X<0||X>=newW)continue;
-     out[newRow+X]=oldAlpha[oldRow+x];
-    }
+  // 슬라이더로 새로 인식할 픽셀의 후보를 원본에서 미리 계산한다.
+  // 위·아래의 실제 게임 배경을 열 단위로 비교하므로 밝은 장식/막대를 우선 추출한다.
+  // 배경과 색이 비슷한 특수 장식은 아래 복원 브러쉬로 보완할 수 있다.
+  const candidates=new Uint8Array(w*h);
+  const outside=new Uint16Array(w*h);
+  const topRefY=Math.min(h-1,Math.max(0,Math.round(b.y-maxRange-y0)));
+  const botRefY=Math.max(0,Math.min(h-1,Math.round(b.y+b.h+maxRange-1-y0)));
+  for(let y=0;y<h;y++){
+   const absY=y+y0;
+   const dy=Math.max(0,b.y-absY,absY-(b.y+b.h-1));
+   for(let x=0;x<w;x++){
+    const absX=x+x0,k=y*w+x,j=k*4;
+    const dx=Math.max(0,b.x-absX,absX-(b.x+b.w-1));
+    outside[k]=Math.ceil(Math.max(dx,dy));
+    if(baseAlpha[k]>24)continue;
+    const t=(topRefY*w+x)*4,q=(botRefY*w+x)*4;
+    const R=source[j],G=source[j+1],B=source[j+2];
+    const diffTop=Math.max(Math.abs(R-source[t]),Math.abs(G-source[t+1]),Math.abs(B-source[t+2]));
+    const diffBot=Math.max(Math.abs(R-source[q]),Math.abs(G-source[q+1]),Math.abs(B-source[q+2]));
+    const delta=Math.min(diffTop,diffBot),hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+    // 주변 게임 화면과 색이 다르고 밝은 장식/텍스트/색상 막대만 자동으로 포함한다.
+    if(delta>=30&&(hi-lo>=18||hi>=125))candidates[k]=Math.max(0,Math.min(255,Math.round((delta-23)*13)));
    }
-   return out;
   }
-  function drawBrushMarker(){
-   if(!hover)return;
-   g.save();
-   const radius=Math.max(2,+slider.value);
-   g.beginPath();
-   g.arc(hover.x,hover.y,radius,0,Math.PI*2);
-   g.strokeStyle=mode==='erase'?'#ff6d6d':'#7ed0ff';
-   g.lineWidth=Math.max(1,Math.min(3,Math.round(Math.max(w,h)/420)));
-   g.setLineDash([6,4]);
-   g.stroke();
-   g.beginPath();
-   g.arc(hover.x,hover.y,1.2,0,Math.PI*2);
-   g.fillStyle='#ffffff';
-   g.fill();
-   g.restore();
+  // 브러쉬로 고친 픽셀은 범위를 줄였다 늘려도 유지한다.
+  // -1: 자동 결과, 0: 지우기, 255: 복원
+  const painted=new Int16Array(w*h);painted.fill(-1);
+  const alpha=new Uint8ClampedArray(w*h);
+  let range=0,mode='restore',painting=false,last=null,undo=null,hover=null,framePending=false;
+  const dialog=document.createElement('div');
+  dialog.style.cssText='position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:14px;overflow:auto';
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
+  const h3=document.createElement('strong');h3.textContent='킬로그 인식 범위 보정';h3.style.cssText='font-size:17px';
+  const hint=document.createElement('p');hint.textContent='인식 범위를 늘리면 원본의 장식을 추가로 인식합니다. 진하게 보이는 부분이 저장되며, 부족한 곳은 복원·불필요한 곳은 지우기로 다듬으세요.';
+  hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:660px';
+  const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;
+   button.style.cssText='padding:10px 12px;min-height:40px;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
+  const rangeRow=document.createElement('div');rangeRow.style.cssText='display:flex;align-items:center;gap:10px;width:100%;max-width:660px;padding:3px 0';
+  const rangeLabel=document.createElement('label');rangeLabel.textContent='인식 범위 0px';rangeLabel.style.cssText='font-size:13px;font-weight:700;min-width:105px';
+  const rangeInput=document.createElement('input');rangeInput.type='range';rangeInput.min='0';rangeInput.max=String(maxRange);rangeInput.step='2';rangeInput.value='0';rangeInput.style.cssText='flex:1;min-width:80px;accent-color:#86aaff';
+  rangeLabel.htmlFor='kl-mask-expand-range';rangeInput.id='kl-mask-expand-range';
+  rangeInput.setAttribute('aria-label','킬로그 인식 범위 확대');
+  rangeRow.append(rangeLabel,rangeInput);
+  const tools=document.createElement('div');tools.style.cssText='display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap';
+  const restore=mk('복원',()=>{mode='restore';setModeStyle();drawCursor()});
+  const erase=mk('지우기',()=>{mode='erase';setModeStyle();drawCursor()});
+  function setModeStyle(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#b34357':'#1d2a42';}
+  setModeStyle();
+  const brushLabel=document.createElement('label');brushLabel.textContent='브러쉬 ';brushLabel.style.cssText='font-size:12px;color:#c3d4f1';
+  const brushSize=document.createElement('select');brushSize.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
+  for(const [v,label] of [['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='12')o.selected=true;brushSize.append(o);}
+  brushLabel.append(brushSize);brushSize.addEventListener('change',drawCursor);
+  tools.append(restore,erase,brushLabel);
+  const wrap=document.createElement('div');wrap.style.cssText='position:relative;width:100%;max-width:1050px;line-height:0;border:1px solid #53657f;border-radius:8px;overflow:hidden';
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.style.cssText='display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;background:#262a34';
+  const cursorCanvas=document.createElement('canvas');cursorCanvas.width=w;cursorCanvas.height=h;cursorCanvas.style.cssText='pointer-events:none;position:absolute;inset:0;display:block;width:100%;height:100%';
+  wrap.append(canvas,cursorCanvas);
+  const g=canvas.getContext('2d',{willReadFrequently:true}),cg=cursorCanvas.getContext('2d');
+  const image=g.createImageData(w,h);
+  function updateAlpha(){
+   const rr=range;
+   for(let k=0;k<alpha.length;k++){
+    // 범위를 넓히면 자동 후보 픽셀을 실제 알파 마스크에 추가한다.
+    // 편집 영역만 커지는 기존 문제를 없앴다.
+    let a=baseAlpha[k];
+    if(rr>0&&outside[k]<=rr)a=Math.max(a,candidates[k]);
+    if(painted[k]!==-1)a=painted[k];
+    alpha[k]=a;
+   }
   }
-  function checker(){
-   if(!source||!alpha||!image)return;
-   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    const k=(y*w+x)*4,s=((x>>4)+(y>>4))%2?36:57;
-    for(let c=0;c<3;c++)image.data[k+c]=s;
-    const a=alpha[y*w+x]/255;
+  function render(){
+   const dat=image.data;
+   for(let k=0;k<alpha.length;k++){
+    const j=k*4,shade=(((k%w)>>4)+(((k/w)|0)>>4))%2?38:58;
+    const a=alpha[k]/255;
     for(let c=0;c<3;c++){
-     const raw=source[k+c];
-     image.data[k+c]=Math.round(s*(1-.22)+raw*.22);
-     image.data[k+c]=Math.round(image.data[k+c]*(1-a)+raw*a);
+     const src=source[j+c];
+     dat[j+c]=Math.round((shade*.75+src*.25)*(1-a)+src*a);
     }
-    image.data[k+3]=255;
+    dat[j+3]=255;
    }
    g.putImageData(image,0,0);
-   drawBrushMarker();
-  };
-  function reloadRegion(newX0,newY0,newX1,newY1,keepEdited=true){
-   newX0=clamp(Math.floor(newX0),0,W-1);newY0=clamp(Math.floor(newY0),0,H-1);
-   newX1=clamp(Math.ceil(newX1),newX0+1,W);newY1=clamp(Math.ceil(newY1),newY0+1,H);
-   const newW=newX1-newX0,newH=newY1-newY0;
-   const oldAlphaData=alpha,oldX=x0,oldY=y0,oldW=w,oldH=h;
-   x0=newX0;y0=newY0;x1=newX1;y1=newY1;w=newW;h=newH;
-   source=ctx.getImageData(x0,y0,w,h).data;
-   if(oldAlphaData&&keepEdited) alpha=remapAlpha(oldAlphaData,oldX,oldY,oldW,oldH,x0,y0,w,h);
-   else alpha=copyAlphaFromResult(x0,y0,w,h);
-   startAlpha=alpha.slice();undo=null;last=null;hover=null;
-   canvas.width=w;canvas.height=h;
-   image=g.createImageData(w,h);
-   updateRegionInfo();checker();
+   // 노란 점선은 인식 범위. 단순한 화면 줌/여백 표시가 아니다.
+   const lx=Math.max(0,b.x-x0-range),ly=Math.max(0,b.y-y0-range);
+   const rx=Math.min(w,b.x+b.w-x0+range),by=Math.min(h,b.y+b.h-y0+range);
+   g.save();g.strokeStyle='#ffd36e';g.lineWidth=Math.max(1,w/600);
+   g.setLineDash([7,5]);g.strokeRect(lx+.5,ly+.5,Math.max(1,rx-lx-1),Math.max(1,by-ly-1));g.restore();
   }
-  function expandRegion(side){
-   const amt=+rangeAmount.value||40;
-   let nx0=x0,ny0=y0,nx1=x1,ny1=y1;
-   if(side==='left'||side==='all')nx0-=amt;
-   if(side==='right'||side==='all')nx1+=amt;
-   if(side==='up'||side==='all')ny0-=amt;
-   if(side==='down'||side==='all')ny1+=amt;
-   reloadRegion(nx0,ny0,nx1,ny1,true);
+  function drawCursor(){
+   cg.clearRect(0,0,w,h);if(!hover)return;
+   const radius=Number(brushSize.value);
+   cg.save();cg.beginPath();cg.arc(hover.x,hover.y,radius,0,Math.PI*2);
+   cg.strokeStyle=mode==='erase'?'#ff6d73':'#68c9ff';cg.lineWidth=2;cg.setLineDash([5,3]);cg.stroke();
+   cg.beginPath();cg.arc(hover.x,hover.y,1.5,0,Math.PI*2);cg.fillStyle='white';cg.fill();cg.restore();
   }
-  function resetRegion(){reloadRegion(initialX0,initialY0,initialX1,initialY1,false);}
-  expandTools.append(
-   rangeLabel,rangeAmount,
-   mk('왼쪽 넓히기',()=>expandRegion('left')),
-   mk('오른쪽 넓히기',()=>expandRegion('right')),
-   mk('위 넓히기',()=>expandRegion('up')),
-   mk('아래 넓히기',()=>expandRegion('down')),
-   mk('전체 넓히기',()=>expandRegion('all')),
-   mk('범위 초기화',resetRegion)
-  );
-  function point(e){const rect=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(w-1,(e.clientX-rect.left)*w/rect.width)),y:Math.max(0,Math.min(h-1,(e.clientY-rect.top)*h/rect.height))};}
+  function scheduleRender(){if(framePending)return;framePending=true;requestAnimationFrame(()=>{framePending=false;render()});}
+  function point(e){const rect=canvas.getBoundingClientRect();return {x:clamp((e.clientX-rect.left)*w/rect.width,0,w-1),y:clamp((e.clientY-rect.top)*h/rect.height,0,h-1)};}
   function dot(x,y){
-   const radius=+slider.value,loX=Math.max(0,Math.floor(x-radius)),hiX=Math.min(w-1,Math.ceil(x+radius));
-   const loY=Math.max(0,Math.floor(y-radius)),hiY=Math.min(h-1,Math.ceil(y+radius));
-   for(let Y=loY;Y<=hiY;Y++)for(let X=loX;X<=hiX;X++){
-    const d=Math.hypot(X-x,Y-y),edge=Math.max(0,Math.min(1,radius-d));if(edge<=0)continue;
-    const k=Y*w+X,target=mode==='restore'?255:0;
-    alpha[k]=Math.round(alpha[k]*(1-edge)+target*edge);
+   const radius=Number(brushSize.value),lx=Math.max(0,Math.floor(x-radius)),rx=Math.min(w-1,Math.ceil(x+radius));
+   const ly=Math.max(0,Math.floor(y-radius)),ry=Math.min(h-1,Math.ceil(y+radius));
+   for(let yy=ly;yy<=ry;yy++)for(let xx=lx;xx<=rx;xx++){
+    if((xx-x)**2+(yy-y)**2>radius*radius)continue;
+    const k=yy*w+xx;painted[k]=mode==='restore'?255:0;alpha[k]=painted[k];
    }
   }
-  function stroke(a,b){const n=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,(+slider.value)/3)));for(let i=0;i<=n;i++){const t=i/n;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}hover=b;checker();}
-  canvas.addEventListener('pointerdown',e=>{paint=true;undo=alpha.slice();last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);e.preventDefault();});
-  canvas.addEventListener('pointermove',e=>{const p=point(e);hover=p;if(!paint){checker();return;}stroke(last,p);last=p;e.preventDefault();});
-  canvas.addEventListener('pointerenter',e=>{hover=point(e);checker();});
-  canvas.addEventListener('pointerleave',()=>{hover=null;checker();});
-  const stop=()=>{paint=false;last=null;};canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
-  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:9px;flex-wrap:wrap;justify-content:center';
-  actions.append(mk('실행 취소',()=>{if(undo){alpha.set(undo);undo=null;checker();}}),mk('현재 범위 자동값으로 초기화',()=>{undo=alpha.slice();alpha.set(startAlpha);checker();}),mk('닫기',()=>dialog.remove()),mk('보정 적용',async()=>{
-   let left=w,top=h,right=-1,bottom=-1;
-   for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}}
-   if(right<left||bottom<top){alert('남은 킬로그 픽셀이 없습니다.');return;}
-   const c=document.createElement('canvas');c.width=w;c.height=h;const context=c.getContext('2d');
-   const out=context.createImageData(w,h);
-   for(let i=0;i<alpha.length;i++){const k=i*4;out.data[k]=source[k];out.data[k+1]=source[k+1];out.data[k+2]=source[k+2];out.data[k+3]=alpha[i];}
-   context.putImageData(out,0,0);
-   r.master=c;r.sourceX=x0;r.sourceY=y0;
-   const m=Math.max(3,Math.round(w*.009));
-   r.inner={x:Math.max(0,left-m),y:Math.max(0,top-m),w:1,h:1};
-   r.inner.w=Math.min(w-1,right+m)-r.inner.x+1;r.inner.h=Math.min(h-1,bottom+m)-r.inner.y+1;
-   r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true,manualRegion:{x0,y0,x1,y1}};
-   if(await encodeResult(r)){dialog.remove();resultView();drawSelections();editStatus('원본 픽셀 기준으로 장식을 수정했고, 남은 킬로그를 기준으로 결과를 다시 중앙 정렬했습니다.');}
-  }));
-  reloadRegion(initialX0,initialY0,initialX1,initialY1,false);
-  dialog.append(h3,hint,tools,expandTools,regionInfo,canvas,actions);document.body.append(dialog);maskEditor=dialog;
+  function stroke(a,b){
+   const steps=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,Number(brushSize.value)/3)));
+   for(let i=0;i<=steps;i++){const t=i/steps;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}
+   scheduleRender();
+  }
+  rangeInput.addEventListener('input',()=>{range=Number(rangeInput.value);rangeLabel.textContent=`인식 범위 ${range}px`;updateAlpha();scheduleRender();});
+  canvas.addEventListener('pointerdown',e=>{if(e.button!==0&&e.pointerType==='mouse')return;
+   painting=true;undo=painted.slice();last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
+  canvas.addEventListener('pointermove',e=>{hover=point(e);drawCursor();if(!painting)return;stroke(last,hover);last=hover;e.preventDefault();});
+  canvas.addEventListener('pointerleave',()=>{if(!painting){hover=null;drawCursor();}});
+  function stop(e){painting=false;last=null;if(e&&e.pointerType!=='mouse'){hover=null;drawCursor();}}
+  canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center';
+  actions.append(
+   mk('실행 취소',()=>{if(!undo)return;painted.set(undo);undo=null;updateAlpha();scheduleRender();}),
+   mk('초기화',()=>{range=0;rangeInput.value='0';rangeLabel.textContent='인식 범위 0px';painted.fill(-1);undo=null;updateAlpha();scheduleRender();}),
+   mk('닫기',()=>dialog.remove()),
+   mk('보정 적용',async()=>{
+    let left=w,top=h,right=-1,bottom=-1;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+    if(right<left||bottom<top){alert('남은 킬로그 픽셀이 없습니다.');return;}
+    const c=document.createElement('canvas');c.width=w;c.height=h;const cg2=c.getContext('2d');
+    const out=cg2.createImageData(w,h);
+    for(let k=0;k<alpha.length;k++){const j=k*4;out.data[j]=source[j];out.data[j+1]=source[j+1];out.data[j+2]=source[j+2];out.data[j+3]=alpha[k];}
+    cg2.putImageData(out,0,0);
+    r.master=c;r.sourceX=x0;r.sourceY=y0;
+    const margin=Math.max(3,Math.round(w*.009));
+    r.inner={x:Math.max(0,left-margin),y:Math.max(0,top-margin),w:1,h:1};
+    r.inner.w=Math.min(w-1,right+margin)-r.inner.x+1;
+    r.inner.h=Math.min(h-1,bottom+margin)-r.inner.y+1;
+    r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true,recognitionExpandPx:range};
+    if(await encodeResult(r)){
+     dialog.remove();resultView();drawSelections();
+     editStatus('인식 범위와 장식을 반영했습니다. 남은 픽셀 기준으로 결과가 자동 중앙 정렬됐습니다.');
+    }
+   })
+  );
+  updateAlpha();render();
+  dialog.append(h3,hint,rangeRow,tools,wrap,actions);document.body.append(dialog);maskEditor=dialog;
  }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;
