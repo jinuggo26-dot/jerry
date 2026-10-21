@@ -1163,7 +1163,7 @@ function snaStartPresets(uid){
 }
 window.SnaCloudSession=uid=>{
  snaCloud.uid=uid||null;
- const b=document.getElementById('sna-report-open');if(b)b.style.display=uid?'':'none';
+ const b=document.getElementById('sna-report-open');if(b)b.style.display=uid?'block':'none';
  snaStartPresets(uid);
  window.SnaDraft?.setUser(uid);
  if(!uid&&snaCloud.reportUnsub){snaCloud.reportUnsub();snaCloud.reportUnsub=null;}
