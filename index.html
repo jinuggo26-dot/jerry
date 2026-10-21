@@ -6284,8 +6284,98 @@ saveBtn.addEventListener("click",async()=>{
   r.meta={...r.meta,flatBlueOverhangCleaned:true};
   return true;
  }
+ function normalizeIcyBlueBannerBody(r){
+  if(!r?.master||!r.inner)return false;
+  const c=r.master,w=c.width,h=c.height;
+  const box=r.inner;
+  const lx=Math.max(0,Math.round(box.x)),rx=Math.min(w-1,Math.round(box.x+box.w-1));
+  const ty=Math.max(0,Math.round(box.y)),by=Math.min(h-1,Math.round(box.y+box.h-1));
+  const bw=rx-lx+1,bh=by-ty+1;
+  if(bw<150||bh<18||bw/bh<4)return false;
+  const ctx2=c.getContext('2d',{willReadFrequently:true});
+  const im=ctx2.getImageData(0,0,w,h),px=im.data;
+  const scanL=lx+Math.max(4,Math.round(bw*.16));
+  const scanR=lx+Math.max(8,Math.round(bw*.95));
+  const rowSpan=Math.max(10,scanR-scanL+1);
+  const rowStats=[];
+  for(let y=ty;y<=by;y++){
+   let solid=0,blueish=0;
+   for(let x=scanL;x<=scanR;x++){
+    const k=(y*w+x)*4,A=px[k+3],R=px[k],G=px[k+1],B=px[k+2];
+    if(A>=28)solid++;
+    if(A>=18&&B>=R+25&&G>=R+10&&B>=95)blueish++;
+   }
+   rowStats.push({y,solid:solid/rowSpan,blueish:blueish/rowSpan});
+  }
+  let runStart=-1,bestStart=-1,bestEnd=-1,bestScore=-1;
+  for(let i=0;i<rowStats.length;i++){
+   const ok=rowStats[i].solid>=.34||rowStats[i].blueish>=.22;
+   if(ok&&runStart<0)runStart=i;
+   if((!ok||i===rowStats.length-1)&&runStart>=0){
+    const end=ok&&i===rowStats.length-1?i:i-1;
+    let score=0;for(let j=runStart;j<=end;j++)score+=rowStats[j].solid+rowStats[j].blueish;
+    if(end-runStart>=Math.max(5,Math.round(bh*.16))&&score>bestScore){bestScore=score;bestStart=runStart;bestEnd=end;}
+    runStart=-1;
+   }
+  }
+  if(bestStart<0)return false;
+  const bandTop=rowStats[bestStart].y,bandBottom=rowStats[bestEnd].y;
+  const bandH=bandBottom-bandTop+1;
+  if(bandH<7)return false;
+  let sampleBlue=0,sampleN=0;
+  for(let y=Math.max(ty,bandTop+1);y<=Math.min(by,bandBottom-1);y+=Math.max(1,Math.floor(bandH/4))){
+   for(let x=lx+Math.round(bw*.35);x<=lx+Math.round(bw*.7);x+=6){
+    const k=(y*w+x)*4,A=px[k+3],R=px[k],G=px[k+1],B=px[k+2];
+    if(A<18)continue;sampleN++;if(B>=R+18&&G>=R+6&&B>=100)sampleBlue++;
+   }
+  }
+  if(sampleN<8||sampleBlue/sampleN<.38)return false;
+  const colStart=lx+Math.max(4,Math.round(bw*.05)),colEnd=lx+Math.round(bw*.97);
+  let bodyLeft=-1,bodyRight=-1;
+  for(let x=colStart;x<=colEnd;x++){
+   let n=0;
+   for(let y=bandTop;y<=bandBottom;y++)if(px[(y*w+x)*4+3]>=22)n++;
+   if(n>=Math.max(3,Math.floor(bandH*.36))){if(bodyLeft<0)bodyLeft=x;bodyRight=x;}
+  }
+  if(bodyLeft<0||bodyRight-bodyLeft<Math.max(70,bandH*4))return false;
+  const fillStart=Math.max(bodyLeft, lx+Math.round(bw*.08));
+  const fillEnd=Math.max(fillStart+1, bodyRight-Math.max(2,Math.round(bandH*.5)));
+  let changed=false;
+  // Remove detached thin strip above the banner body, but never the left ornament/head.
+  for(let y=ty;y<bandTop;y++){
+   const thin=y<bandTop-Math.max(1,Math.round(bandH*.75));
+   for(let x=fillStart+Math.round(bandH*.6);x<=bodyRight;x++){
+    const k=(y*w+x)*4;
+    if(px[k+3]>=18&&(thin||x>fillStart+Math.round(bandH*1.8))){px[k+3]=0;changed=true;}
+   }
+  }
+  // Fill missing holes inside the main blue body so the lower edge is not stepped/cut out.
+  for(let x=fillStart;x<=fillEnd;x++){
+   let hits=0;
+   for(let y=bandTop;y<=bandBottom;y++)if(px[(y*w+x)*4+3]>=20)hits++;
+   if(hits<Math.max(1,Math.floor(bandH*.14)))continue;
+   for(let y=bandTop;y<=bandBottom;y++){
+    const k=(y*w+x)*4;
+    if(px[k+3]>=20)continue;
+    const R=px[k],G=px[k+1],B=px[k+2];
+    if(B>=R+10&&G>=R-6){px[k+3]=255;changed=true;}
+   }
+  }
+  if(!changed)return false;
+  ctx2.putImageData(im,0,0);
+  let minY=by,maxY=ty;
+  for(let y=ty;y<=by;y++)for(let x=lx;x<=rx;x++)if(px[(y*w+x)*4+3]>=9){if(y<minY)minY=y;if(y>maxY)maxY=y;}
+  if(minY<=maxY){
+   const newTop=Math.max(ty,minY-2),newBottom=Math.min(by,maxY+2);
+   r.inner={...r.inner,y:newTop,h:newBottom-newTop+1};
+  }
+  r.meta={...r.meta,icyBlueBodyNormalized:true};
+  return true;
+ }
+
  async function encodeResult(r){
   removeFlatDarkBlueOverhang(r);
+  normalizeIcyBlueBannerBody(r);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
   const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
