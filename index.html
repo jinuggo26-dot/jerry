@@ -7244,26 +7244,18 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const W=view.width,H=view.height;
   const b=r.bounds;
   if(!b)return;
-  const padX=Math.max(90,Math.round(b.w*.72));
-  const padY=Math.max(42,Math.round(b.h*1.6));
-  const x0=Math.max(0,Math.floor(b.x-padX)),y0=Math.max(0,Math.floor(b.y-padY));
-  const x1=Math.min(W,Math.ceil(b.x+b.w+padX*.36)),y1=Math.min(H,Math.ceil(b.y+b.h+padY));
-  const w=x1-x0,h=y1-y0;if(w<2||h<2)return;
-  const source=ctx.getImageData(x0,y0,w,h).data;
+  const basePadX=Math.max(90,Math.round(b.w*.72));
+  const basePadY=Math.max(42,Math.round(b.h*1.6));
+  const initialX0=Math.max(0,Math.floor(b.x-basePadX)),initialY0=Math.max(0,Math.floor(b.y-basePadY));
+  const initialX1=Math.min(W,Math.ceil(b.x+b.w+basePadX*.36)),initialY1=Math.min(H,Math.ceil(b.y+b.h+basePadY));
   const old=r.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,r.master.width,r.master.height).data;
-  const alpha=new Uint8ClampedArray(w*h);
-  for(let y=0;y<r.master.height;y++){
-   const Y=y+r.sourceY-y0;if(Y<0||Y>=h)continue;
-   for(let x=0;x<r.master.width;x++){
-    const X=x+r.sourceX-x0;if(X<0||X>=w)continue;
-    alpha[Y*w+X]=old[(y*r.master.width+x)*4+3];
-   }
-  }
-  const startAlpha=alpha.slice();let undo=null,paint=false,last=null;
+  let x0=initialX0,y0=initialY0,x1=initialX1,y1=initialY1,w=0,h=0;
+  let source=null,alpha=null,startAlpha=null,undo=null,paint=false,last=null,hover=null;
   const dialog=document.createElement('div');dialog.style.cssText='position:fixed;inset:0;z-index:10000002;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px;background:#060a12f5;color:#f6f8ff;overflow:auto';
   const h3=document.createElement('strong');h3.textContent='장식 복원 · 원본 픽셀 수정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('div');hint.textContent='옅게 보이는 원본 장식을 손가락으로 칠하면 복원됩니다. 잘못 남은 부분은 지우기로 정리하세요.';hint.style.cssText='font-size:12px;color:#b3c8e4;max-width:720px;line-height:1.6';
+  const hint=document.createElement('div');hint.innerHTML='옅게 보이는 원본 장식을 손가락으로 칠하면 복원됩니다. 잘못 남은 부분은 지우기로 정리하세요.<br>자동 추출 범위가 좁으면 아래의 <strong>범위 넓히기</strong> 버튼으로 원본 편집 영역을 더 넓힐 수 있습니다. 보정 적용 시 남은 킬로그를 기준으로 결과가 자동 중앙 정렬됩니다.';hint.style.cssText='font-size:12px;color:#b3c8e4;max-width:760px;line-height:1.6;text-align:center';
   const tools=document.createElement('div');tools.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center';
+  const expandTools=document.createElement('div');expandTools.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center';
   const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 13px;background:#1d2a42;border:1px solid #60739c;border-radius:9px;color:white;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
   let mode='restore';
   const restore=mk('복원',()=>{mode='restore';highlight()});
@@ -7271,13 +7263,57 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   function highlight(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#3966c2':'#1d2a42';}
   highlight();
   const slider=document.createElement('input');slider.type='range';slider.min='2';slider.max='42';slider.value='10';slider.step='1';slider.setAttribute('aria-label','브러시 크기');
-  const sizeLabel=document.createElement('span');sizeLabel.textContent='브러시 10px';sizeLabel.style.cssText='font-size:12px;color:#d4e2ff';slider.oninput=()=>{sizeLabel.textContent='브러시 '+slider.value+'px'};
+  const sizeLabel=document.createElement('span');sizeLabel.textContent='브러시 10px';sizeLabel.style.cssText='font-size:12px;color:#d4e2ff';slider.oninput=()=>{sizeLabel.textContent='브러시 '+slider.value+'px';checker();};
   tools.append(restore,erase,sizeLabel,slider);
-  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const rangeAmount=document.createElement('input');rangeAmount.type='range';rangeAmount.min='10';rangeAmount.max='160';rangeAmount.value='40';rangeAmount.step='5';rangeAmount.setAttribute('aria-label','범위 확장 크기');
+  const rangeLabel=document.createElement('span');rangeLabel.textContent='범위 40px';rangeLabel.style.cssText='font-size:12px;color:#d4e2ff';rangeAmount.oninput=()=>{rangeLabel.textContent='범위 '+rangeAmount.value+'px';};
+  const regionInfo=document.createElement('div');regionInfo.style.cssText='font-size:12px;color:#d4e2ff;text-align:center';
+  const canvas=document.createElement('canvas');
   canvas.style.cssText='width:100%;max-width:min(98vw,1050px);height:auto;touch-action:none;border:1px solid #53657f;border-radius:8px;cursor:crosshair;background:#222;';
   const g=canvas.getContext('2d',{willReadFrequently:true});
-  const image=g.createImageData(w,h);const srcFrame=g.createImageData(w,h);
-  const checker=()=>{
+  let image=null;
+  function updateRegionInfo(){regionInfo.textContent=`현재 편집 범위 ${w}×${h}px · 좌상단 (${x0}, ${y0})`}
+  function copyAlphaFromResult(newX0,newY0,newW,newH){
+   const out=new Uint8ClampedArray(newW*newH);
+   for(let y=0;y<r.master.height;y++){
+    const Y=y+r.sourceY-newY0;if(Y<0||Y>=newH)continue;
+    for(let x=0;x<r.master.width;x++){
+     const X=x+r.sourceX-newX0;if(X<0||X>=newW)continue;
+     out[Y*newW+X]=old[(y*r.master.width+x)*4+3];
+    }
+   }
+   return out;
+  }
+  function remapAlpha(oldAlpha,oldX0,oldY0,oldW,oldH,newX0,newY0,newW,newH){
+   const out=new Uint8ClampedArray(newW*newH);
+   for(let y=0;y<oldH;y++){
+    const Y=y+oldY0-newY0;if(Y<0||Y>=newH)continue;
+    const oldRow=y*oldW,newRow=Y*newW;
+    for(let x=0;x<oldW;x++){
+     const X=x+oldX0-newX0;if(X<0||X>=newW)continue;
+     out[newRow+X]=oldAlpha[oldRow+x];
+    }
+   }
+   return out;
+  }
+  function drawBrushMarker(){
+   if(!hover)return;
+   g.save();
+   const radius=Math.max(2,+slider.value);
+   g.beginPath();
+   g.arc(hover.x,hover.y,radius,0,Math.PI*2);
+   g.strokeStyle=mode==='erase'?'#ff6d6d':'#7ed0ff';
+   g.lineWidth=Math.max(1,Math.min(3,Math.round(Math.max(w,h)/420)));
+   g.setLineDash([6,4]);
+   g.stroke();
+   g.beginPath();
+   g.arc(hover.x,hover.y,1.2,0,Math.PI*2);
+   g.fillStyle='#ffffff';
+   g.fill();
+   g.restore();
+  }
+  function checker(){
+   if(!source||!alpha||!image)return;
    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const k=(y*w+x)*4,s=((x>>4)+(y>>4))%2?36:57;
     for(let c=0;c<3;c++)image.data[k+c]=s;
@@ -7290,8 +7326,41 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     image.data[k+3]=255;
    }
    g.putImageData(image,0,0);
+   drawBrushMarker();
   };
-  checker();
+  function reloadRegion(newX0,newY0,newX1,newY1,keepEdited=true){
+   newX0=clamp(Math.floor(newX0),0,W-1);newY0=clamp(Math.floor(newY0),0,H-1);
+   newX1=clamp(Math.ceil(newX1),newX0+1,W);newY1=clamp(Math.ceil(newY1),newY0+1,H);
+   const newW=newX1-newX0,newH=newY1-newY0;
+   const oldAlphaData=alpha,oldX=x0,oldY=y0,oldW=w,oldH=h;
+   x0=newX0;y0=newY0;x1=newX1;y1=newY1;w=newW;h=newH;
+   source=ctx.getImageData(x0,y0,w,h).data;
+   if(oldAlphaData&&keepEdited) alpha=remapAlpha(oldAlphaData,oldX,oldY,oldW,oldH,x0,y0,w,h);
+   else alpha=copyAlphaFromResult(x0,y0,w,h);
+   startAlpha=alpha.slice();undo=null;last=null;hover=null;
+   canvas.width=w;canvas.height=h;
+   image=g.createImageData(w,h);
+   updateRegionInfo();checker();
+  }
+  function expandRegion(side){
+   const amt=+rangeAmount.value||40;
+   let nx0=x0,ny0=y0,nx1=x1,ny1=y1;
+   if(side==='left'||side==='all')nx0-=amt;
+   if(side==='right'||side==='all')nx1+=amt;
+   if(side==='up'||side==='all')ny0-=amt;
+   if(side==='down'||side==='all')ny1+=amt;
+   reloadRegion(nx0,ny0,nx1,ny1,true);
+  }
+  function resetRegion(){reloadRegion(initialX0,initialY0,initialX1,initialY1,false);}
+  expandTools.append(
+   rangeLabel,rangeAmount,
+   mk('왼쪽 넓히기',()=>expandRegion('left')),
+   mk('오른쪽 넓히기',()=>expandRegion('right')),
+   mk('위 넓히기',()=>expandRegion('up')),
+   mk('아래 넓히기',()=>expandRegion('down')),
+   mk('전체 넓히기',()=>expandRegion('all')),
+   mk('범위 초기화',resetRegion)
+  );
   function point(e){const rect=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(w-1,(e.clientX-rect.left)*w/rect.width)),y:Math.max(0,Math.min(h-1,(e.clientY-rect.top)*h/rect.height))};}
   function dot(x,y){
    const radius=+slider.value,loX=Math.max(0,Math.floor(x-radius)),hiX=Math.min(w-1,Math.ceil(x+radius));
@@ -7302,12 +7371,14 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     alpha[k]=Math.round(alpha[k]*(1-edge)+target*edge);
    }
   }
-  function stroke(a,b){const n=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,(+slider.value)/3)));for(let i=0;i<=n;i++){const t=i/n;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}checker();}
-  canvas.addEventListener('pointerdown',e=>{paint=true;undo=alpha.slice();last=point(e);canvas.setPointerCapture(e.pointerId);stroke(last,last);e.preventDefault();});
-  canvas.addEventListener('pointermove',e=>{if(!paint)return;const p=point(e);stroke(last,p);last=p;e.preventDefault();});
+  function stroke(a,b){const n=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,(+slider.value)/3)));for(let i=0;i<=n;i++){const t=i/n;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}hover=b;checker();}
+  canvas.addEventListener('pointerdown',e=>{paint=true;undo=alpha.slice();last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);e.preventDefault();});
+  canvas.addEventListener('pointermove',e=>{const p=point(e);hover=p;if(!paint){checker();return;}stroke(last,p);last=p;e.preventDefault();});
+  canvas.addEventListener('pointerenter',e=>{hover=point(e);checker();});
+  canvas.addEventListener('pointerleave',()=>{hover=null;checker();});
   const stop=()=>{paint=false;last=null;};canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
   const actions=document.createElement('div');actions.style.cssText='display:flex;gap:9px;flex-wrap:wrap;justify-content:center';
-  actions.append(mk('실행 취소',()=>{if(undo){alpha.set(undo);undo=null;checker();}}),mk('자동 추출로 초기화',()=>{undo=alpha.slice();alpha.set(startAlpha);checker();}),mk('닫기',()=>dialog.remove()),mk('보정 적용',async()=>{
+  actions.append(mk('실행 취소',()=>{if(undo){alpha.set(undo);undo=null;checker();}}),mk('현재 범위 자동값으로 초기화',()=>{undo=alpha.slice();alpha.set(startAlpha);checker();}),mk('닫기',()=>dialog.remove()),mk('보정 적용',async()=>{
    let left=w,top=h,right=-1,bottom=-1;
    for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}}
    if(right<left||bottom<top){alert('남은 킬로그 픽셀이 없습니다.');return;}
@@ -7319,10 +7390,11 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    const m=Math.max(3,Math.round(w*.009));
    r.inner={x:Math.max(0,left-m),y:Math.max(0,top-m),w:1,h:1};
    r.inner.w=Math.min(w-1,right+m)-r.inner.x+1;r.inner.h=Math.min(h-1,bottom+m)-r.inner.y+1;
-   r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true};
-   if(await encodeResult(r)){dialog.remove();resultView();drawSelections();editStatus('원본 픽셀 기준으로 장식을 수정했습니다.');}
+   r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true,manualRegion:{x0,y0,x1,y1}};
+   if(await encodeResult(r)){dialog.remove();resultView();drawSelections();editStatus('원본 픽셀 기준으로 장식을 수정했고, 남은 킬로그를 기준으로 결과를 다시 중앙 정렬했습니다.');}
   }));
-  dialog.append(h3,hint,tools,canvas,actions);document.body.append(dialog);maskEditor=dialog;
+  reloadRegion(initialX0,initialY0,initialX1,initialY1,false);
+  dialog.append(h3,hint,tools,expandTools,regionInfo,canvas,actions);document.body.append(dialog);maskEditor=dialog;
  }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;
@@ -7473,4 +7545,3 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
 
 </body>
 </html>
-
