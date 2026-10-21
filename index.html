@@ -7242,13 +7242,11 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const r=results[index];if(!r?.bounds||!r.master)return;
   active=r.photo;redraw();
   const W=view.width,H=view.height,b=r.bounds;
-  // '인식 범위'는 편집 캔버스의 줌/여백이 아니라 실제로 복원될 원본 픽셀의 범위다.
-  // 기기 CSS 크기와 관계없이 원본 사진의 픽셀 단위를 그대로 사용한다.
-  const maxRange=Math.min(220,Math.max(100,Math.round(b.h*2.2)));
-  const x0=Math.max(0,Math.floor(b.x-maxRange));
-  const y0=Math.max(0,Math.floor(b.y-maxRange));
-  const x1=Math.min(W,Math.ceil(b.x+b.w+maxRange));
-  const y1=Math.min(H,Math.ceil(b.y+b.h+maxRange));
+  const maxExpand=Math.min(220,Math.max(100,Math.round(b.h*2.2)));
+  const x0=Math.max(0,Math.floor(b.x-maxExpand));
+  const y0=Math.max(0,Math.floor(b.y-maxExpand));
+  const x1=Math.min(W,Math.ceil(b.x+b.w+maxExpand));
+  const y1=Math.min(H,Math.ceil(b.y+b.h+maxExpand));
   const w=x1-x0,h=y1-y0;
   if(w<2||h<2)return;
   const source=ctx.getImageData(x0,y0,w,h).data;
@@ -7261,49 +7259,48 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     baseAlpha[Y*w+X]=old[(y*r.master.width+x)*4+3];
    }
   }
-  // 슬라이더로 새로 인식할 픽셀의 후보를 원본에서 미리 계산한다.
-  // 위·아래의 실제 게임 배경을 열 단위로 비교하므로 밝은 장식/막대를 우선 추출한다.
-  // 배경과 색이 비슷한 특수 장식은 아래 복원 브러쉬로 보완할 수 있다.
   const candidates=new Uint8Array(w*h);
-  const outside=new Uint16Array(w*h);
-  const topRefY=Math.min(h-1,Math.max(0,Math.round(b.y-maxRange-y0)));
-  const botRefY=Math.max(0,Math.min(h-1,Math.round(b.y+b.h+maxRange-1-y0)));
+  const topRefY=Math.min(h-1,Math.max(0,Math.round(b.y-maxExpand-y0)));
+  const botRefY=Math.max(0,Math.min(h-1,Math.round(b.y+b.h+maxExpand-1-y0)));
   for(let y=0;y<h;y++){
-   const absY=y+y0;
-   const dy=Math.max(0,b.y-absY,absY-(b.y+b.h-1));
    for(let x=0;x<w;x++){
-    const absX=x+x0,k=y*w+x,j=k*4;
-    const dx=Math.max(0,b.x-absX,absX-(b.x+b.w-1));
-    outside[k]=Math.ceil(Math.max(dx,dy));
+    const k=y*w+x,j=k*4;
     if(baseAlpha[k]>24)continue;
     const t=(topRefY*w+x)*4,q=(botRefY*w+x)*4;
     const R=source[j],G=source[j+1],B=source[j+2];
     const diffTop=Math.max(Math.abs(R-source[t]),Math.abs(G-source[t+1]),Math.abs(B-source[t+2]));
     const diffBot=Math.max(Math.abs(R-source[q]),Math.abs(G-source[q+1]),Math.abs(B-source[q+2]));
     const delta=Math.min(diffTop,diffBot),hi=Math.max(R,G,B),lo=Math.min(R,G,B);
-    // 주변 게임 화면과 색이 다르고 밝은 장식/텍스트/색상 막대만 자동으로 포함한다.
     if(delta>=30&&(hi-lo>=18||hi>=125))candidates[k]=Math.max(0,Math.min(255,Math.round((delta-23)*13)));
    }
   }
-  // 브러쉬로 고친 픽셀은 범위를 줄였다 늘려도 유지한다.
-  // -1: 자동 결과, 0: 지우기, 255: 복원
   const painted=new Int16Array(w*h);painted.fill(-1);
   const alpha=new Uint8ClampedArray(w*h);
-  let range=0,mode='restore',painting=false,last=null,undo=null,hover=null,framePending=false;
+  let expandLeft=0,expandRight=0,expandTop=0,expandBottom=0;
+  let mode='restore',painting=false,last=null,undo=null,hover=null,framePending=false;
   const dialog=document.createElement('div');
   dialog.style.cssText='position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:14px;overflow:auto';
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
   const h3=document.createElement('strong');h3.textContent='킬로그 인식 범위 보정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('p');hint.textContent='인식 범위를 늘리면 원본의 장식을 추가로 인식합니다. 진하게 보이는 부분이 저장되며, 부족한 곳은 복원·불필요한 곳은 지우기로 다듬으세요.';
-  hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:660px';
-  const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;
-   button.style.cssText='padding:10px 12px;min-height:40px;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
-  const rangeRow=document.createElement('div');rangeRow.style.cssText='display:flex;align-items:center;gap:10px;width:100%;max-width:660px;padding:3px 0';
-  const rangeLabel=document.createElement('label');rangeLabel.textContent='인식 범위 0px';rangeLabel.style.cssText='font-size:13px;font-weight:700;min-width:105px';
-  const rangeInput=document.createElement('input');rangeInput.type='range';rangeInput.min='0';rangeInput.max=String(maxRange);rangeInput.step='2';rangeInput.value='0';rangeInput.style.cssText='flex:1;min-width:80px;accent-color:#86aaff';
-  rangeLabel.htmlFor='kl-mask-expand-range';rangeInput.id='kl-mask-expand-range';
-  rangeInput.setAttribute('aria-label','킬로그 인식 범위 확대');
-  rangeRow.append(rangeLabel,rangeInput);
+  const hint=document.createElement('p');hint.textContent='왼쪽·오른쪽·위·아래 인식 범위를 각각 늘릴 수 있습니다. 범위를 늘리면 원본의 장식을 추가로 인식합니다. 부족한 곳은 복원, 불필요한 곳은 지우기로 다듬으세요. 적용하면 결과는 자동으로 중앙에 맞춰집니다.';
+  hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:720px';
+  const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 12px;min-height:40px;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
+  const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:minmax(84px,120px) minmax(140px,1fr);gap:8px 10px;width:100%;max-width:720px;align-items:center';
+  function makeSliderRow(labelText,id,onChange){
+   const label=document.createElement('label');label.htmlFor=id;label.style.cssText='font-size:13px;font-weight:700';
+   const input=document.createElement('input');input.type='range';input.min='0';input.max=String(maxExpand);input.step='2';input.value='0';input.id=id;input.style.cssText='width:100%;accent-color:#86aaff';
+   const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;width:100%';
+   const value=document.createElement('span');value.textContent='0px';value.style.cssText='font-size:12px;color:#cfe0ff;min-width:40px;text-align:right';
+   input.addEventListener('input',()=>{value.textContent=input.value+'px';onChange(Number(input.value));});
+   label.textContent=labelText;
+   row.append(input,value);
+   controls.append(label,row);
+   return input;
+  }
+  const leftInput=makeSliderRow('왼쪽 범위','kl-range-left',v=>{expandLeft=v;updateAlpha();scheduleRender();});
+  const rightInput=makeSliderRow('오른쪽 범위','kl-range-right',v=>{expandRight=v;updateAlpha();scheduleRender();});
+  const topInput=makeSliderRow('위 범위','kl-range-top',v=>{expandTop=v;updateAlpha();scheduleRender();});
+  const bottomInput=makeSliderRow('아래 범위','kl-range-bottom',v=>{expandBottom=v;updateAlpha();scheduleRender();});
   const tools=document.createElement('div');tools.style.cssText='display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap';
   const restore=mk('복원',()=>{mode='restore';setModeStyle();drawCursor()});
   const erase=mk('지우기',()=>{mode='erase';setModeStyle();drawCursor()});
@@ -7311,7 +7308,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   setModeStyle();
   const brushLabel=document.createElement('label');brushLabel.textContent='브러쉬 ';brushLabel.style.cssText='font-size:12px;color:#c3d4f1';
   const brushSize=document.createElement('select');brushSize.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
-  for(const [v,label] of [['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='12')o.selected=true;brushSize.append(o);}
+  for(const [v,label] of [['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='12')o.selected=true;brushSize.append(o);} 
   brushLabel.append(brushSize);brushSize.addEventListener('change',drawCursor);
   tools.append(restore,erase,brushLabel);
   const wrap=document.createElement('div');wrap.style.cssText='position:relative;width:100%;max-width:1050px;line-height:0;border:1px solid #53657f;border-radius:8px;overflow:hidden';
@@ -7320,13 +7317,14 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   wrap.append(canvas,cursorCanvas);
   const g=canvas.getContext('2d',{willReadFrequently:true}),cg=cursorCanvas.getContext('2d');
   const image=g.createImageData(w,h);
+  function withinExpandedRect(absX,absY){
+   return absX>=b.x-expandLeft&&absX<=b.x+b.w-1+expandRight&&absY>=b.y-expandTop&&absY<=b.y+b.h-1+expandBottom;
+  }
   function updateAlpha(){
-   const rr=range;
-   for(let k=0;k<alpha.length;k++){
-    // 범위를 넓히면 자동 후보 픽셀을 실제 알파 마스크에 추가한다.
-    // 편집 영역만 커지는 기존 문제를 없앴다.
+   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const k=y*w+x;
     let a=baseAlpha[k];
-    if(rr>0&&outside[k]<=rr)a=Math.max(a,candidates[k]);
+    if(candidates[k]&&withinExpandedRect(x+x0,y+y0))a=Math.max(a,candidates[k]);
     if(painted[k]!==-1)a=painted[k];
     alpha[k]=a;
    }
@@ -7343,11 +7341,10 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     dat[j+3]=255;
    }
    g.putImageData(image,0,0);
-   // 노란 점선은 인식 범위. 단순한 화면 줌/여백 표시가 아니다.
-   const lx=Math.max(0,b.x-x0-range),ly=Math.max(0,b.y-y0-range);
-   const rx=Math.min(w,b.x+b.w-x0+range),by=Math.min(h,b.y+b.h-y0+range);
-   g.save();g.strokeStyle='#ffd36e';g.lineWidth=Math.max(1,w/600);
-   g.setLineDash([7,5]);g.strokeRect(lx+.5,ly+.5,Math.max(1,rx-lx-1),Math.max(1,by-ly-1));g.restore();
+   const lx=Math.max(0,b.x-x0-expandLeft),ly=Math.max(0,b.y-y0-expandTop);
+   const rx=Math.min(w,b.x+b.w-x0+expandRight),by=Math.min(h,b.y+b.h-y0+expandBottom);
+   g.save();g.strokeStyle='#ffd36e';g.lineWidth=Math.max(1,w/600);g.setLineDash([7,5]);
+   g.strokeRect(lx+.5,ly+.5,Math.max(1,rx-lx-1),Math.max(1,by-ly-1));g.restore();
   }
   function drawCursor(){
    cg.clearRect(0,0,w,h);if(!hover)return;
@@ -7368,10 +7365,8 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   function stroke(a,b){
    const steps=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,Number(brushSize.value)/3)));
-   for(let i=0;i<=steps;i++){const t=i/steps;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}
-   scheduleRender();
+   for(let i=0;i<=steps;i++){const t=i/steps;dot(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);}scheduleRender();
   }
-  rangeInput.addEventListener('input',()=>{range=Number(rangeInput.value);rangeLabel.textContent=`인식 범위 ${range}px`;updateAlpha();scheduleRender();});
   canvas.addEventListener('pointerdown',e=>{if(e.button!==0&&e.pointerType==='mouse')return;
    painting=true;undo=painted.slice();last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
   canvas.addEventListener('pointermove',e=>{hover=point(e);drawCursor();if(!painting)return;stroke(last,hover);last=hover;e.preventDefault();});
@@ -7381,11 +7376,11 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center';
   actions.append(
    mk('실행 취소',()=>{if(!undo)return;painted.set(undo);undo=null;updateAlpha();scheduleRender();}),
-   mk('초기화',()=>{range=0;rangeInput.value='0';rangeLabel.textContent='인식 범위 0px';painted.fill(-1);undo=null;updateAlpha();scheduleRender();}),
+   mk('초기화',()=>{expandLeft=expandRight=expandTop=expandBottom=0;leftInput.value=rightInput.value=topInput.value=bottomInput.value='0';for(const span of controls.querySelectorAll('span'))span.textContent='0px';painted.fill(-1);undo=null;updateAlpha();scheduleRender();}),
    mk('닫기',()=>dialog.remove()),
    mk('보정 적용',async()=>{
     let left=w,top=h,right=-1,bottom=-1;
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(alpha[y*w+x]>=9){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);} 
     if(right<left||bottom<top){alert('남은 킬로그 픽셀이 없습니다.');return;}
     const c=document.createElement('canvas');c.width=w;c.height=h;const cg2=c.getContext('2d');
     const out=cg2.createImageData(w,h);
@@ -7396,15 +7391,16 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     r.inner={x:Math.max(0,left-margin),y:Math.max(0,top-margin),w:1,h:1};
     r.inner.w=Math.min(w-1,right+margin)-r.inner.x+1;
     r.inner.h=Math.min(h-1,bottom+margin)-r.inner.y+1;
-    r.baseInner={...r.inner};r.meta={...r.meta,manualRepair:true,recognitionExpandPx:range};
+    r.baseInner={...r.inner};
+    r.meta={...r.meta,manualRepair:true,recognitionExpand:{left:expandLeft,right:expandRight,top:expandTop,bottom:expandBottom}};
     if(await encodeResult(r)){
      dialog.remove();resultView();drawSelections();
-     editStatus('인식 범위와 장식을 반영했습니다. 남은 픽셀 기준으로 결과가 자동 중앙 정렬됐습니다.');
+     editStatus('인식 범위를 좌우상하로 반영했고, 결과를 자동 중앙 정렬했습니다.');
     }
    })
   );
   updateAlpha();render();
-  dialog.append(h3,hint,rangeRow,tools,wrap,actions);document.body.append(dialog);maskEditor=dialog;
+  dialog.append(h3,hint,controls,tools,wrap,actions);document.body.append(dialog);maskEditor=dialog;
  }
  function deleteResult(idx){
   if(idx<0||!results[idx])return;
