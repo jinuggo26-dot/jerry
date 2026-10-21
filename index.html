@@ -902,6 +902,18 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 @media(max-width:640px){.guide-body{padding:12px}.guide-body section{padding:12px}.guide-header{padding:13px}.guide-footer{padding:10px 12px}.global-tabs > #btn-guide{font-size:clamp(11.5px,3.25vw,14px)!important;min-height:48px!important;}}
 
 </style>
+<style>
+#sna-report-open{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:100001;min-height:42px;padding:9px 14px;border:1px solid #7892bc;background:#263c5e;color:#f4f7ff;border-radius:25px;font-weight:750;box-shadow:0 4px 16px #0008;display:none}
+#sna-report-open:focus-visible{outline:3px solid #b6d0ff}
+#sna-report-dialog select,#sna-report-dialog textarea{background:#13233c;color:#f0f5ff;border:1px solid #5973a0;border-radius:9px;padding:10px;min-height:42px}
+.sna-report-item{margin:10px 0;background:#162740;border:1px solid #526888;border-radius:10px;padding:11px;overflow-wrap:anywhere}
+.sna-report-item img{max-width:100%;max-height:180px;object-fit:contain}
+.sna-compare-backdrop{position:fixed;inset:0;background:#060912f5;z-index:10000145;padding:14px;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:12px;color:#fff}
+.sna-compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:min(96vw,1050px)}
+.sna-compare-grid>div{min-width:0;border:1px solid #586d8d;border-radius:12px;padding:12px;background:#17283f}
+.sna-compare-grid img,.sna-compare-grid canvas{width:100%;height:auto;object-fit:contain;display:block}
+@media(max-width:600px){.sna-compare-grid{grid-template-columns:1fr}}
+</style>
 </head>
 
 <body>
@@ -963,6 +975,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
  };
 })();
 </script>
+<button id="sna-report-open" type="button">🛠 오류 신고</button>
 <div id="auth-screen">
  <div class="auth-box" id="view-user-form">
   <h2>🔐 대필 편집기 로그인 / 회원가입</h2>
@@ -985,6 +998,14 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
   <button class="auth-btn" id="request-again" type="button" onclick="window.requestAgain()">로그아웃 / 다른 계정</button>
  </div>
 </div>
+<section id="sna-report-dialog" class="member-shade" style="display:none;z-index:10000150;position:fixed;inset:0" role="dialog" aria-modal="true" aria-label="오류 신고 및 개선 요청"><div class="member-modal" style="width:min(95vw,600px);max-height:90dvh;overflow:auto">
+ <h2>🛠 오류 신고·개선 요청</h2><p class="member-tip">사진 첨부는 선택사항이며, 동의하지 않으면 사진을 전송하지 않습니다.</p>
+ <label>종류 <select id="sna-report-kind" style="width:100%;padding:10px;border-radius:8px"><option>킬로그 추출</option><option>옷 추출</option><option>총 자르기</option><option>대필판 제작</option><option>저장 오류</option><option>기능 개선 제안</option><option>기타</option></select></label>
+ <label style="display:block;margin-top:10px">내용 <textarea id="sna-report-body" maxlength="1500" rows="5" placeholder="어떤 문제가 발생했고 무엇을 기대했는지 적어 주세요" style="width:100%"></textarea></label>
+ <label style="display:block;margin-top:10px">문제 사진 (선택) <input type="file" id="sna-report-file" accept="image/png,image/jpeg,image/webp" style="max-width:100%"></label>
+ <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input id="sna-report-photo-consent" type="checkbox"> 사진을 관리자에게 전송하는 데 동의합니다</label>
+ <p id="sna-report-status" role="status" class="member-tip"></p><div class="member-controls"><button id="sna-report-cancel" class="member-btn" type="button">닫기</button><button id="sna-report-send" class="member-btn primary" type="button">신고 제출</button></div>
+ </div></section>
 <div id="admin-dashboard">
  <div class="admin-header">
   <h2>🛠 관리자 대시보드</h2>
@@ -1022,6 +1043,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
  <p id="admin-release-status" class="release-status" role="status" aria-live="polite"></p>
  <div id="admin-release-list" class="release-list" aria-label="등록된 업데이트 목록"></div>
 </section>
+<div class="member-panel" id="sna-admin-reports"><h3>🛠 사용자 오류 신고·개선 요청</h3><p>최고 관리자만 열람하고 처리 상태를 변경할 수 있습니다.</p><p id="sna-admin-report-status" class="member-tip"></p><div id="sna-admin-report-list"></div></div>
 <div class="member-panel"><h3>🖼 대필 전시관 관리</h3><p>공개된 작품을 검토하고 필요한 경우 삭제할 수 있습니다.</p><div id="admin-gallery-list"></div></div>
 <div class="member-controls" style="margin-bottom:10px"><input id="admin-user-search" type="search" placeholder="회원 이름 검색" aria-label="회원 검색" style="flex:1"><select id="admin-user-grade-filter" aria-label="등급 검색"><option value="">모든 등급</option><option value="silver">실버</option><option value="gold">골드</option><option value="vip">VIP</option></select></div>
 <div id="admin-user-list"></div>
@@ -1108,6 +1130,144 @@ window.logActivity=async(action,detail={})=>{
  }catch(e){console.warn("작업 로그 저장 실패",e);}
 };
 
+
+// 스나: 계정별 프리셋 및 오류 신고 (Firestore 서버 규칙이 권한을 강제)
+const snaPresetSelect=document.getElementById('sna-preset-list');
+const snaPresetState=document.getElementById('sna-preset-status');
+const snaCloud={uid:null,presets:[],unsub:null,reportUnsub:null,admin:false};
+const snaMsg=(id,s)=>{const el=document.getElementById(id);if(el)el.textContent=s;};
+function snaFallbackKey(){return 'sna-private-presets-v1:'+snaCloud.uid;}
+function snaLocalPresets(){try{return JSON.parse(localStorage.getItem(snaFallbackKey())||'[]')}catch(e){return []}}
+function snaWriteLocalPresets(list){localStorage.setItem(snaFallbackKey(),JSON.stringify(list.slice(0,40)));}
+function snaRenderPresets(){
+ if(!snaPresetSelect)return;
+ const current=snaPresetSelect.value;
+ snaPresetSelect.replaceChildren(new Option('저장된 설정 선택',''));
+ for(const preset of snaCloud.presets)snaPresetSelect.add(new Option((preset.source==='local'?'📱 ':'☁ ')+preset.name,preset.id));
+ if(snaCloud.presets.some(p=>p.id===current))snaPresetSelect.value=current;
+}
+function snaSetFallbackPresets(){snaCloud.presets=snaLocalPresets().map(p=>({...p,source:'local'}));snaRenderPresets();}
+function snaStartPresets(uid){
+ if(snaCloud.unsub){snaCloud.unsub();snaCloud.unsub=null;}
+ if(!uid){snaCloud.presets=[];snaRenderPresets();return;}
+ snaSetFallbackPresets();
+ snaCloud.unsub=onSnapshot(query(collection(db,'users',uid,'presets'),orderBy('updatedAt','desc'),limit(40)),snap=>{
+  const fromCloud=snap.docs.map(d=>({id:d.id,source:'cloud',...d.data()}));
+  const local=snaLocalPresets().filter(p=>!fromCloud.some(a=>a.id===p.id)).map(p=>({...p,source:'local'}));
+  snaCloud.presets=[...fromCloud,...local].slice(0,40);snaRenderPresets();
+  snaMsg('sna-preset-status','클라우드 프리셋 '+fromCloud.length+'개'+(local.length?` · 기기 전용 ${local.length}개`:'')+' · 계정별 저장');
+ },err=>{
+  console.warn('프리셋 구독 오류',err);
+  snaSetFallbackPresets();snaMsg('sna-preset-status','Firebase 권한/연결 오류. 지금은 기기 내부 프리셋만 표시합니다.');
+ });
+}
+window.SnaCloudSession=uid=>{
+ snaCloud.uid=uid||null;
+ const b=document.getElementById('sna-report-open');if(b)b.style.display=uid?'':'none';
+ snaStartPresets(uid);
+ window.SnaDraft?.setUser(uid);
+ if(!uid&&snaCloud.reportUnsub){snaCloud.reportUnsub();snaCloud.reportUnsub=null;}
+};
+const snaSavePreset=document.getElementById('sna-preset-save');
+snaSavePreset?.addEventListener('click',async()=>{
+ if(!snaCloud.uid)return snaMsg('sna-preset-status','로그인 후 이용할 수 있습니다.');
+ const name=document.getElementById('sna-preset-title').value.trim();
+ if(!name||name.length>40)return snaMsg('sna-preset-status','프리셋 이름을 1~40자로 입력해 주세요.');
+ if(!window.SnaBoard)return;
+ const settings=window.SnaBoard.getSettings();
+ const item={name,settings,uid:snaCloud.uid,createdAt:Date.now(),updatedAt:Date.now()};
+ snaSavePreset.disabled=true;
+ try{
+  const ref=doc(collection(db,'users',snaCloud.uid,'presets'));
+  await setDoc(ref,item);
+  snaPresetSelect.value=ref.id;
+  snaMsg('sna-preset-status','Firebase에 프리셋을 저장했습니다. 다른 기기에서도 로그인해 불러올 수 있습니다.');
+ }catch(e){
+  const records=snaLocalPresets();
+  const entry={...item,id:'local-'+Date.now()};records.unshift(entry);
+  try{snaWriteLocalPresets(records);snaSetFallbackPresets();snaPresetSelect.value=entry.id;
+   snaMsg('sna-preset-status','Firebase 저장이 차단되어 이 기기에만 저장했습니다. 보안 규칙을 확인해 주세요.');}
+  catch(err){snaMsg('sna-preset-status','프리셋 저장 실패: 기기 저장 공간 또는 권한을 확인해 주세요.');}
+ }finally{snaSavePreset.disabled=false;}
+});
+document.getElementById('sna-preset-load')?.addEventListener('click',()=>{
+ const p=snaCloud.presets.find(p=>p.id===snaPresetSelect.value);
+ if(!p)return snaMsg('sna-preset-status','먼저 저장된 프리셋을 선택해 주세요.');
+ window.SnaBoard?.applySettings(p.settings);
+ snaMsg('sna-preset-status',`'${p.name}' 설정을 불러왔습니다.`);
+ window.SnaDraft?.queue('board');
+});
+document.getElementById('sna-preset-delete')?.addEventListener('click',async()=>{
+ const p=snaCloud.presets.find(p=>p.id===snaPresetSelect.value);if(!p)return;
+ if(!await window.uiConfirm?.(`'${p.name}' 설정을 삭제할까요?`))return;
+ try{
+  if(p.source==='cloud')await deleteDoc(doc(db,'users',snaCloud.uid,'presets',p.id));
+  else{snaWriteLocalPresets(snaLocalPresets().filter(x=>x.id!==p.id));snaCloud.presets=snaCloud.presets.filter(x=>x.id!==p.id);snaRenderPresets();}
+  snaMsg('sna-preset-status','프리셋을 삭제했습니다.');
+ }catch(e){snaMsg('sna-preset-status','삭제 실패: Firebase 규칙을 확인해 주세요.');}
+});
+// 오류 신고: 사용자 명시 동의 시에만 축소 썸네일 포함
+function snaReportClose(){document.getElementById('sna-report-dialog').style.display='none';}
+document.getElementById('sna-report-open')?.addEventListener('click',()=>{
+ if(!snaCloud.uid||document.getElementById('auth-screen')?.style.display!=='none')return window.uiAlert?.('승인된 계정으로 로그인한 후 신고할 수 있습니다.');
+ document.getElementById('sna-report-dialog').style.display='flex';
+});
+document.getElementById('sna-report-cancel')?.addEventListener('click',snaReportClose);
+async function snaSmallReportImage(file){
+ const url=URL.createObjectURL(file);
+ try{
+  const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=url;});
+  const scale=Math.min(1,640/Math.max(img.naturalWidth,img.naturalHeight));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  const txt=c.toDataURL('image/jpeg',.65);
+  if(txt.length>175000)throw new Error('이미지 용량 초과');
+  return txt;
+ }finally{URL.revokeObjectURL(url);}
+}
+document.getElementById('sna-report-send')?.addEventListener('click',async()=>{
+ if(!snaCloud.uid)return;
+ const body=document.getElementById('sna-report-body').value.trim();
+ const category=document.getElementById('sna-report-kind').value;
+ const file=document.getElementById('sna-report-file').files?.[0];
+ if(body.length<10)return snaMsg('sna-report-status','설명을 10자 이상 입력해 주세요.');
+ if(file&&!document.getElementById('sna-report-photo-consent').checked)return snaMsg('sna-report-status','사진 첨부에 동의하거나 사진을 선택 해제해 주세요.');
+ if(file&&file.size>12*1024*1024)return snaMsg('sna-report-status','12MB 이하의 이미지만 첨부할 수 있습니다.');
+ const send=document.getElementById('sna-report-send');send.disabled=true;
+ snaMsg('sna-report-status','전송 중…');
+ try{
+  const thumb=file?await snaSmallReportImage(file):'';
+  await addDoc(collection(db,'feedbackReports'),{uid:snaCloud.uid,name:savedName||'회원',category,body,thumb,status:'new',createdAt:Date.now(),updatedAt:Date.now()});
+  snaMsg('sna-report-status','신고가 접수되었습니다.');
+  document.getElementById('sna-report-body').value='';document.getElementById('sna-report-file').value='';document.getElementById('sna-report-photo-consent').checked=false;
+  window.logActivity?.('오류 신고 등록',{category});
+ }catch(e){console.warn(e);snaMsg('sna-report-status','전송 실패: Firebase 권한과 네트워크를 확인해 주세요. 내용은 전송되지 않았습니다.');}
+ finally{send.disabled=false;}
+});
+function snaStartReportAdmin(){
+ if(!isAdminMode||!authUser)return;
+ if(snaCloud.reportUnsub){snaCloud.reportUnsub();snaCloud.reportUnsub=null;}
+ const holder=document.getElementById('sna-admin-report-list');if(!holder)return;
+ snaCloud.reportUnsub=onSnapshot(query(collection(db,'feedbackReports'),orderBy('createdAt','desc'),limit(80)),snap=>{
+  holder.replaceChildren();
+  snaMsg('sna-admin-report-status',snap.size+'건 · 최근 80건까지 표시');
+  for(const d of snap.docs){
+   const r=d.data(),item=document.createElement('article');item.className='sna-report-item';
+   const name=document.createElement('strong');name.textContent=`${r.category||'기타'} · ${r.name||'회원'} · ${new Date(r.createdAt).toLocaleString('ko-KR')}`;
+   const text=document.createElement('p');text.textContent=r.body;
+   const actions=document.createElement('div');actions.className='member-controls';
+   const state=document.createElement('select');state.setAttribute('aria-label','처리 상태');
+   for(const [code,label] of [['new','새 신고'],['reviewing','검토 중'],['resolved','처리 완료']])state.add(new Option(label,code));
+   state.value=r.status||'new';state.onchange=async()=>{try{await updateDoc(doc(db,'feedbackReports',d.id),{status:state.value,updatedAt:Date.now()});}catch(e){snaMsg('sna-admin-report-status','수정 실패: 관리자 규칙을 확인해 주세요.');}};
+   actions.append(state);
+   item.append(name,text);
+   if(r.thumb&&/^data:image\/jpeg;base64,/.test(r.thumb)){const img=document.createElement('img');img.src=r.thumb;img.alt='사용자가 첨부한 오류 이미지';item.append(img);}
+   item.append(actions);holder.append(item);
+  }
+ },e=>{console.warn(e);snaMsg('sna-admin-report-status','신고 목록 접근이 차단됐습니다. Firebase 규칙을 확인해 주세요.');});
+}
+// Administrator authorization comes from verified Firebase Custom Claim.
+window.SnaAdminReportsStart=snaStartReportAdmin;
 
 // ===== 수동 회원 등급제 =====
 const GRADE_NAMES={silver:'실버',gold:'골드',vip:'VIP'};
@@ -1573,6 +1733,7 @@ const displayLogin=(message='')=>{
  if(message)authMsg(message);
 };
 async function resetCurrentSession(){
+ window.SnaCloudSession?.(null);
  if(userUnsubscribe){userUnsubscribe();userUnsubscribe=null;}
  if(memberContentUnsubscribes.length)stopMemberContentSubscriptions();
  for(const unsub of liveUnsubscribes)try{unsub();}catch(e){};
@@ -1631,7 +1792,7 @@ window.openAdminPrompt=async()=>{
   isAdminMode=true;
   document.getElementById('btn-admin').style.display='';
   document.getElementById('admin-dashboard').style.display='block';
-  loadAdminData();refreshGradeUI();
+  loadAdminData();refreshGradeUI();window.SnaAdminReportsStart?.();
  }catch(e){console.error(e);window.uiAlert?.('관리자 권한 확인에 실패했어요. 다시 로그인해 주세요.');}
 };
 window.requestAccess=async()=>{
@@ -1689,6 +1850,7 @@ window.registerMember=async()=>{
 };
 async function afterAuthLogin(user){
  authUser=user;
+ window.SnaCloudSession?.(user.uid);
  const token=await getIdTokenResult(user,true);
  if(token.claims.admin===true){
   isAdminMode=true;
@@ -1697,7 +1859,7 @@ async function afterAuthLogin(user){
   currentMember={name:ADMIN_NAME,grade:'vip',status:'approved',membershipMode:'gradeOnly',gradeDuration:'permanent',gradeExpiresAt:null};
   accessExpiry=Infinity;authScreen.style.display='none';refreshGradeUI();
   liveUnsubscribes.push(startGradeSubscription(),startNoticesSubscription(),startGallerySubscription());
-  loadAdminData();
+  loadAdminData();window.SnaAdminReportsStart?.();
   return;
  }
  isAdminMode=false;
@@ -2199,6 +2361,7 @@ window.closeAdmin=()=>{
    <section><h3>5. 📝 대필판 만들기</h3><ol><li><strong>대필판</strong>에서 옷 사진과 총기·차량 사진을 각각 추가하세요.</li><li>저스펙·중스펙·고스펙 판을 선택하고 사진 순서와 배치를 확인하세요.</li><li>문의 문구, 보조 문구, 대필 이름, 옷·총 이름과 레벨을 입력하세요.</li><li>필요하면 글자 크기·위치·색상·그림자를 조절하고 미리보기를 확인하세요.</li><li><strong>PNG 저장</strong>을 누르면 대필판 결과를 저장할 수 있어요.</li></ol></section>
    <section><h3>6. 🏛️ 전시관과 작품 관리</h3><ol><li>대필판 PNG 저장 시 작품이 <strong>전시관에 자동 등록·공개</strong>될 수 있어요. 저장 전 공개될 내용과 사진을 확인하세요.</li><li><strong>전시관</strong>에서 전체 공개 작품을 확인하거나 <strong>내 작품</strong>을 선택하세요.</li><li>필요하면 본인이 등록한 작품을 찾아 삭제할 수 있어요. 이용 권한·기간에 따라 접근이 제한될 수 있어요.</li></ol></section>
    <section><h3>7. 📥 저장과 문제 해결</h3><ul><li>기기에 공유·저장 창이 뜨면 사진 또는 파일 앱에 저장할 곳을 선택하세요. 브라우저에 따라 다운로드 방식이 달라질 수 있어요.</li><li>사진이 인식되지 않으면 잘린 결과가 아니라 <strong>원본 스크린샷</strong>을 사용하고, 해당 기능과 일반/고번 모드를 다시 확인하세요.</li><li>장식이 잘렸거나 검은 잔배경이 남으면 보정 기능을 사용하고 저장 전에 PNG를 확대해서 확인하세요.</li><li>프로그램 변경 사항은 <strong>ℹ 제작자 → 업데이트 내역</strong>에서 확인할 수 있어요.</li></ul></section>
+   <section><h3>8. 💾 새 기능: 작업 저장·프리셋·일괄 추출</h3><ol><li><strong>작업 이어하기:</strong> 대필판의 '현재 작업 임시 저장' 또는 킬로그 사진함의 '지금 저장'을 누르세요. 자동 저장도 작동하며, 다시 접속할 때 '이전 작업 이어하기'로 원본과 설정을 불러올 수 있어요. 이 기기의 브라우저 데이터를 삭제하면 사라질 수 있어요.</li><li><strong>실행 취소·다시 실행:</strong> 킬로그의 '인식 범위·장식 보정' 창에서 브러쉬나 범위 슬라이더를 수정한 후 ↶/↷ 버튼을 사용하세요.</li><li><strong>원본 비교:</strong> 킬로그 결과의 '원본·결과 비교'를 눌러 원본과 투명 PNG를 나란히 확인하세요.</li><li><strong>개인별 설정:</strong> 대필판 아래에 설정 이름을 쓰고 '내 설정 추가'를 누른 뒤, 목록에서 불러오거나 삭제하세요. Firebase 규칙이 없으면 기기 내부에만 임시 저장돼요.</li><li><strong>일괄 추출:</strong> 옷·총은 '사진함 자동 추출', 킬로그는 '현재 사진함 일괄 추출'을 누르세요. 인식 실패 사진은 직접 확인하세요.</li><li><strong>오류 신고:</strong> 로그인 후 화면 오른쪽 아래의 '오류 신고'를 누르세요. 사진 첨부는 선택사항이며 동의한 경우에만 전송합니다.</li></ol></section>
   </div>
   <footer class="guide-footer"><button type="button" class="guide-done" data-close-guide>이해했어요</button></footer>
  </article>
@@ -2310,6 +2473,7 @@ window.closeAdmin=()=>{
 <div class="action-row">
  <button class="action" onclick="window.c_clearCurrentSelection()">선택 해제</button>
  <button class="action main" onclick="window.c_extractSelected()">✂ 선택한 옷 자르기</button>
+ <button class="action" type="button" onclick="window.c_autoExtractAll()">🔎 사진함 자동 추출</button>
 </div>
 
 <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:34px;margin-bottom:12px">
@@ -2408,6 +2572,7 @@ window.closeAdmin=()=>{
 <div class="action-row">
  <button class="action" onclick="window.g_clearCurrentSelection()">선택 해제</button>
  <button class="action main" onclick="window.g_extractSelected()">✂ 선택한 카드 자르기</button>
+ <button class="action" type="button" onclick="window.g_autoExtractAll()">🔎 사진함 자동 추출</button>
 </div>
 
 <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:34px;margin-bottom:12px">
@@ -2447,6 +2612,10 @@ window.closeAdmin=()=>{
   <div id="kl-upload-special" style="display:none">
    <label class="upload" for="kl-files-special"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>고번 킬로그 사진 추가하기</strong><span>PNG · JPG · WEBP / 여러 장 선택 가능 · 고번 사진함에만 추가</span></div></div></label>
    <input id="kl-files-special" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+  </div>
+  <div class="photo-panel"><div class="panel-head"><strong>일괄 작업</strong><span id="kl-batch-state" style="font-size:12px;color:#adbfdf" role="status">준비</span></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="photo-button" type="button" id="kl-batch-start">🔎 현재 사진함 일괄 추출</button><button class="photo-button" type="button" id="kl-batch-stop" disabled>중단</button><button class="photo-button" type="button" id="kl-resume">↩ 임시 작업 이어하기</button><button class="photo-button" type="button" id="kl-save-draft">💾 지금 저장</button></div>
+   <p style="font-size:12px;color:#afc2db;margin:7px 0 0">사진별 한 개의 킬로그를 검출하며, 실패한 사진은 직접 터치해 확인하세요. 자동 정밀 보정은 실행하지 않습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>사진 목록</strong><button class="photo-button" id="kl-clear" type="button" title="현재 선택한 킬로그 종류의 사진과 결과만 삭제합니다">현재 사진함 비우기</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 자를 킬로그 선택</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
@@ -2749,6 +2918,20 @@ window.closeAdmin=()=>{
     <button id="b_savePng" type="button" class="board-btn primary">⬇ PNG 대필판 저장</button>
     <button id="b_saveSettings" type="button" class="board-btn">💾 설정 저장</button>
    </div>
+   <div class="board-row" style="margin-top:8px;align-items:center">
+    <input type="text" id="sna-preset-title" maxlength="40" placeholder="내 설정 이름 (예: 스나 기본)" aria-label="프리셋 이름" style="width:100%;min-height:44px;background:#182844;color:white;border:1px solid #53678c;border-radius:9px;padding:10px">
+    <button id="sna-preset-save" class="board-btn" type="button">☁ 내 설정 추가</button>
+    <select id="sna-preset-list" aria-label="저장된 프리셋" style="min-height:44px;background:#182844;color:white;border:1px solid #53678c;border-radius:9px;padding:8px"><option value="">저장된 설정 선택</option></select>
+    <button id="sna-preset-load" class="board-btn" type="button">불러오기</button>
+    <button id="sna-preset-delete" class="board-btn danger" type="button">삭제</button>
+   </div>
+   <p id="sna-preset-status" role="status" class="board-small">설정 프리셋은 로그인한 계정의 Firebase에 저장됩니다. 저장 실패 시 기기 내부에만 임시 보관됩니다.</p>
+   <div class="board-row" style="margin-top:8px">
+    <button id="sna-session-save" class="board-btn" type="button">💾 현재 작업 임시 저장</button>
+    <button id="sna-session-load" class="board-btn" type="button">↩ 이전 작업 이어하기</button>
+    <button id="sna-session-clear" class="board-btn danger" type="button">임시 작업 삭제</button>
+   </div>
+   <p id="sna-session-status" class="board-small" role="status">자동 저장: 기기 내부 IndexedDB · 브라우저 데이터를 삭제하면 사라질 수 있습니다.</p>
    <div class="board-row">
     <button id="b_loadSettings" type="button" class="board-btn">설정 불러오기</button>
     <button id="b_resetSettings" type="button" class="board-btn danger">기본 설정으로 초기화</button>
@@ -3555,6 +3738,26 @@ window.c_clearCurrentSelection=()=>{
  drawSelections();
 };
 
+window.c_autoExtractAll=async()=>{
+ if(!photos.length)return window.uiAlert?.('사진을 먼저 추가해 주세요.');
+ if(!await window.uiConfirm?.('현재 사진함에서 감지된 영역을 모두 선택하고 추출할까요? 저장 전에 결과를 검토해 주세요.'))return;
+ const previous=currentIndex;let selected=0,review=0;
+ for(let i=0;i<photos.length;i++){
+  if(!photos[i])continue;
+  showPhoto(i);
+  if(!photos[i].selected?.length){
+   const found=cards.filter(c=>c&&c.width>12&&c.height>12&&c.x>=0&&c.y>=0&&c.x+c.width<=imageCanvas.width+2&&c.y+c.height<=imageCanvas.height+2).slice(0,60);
+   photos[i].selected=found;
+  }
+  selected+=photos[i].selected.length;
+  if(!photos[i].selected.length)review++;
+ }
+ showPhoto(previous);updatePhotoButtons();
+ if(!selected)return window.uiAlert?.('자동으로 찾은 카드가 없습니다. 각 사진을 터치해 직접 선택해 주세요.');
+ window.c_extractSelected();
+ if(review)window.uiAlert?.(`일괄 추출 완료. ${review}장은 검출된 카드가 없어 직접 확인해야 합니다.`);
+};
+
 window.c_extractSelected=()=>{
 
  const all=[];
@@ -4282,6 +4485,26 @@ window.g_clearCurrentSelection=()=>{
  drawSelections();
 };
 
+
+window.g_autoExtractAll=async()=>{
+ if(!photos.length)return window.uiAlert?.('사진을 먼저 추가해 주세요.');
+ if(!await window.uiConfirm?.('현재 사진함에서 감지된 영역을 모두 선택하고 추출할까요? 저장 전에 결과를 검토해 주세요.'))return;
+ const previous=currentIndex;let selected=0,review=0;
+ for(let i=0;i<photos.length;i++){
+  if(!photos[i])continue;
+  showPhoto(i);
+  if(!photos[i].selected?.length){
+   const found=cards.filter(c=>c&&c.width>12&&c.height>12&&c.x>=0&&c.y>=0&&c.x+c.width<=imageCanvas.width+2&&c.y+c.height<=imageCanvas.height+2).slice(0,60);
+   photos[i].selected=found;
+  }
+  selected+=photos[i].selected.length;
+  if(!photos[i].selected.length)review++;
+ }
+ showPhoto(previous);updatePhotoButtons();
+ if(!selected)return window.uiAlert?.('자동으로 찾은 카드가 없습니다. 각 사진을 터치해 직접 선택해 주세요.');
+ window.g_extractSelected();
+ if(review)window.uiAlert?.(`일괄 추출 완료. ${review}장은 검출된 카드가 없어 직접 확인해야 합니다.`);
+};
 
 window.g_extractSelected=()=>{
 
@@ -6088,6 +6311,11 @@ saveBtn.addEventListener("click",async()=>{
  }
  $("b_savePng").addEventListener("click",savePNG);
 
+ window.SnaBoard={getSettings:currentSettings,applySettings,
+  snapshot:()=>({settings:currentSettings(),clothes:state.clothes.filter(x=>x.file instanceof Blob).map(x=>x.file).slice(0,40),guns:state.guns.filter(x=>x.file instanceof Blob).map(x=>x.file).slice(0,40)}),
+  restore:async draft=>{if(!draft)return;state.clothes.forEach(x=>x.url&&URL.revokeObjectURL(x.url));state.guns.forEach(x=>x.url&&URL.revokeObjectURL(x.url));state.clothes.length=0;state.guns.length=0;
+    if(draft.settings)applySettings(draft.settings);if(draft.clothes?.length)addFiles(draft.clothes,'clothes');if(draft.guns?.length)addFiles(draft.guns,'guns');scheduleDraw();}
+ };
  buildColorSettings();renderItems("clothes");renderItems("guns");updateLoadStatus();scheduleDraw();
  if(document.fonts&&document.fonts.load)document.fonts.load('24px "Jua"').then(()=>scheduleDraw()).catch(()=>{});
 })();
@@ -6423,6 +6651,23 @@ saveBtn.addEventListener("click",async()=>{
   editStatus(`사진 ${r.photo+1}의 ${r.mode==='special'?'고번':'일반'} 킬로그 여백 조절 중입니다.`);
   drawSelections();resultView();
  }
+ function compareResult(r,i){
+  if(!r||!photos[r.photo])return;
+  const shade=document.createElement('div');shade.className='sna-compare-backdrop';shade.setAttribute('role','dialog');shade.setAttribute('aria-modal','true');shade.setAttribute('aria-label','원본과 추출 결과 비교');
+  const title=document.createElement('strong');title.textContent=`사진 ${r.photo+1} · 원본과 추출 결과 비교`;
+  const close=document.createElement('button');close.type='button';close.className='photo-button';close.textContent='닫기 ✕';close.onclick=()=>shade.remove();
+  const grid=document.createElement('div');grid.className='sna-compare-grid';
+  const left=document.createElement('div'),right=document.createElement('div');
+  const ltitle=document.createElement('h3');ltitle.textContent='원본 영역 (배경 포함)';
+  const rtitle=document.createElement('h3');rtitle.textContent='추출 결과 (투명 PNG)';
+  const original=document.createElement('canvas');const srcImg=photos[r.photo].image;
+  const bb=r.bounds,padX=Math.max(8,Math.round(bb.w*.13)),padY=Math.max(8,Math.round(bb.h*.75));
+  const ox=Math.max(0,bb.x-padX),oy=Math.max(0,bb.y-padY),ex=Math.min(srcImg.naturalWidth,bb.x+bb.w+padX),ey=Math.min(srcImg.naturalHeight,bb.y+bb.h+padY);
+  original.width=Math.max(1,ex-ox);original.height=Math.max(1,ey-oy);original.getContext('2d').drawImage(srcImg,ox,oy,original.width,original.height,0,0,original.width,original.height);
+  const final=document.createElement('img');final.src=r.url;final.alt='최종 킬로그 PNG';final.style.background='repeating-conic-gradient(#2a3546 0% 25%,#40516a 0% 50%) 50%/20px 20px';
+  left.append(ltitle,original);right.append(rtitle,final);grid.append(left,right);shade.append(title,close,grid);document.body.append(shade);
+  shade.addEventListener('click',e=>{if(e.target===shade)shade.remove();});
+ }
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
@@ -6439,6 +6684,7 @@ saveBtn.addEventListener("click",async()=>{
    const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
+    mk('원본·결과 비교',()=>compareResult(r,i)),
         mk('개별 저장',()=>saveFiles([r],i)),
     mk('인식 범위·장식 보정',()=>openMaskEditor(i)),
     mk('삭제',()=>deleteResult(i))
@@ -6475,8 +6721,9 @@ saveBtn.addEventListener("click",async()=>{
   status(`${mode==='normal'?'일반':'고번'} 사진을 불러오는 중…`);
   let ok=0;
   // 사진 읽기 중 모드를 바꿔도 결과가 다른 모드 사진함으로 섞이지 않게 고정한다.
-  for(const f of filesToAdd){try{const im=await loadImage(f);target.photos.push({image:im,name:f.name});ok++;}catch(err){console.warn(err);}}
+  for(const f of filesToAdd){try{const im=await loadImage(f);target.photos.push({image:im,name:f.name,file:f});ok++;}catch(err){console.warn(err);}}
   if(ok){
+   window.SnaDraft?.queue('kill');
    target.active=first;
    target.editingIndex=-1;
    if(killlogMode===mode){active=first;editingIndex=-1;redraw();resultView();}
@@ -6486,7 +6733,7 @@ saveBtn.addEventListener("click",async()=>{
  }
  $('kl-files-normal').addEventListener('change',e=>receivePhotos('normal',e));
  $('kl-files-special').addEventListener('change',e=>receivePhotos('special',e));
- $('kl-clear').onclick=()=>{photos.length=0;active=-1;editingIndex=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();drawSelections();};
+ $('kl-clear').onclick=()=>{photos.length=0;active=-1;editingIndex=-1;for(const r of results)URL.revokeObjectURL(r.url);results.length=0;redraw();resultView();drawSelections();window.SnaDraft?.queue('kill');};
  
  function cleanupDetachedBelow(alpha,w,h,raw){
   const seen=new Uint8Array(w*h),queue=new Int32Array(w*h),items=[];
@@ -7652,7 +7899,23 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const painted=new Int16Array(w*h);painted.fill(-1);
   const alpha=new Uint8ClampedArray(w*h);
   let expandLeft=0,expandRight=0,expandTop=0,expandBottom=0;
-  let mode='restore',painting=false,last=null,undo=null,hover=null,framePending=false,panStart=null;
+  let mode='restore',painting=false,last=null,hover=null,framePending=false,panStart=null;
+  const history=[],future=[];
+  const maxHistory=Math.max(3,Math.min(15,Math.floor(12000000/Math.max(1,painted.byteLength))));
+  function historyState(){return {pixels:painted.slice(),ranges:[expandLeft,expandRight,expandTop,expandBottom]};}
+  function recordHistory(){
+   history.push(historyState());if(history.length>maxHistory)history.shift();future.length=0;refreshHistoryButtons();
+  }
+  function restoreHistory(state){
+   if(!state)return;painted.set(state.pixels);
+   [expandLeft,expandRight,expandTop,expandBottom]=state.ranges;
+   [leftInput,rightInput,topInput,bottomInput].forEach((el,i)=>{el.value=String(state.ranges[i]);el.nextElementSibling.textContent=state.ranges[i]+'px';});
+   updateAlpha();scheduleRender();refreshHistoryButtons();
+  }
+  function undoEdit(){if(history.length<2)return;future.push(history.pop());restoreHistory(history[history.length-1]);}
+  function redoEdit(){if(!future.length)return;const item=future.pop();history.push(item);restoreHistory(item);}
+  function refreshHistoryButtons(){if(undoButton)undoButton.disabled=history.length<2;if(redoButton)redoButton.disabled=!future.length;}
+  let undoButton=null,redoButton=null;
   const dialog=document.createElement('div');
   dialog.style.cssText='position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:12px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch';
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
@@ -7667,6 +7930,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;width:100%';
    const value=document.createElement('span');value.textContent='0px';value.style.cssText='font-size:12px;color:#cfe0ff;min-width:40px;text-align:right';
    input.addEventListener('input',()=>{value.textContent=input.value+'px';onChange(Number(input.value));});
+   input.addEventListener('change',()=>recordHistory());
    label.textContent=labelText;
    row.append(input,value);
    controls.append(label,row);
@@ -7835,19 +8099,20 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     panStart={x:e.clientX,y:e.clientY,left:wrap.scrollLeft,top:wrap.scrollTop,id:e.pointerId};
     canvas.style.cursor='grabbing';canvas.setPointerCapture(e.pointerId);e.preventDefault();return;
    }
-   painting=true;undo=painted.slice();last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
+   painting=true;last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
   canvas.addEventListener('pointermove',e=>{
    if(panStart){if(e.pointerId===panStart.id){wrap.scrollLeft=panStart.left+panStart.x-e.clientX;wrap.scrollTop=panStart.top+panStart.y-e.clientY;}e.preventDefault();return;}
    if(mode==='pan')return;
    hover=point(e);drawCursor();if(!painting)return;stroke(last,hover);last=hover;e.preventDefault();
   });
   canvas.addEventListener('pointerleave',()=>{if(!painting&&!panStart){hover=null;drawCursor();}});
-  function stop(e){painting=false;last=null;panStart=null;canvas.style.cursor=mode==='pan'?'grab':'crosshair';if(e&&e.pointerType!=='mouse'){hover=null;drawCursor();}}
+  function stop(e){if(painting&&e?.type==='pointerup')recordHistory();painting=false;last=null;panStart=null;canvas.style.cursor=mode==='pan'?'grab':'crosshair';if(e&&e.pointerType!=='mouse'){hover=null;drawCursor();}}
   canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
   const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center';
+  undoButton=mk('↶ 실행 취소',undoEdit);redoButton=mk('↷ 다시 실행',redoEdit);
   actions.append(
-   mk('실행 취소',()=>{if(!undo)return;painted.set(undo);undo=null;updateAlpha();scheduleRender();}),
-   mk('초기화',()=>{expandLeft=expandRight=expandTop=expandBottom=0;leftInput.value=rightInput.value=topInput.value=bottomInput.value='0';for(const span of controls.querySelectorAll('span'))span.textContent='0px';painted.fill(-1);undo=null;updateAlpha();scheduleRender();}),
+   undoButton,redoButton,
+   mk('초기화',()=>{expandLeft=expandRight=expandTop=expandBottom=0;leftInput.value=rightInput.value=topInput.value=bottomInput.value='0';for(const span of controls.querySelectorAll('span'))span.textContent='0px';painted.fill(-1);updateAlpha();recordHistory();scheduleRender();}),
    mk('닫기',()=>dialog.remove()),
    mk('보정 적용',async()=>{
     removeIsolatedNoise();
@@ -7866,12 +8131,12 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     r.baseInner={...r.inner};
     r.meta={...r.meta,manualRepair:true,recognitionExpand:{left:expandLeft,right:expandRight,top:expandTop,bottom:expandBottom}};
     if(await encodeResult(r)){
-     dialog.remove();resultView();drawSelections();
+     dialog.remove();resultView();drawSelections();window.SnaDraft?.queue('kill');
      editStatus('인식 범위를 좌우상하로 반영했고, 결과를 자동 중앙 정렬했습니다.');
     }
    })
   );
-  updateAlpha();render();
+  updateAlpha();recordHistory();render();
   dialog.append(h3,hint,controls,tools,zoomTools,wrap,actions);document.body.append(dialog);maskEditor=dialog;
   fitView();
   // 회전이나 분할 화면으로 창 크기가 바뀌어도 전체 보기에서 보이는 범위를 다시 맞춤.
@@ -7887,7 +8152,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    if(photo._klFallbackNormal===deleting)delete photo._klFallbackNormal;}
   URL.revokeObjectURL(results[idx].url);results.splice(idx,1);
   if(editingIndex===idx)editingIndex=-1; else if(editingIndex>idx)editingIndex--;
-  resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');
+  resultView();drawSelections();updatePhotoCounts();editStatus('결과를 삭제했어요.');window.SnaDraft?.queue('kill');
  }
  let gesturePointer=null,gestureTouch=null,lastHandledTouch=0;
  const TAP_DRIFT=18,TAP_SCROLL_DRIFT=8,TAP_MAX_MS=1750;
@@ -7949,12 +8214,95 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   try{
    const picked=await extractKilllog(tx,ty,killlogMode);
    if(!picked){status('킬로그가 감지되지 않았거나 터치한 곳이 킬로그가 아닙니다. 사진 속 ‘킬 알림’ 막대 또는 장식을 눌러주세요.');return;}
-   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();
+   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();window.SnaDraft?.queue('kill');
    status('킬로그 추출 완료! 아래에서 확인하고 저장하세요.');
    window.logActivity?.('킬로그 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
   }catch(err){console.error(err);status('추출 중 오류가 발생했습니다.');}
   finally{busy=false;}
  }
+ let batchStop=false,batchRunning=false;
+ async function batchExtract(){
+  if(batchRunning)return;
+  if(!photos.length){status('사진을 먼저 추가해 주세요.');return;}
+  batchRunning=true;batchStop=false;busy=true;
+  $('kl-batch-start').disabled=true;$('kl-batch-stop').disabled=false;
+  const original=active;let success=0,failed=0;
+  const stateLabel=$('kl-batch-state');
+  // The original image pixels are sampled in the upper area only; no blind PNGs are accepted.
+  // All candidates are validated by the existing killlog detector before they are added.
+  try{
+   for(let i=0;i<photos.length;i++){
+    if(batchStop)break;
+    if(results.some(r=>r.photo===i)){stateLabel.textContent=`${i+1}/${photos.length} · 기존 결과 유지`;continue;}
+    active=i;redraw();
+    const W=view.width,H=view.height;
+    const tries=[];
+    for(const y of [.11,.12,.17,.23,.29])for(const x of [.44,.34,.24,.55])tries.push([Math.round(W*x),Math.round(Math.min(H*.43,W*y))]);
+    // The stored pixel coordinates are independent of the phone/tablet CSS screen width.
+    let found=null;
+    for(const [x,y] of tries){
+     if(batchStop)break;
+     try{const candidate=await extractKilllog(x,y,killlogMode);
+       if(candidate&&validKilllogResult(candidate)){found=candidate;break;}
+     }catch(e){console.warn('일괄 검출 후보 실패',e);}
+     await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    if(found){found.photo=i;results.push(found);success++;}
+    else failed++;
+    stateLabel.textContent=`${i+1}/${photos.length} · 성공 ${success} · 검토 ${failed}`;
+    resultView();drawSelections();
+    await new Promise(resolve=>setTimeout(resolve,0));
+   }
+  }finally{
+   busy=false;batchRunning=false;$('kl-batch-start').disabled=false;$('kl-batch-stop').disabled=true;
+   if(original>=0&&original<photos.length)active=original;
+   redraw();resultView();drawSelections();
+   stateLabel.textContent=`${batchStop?'중단됨 · ':''}성공 ${success}장 / 수동 검토 ${failed}장`;
+   window.SnaDraft?.queue('kill');
+   window.logActivity?.('킬로그 일괄 추출',{success,review:failed,mode:killlogMode});
+  }
+ }
+ $('kl-batch-start').addEventListener('click',batchExtract);
+ $('kl-batch-stop').addEventListener('click',()=>{batchStop=true;$('kl-batch-state').textContent='중단 요청 중…';});
+ $('kl-resume').addEventListener('click',()=>window.SnaDraft?.resume('kill'));
+ $('kl-save-draft').addEventListener('click',()=>window.SnaDraft?.save('kill',true));
+ window.SnaKilllog={
+  save:async()=>{
+   const state={mode:killlogMode,albums:{}};
+   for(const type of ['normal','special']){
+    const album=albums[type];
+    const pack={active:album.active,photos:[],results:[]};
+    for(const photo of album.photos.slice(0,24))if(photo.file instanceof Blob)pack.photos.push(photo.file);
+    for(const r of album.results.slice(0,35)){
+     if(!r.master||!pack.photos[r.photo])continue;
+     const master=await new Promise(done=>r.master.toBlob(done,'image/png'));
+     if(master)pack.results.push({master,photo:r.photo,mode:r.mode,sourceX:r.sourceX,sourceY:r.sourceY,inner:r.inner,baseInner:r.baseInner,meta:r.meta});
+    }
+    state.albums[type]=pack;
+   }
+   return state;
+  },
+  restore:async draft=>{
+   if(!draft?.albums)return false;
+   for(const type of ['normal','special']){
+    const dest=albums[type],rec=draft.albums[type];if(!rec)continue;
+    for(const item of dest.results)if(item.url)URL.revokeObjectURL(item.url);
+    dest.photos.length=0;dest.results.length=0;
+    for(const file of rec.photos||[]){try{const im=await loadImage(file);dest.photos.push({file,image:im,name:file.name||'복원 사진'});}catch(e){console.warn(e);}}
+    for(const item of rec.results||[]){
+     if(!dest.photos[item.photo])continue;
+     try{const im=await loadImage(item.master);const master=document.createElement('canvas');master.width=im.naturalWidth;master.height=im.naturalHeight;master.getContext('2d').drawImage(im,0,0);
+      const r={master,photo:item.photo,mode:type,sourceX:item.sourceX,sourceY:item.sourceY,inner:item.inner,baseInner:item.baseInner,meta:item.meta||{}};
+      if(await encodeResult(r))dest.results.push(r);
+     }catch(e){console.warn(e);}
+    }
+    dest.active=clamp(Number(rec.active)||0,0,Math.max(0,dest.photos.length-1));dest.editingIndex=-1;
+   }
+   const nextMode=draft.mode==='special'?'special':'normal';
+   killlogMode=nextMode;photos=albums[nextMode].photos;results=albums[nextMode].results;
+   active=albums[nextMode].active;editingIndex=-1;setMode(nextMode);return true;
+  }
+ };
  setMode('normal');
 })();
 </script>
@@ -8064,6 +8412,84 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
 })();
 </script>
 
+<script>
+// 기기 내부 IndexedDB에 원본 파일과 설정을 저장하는 임시 작업 시스템.
+(()=>{
+ 'use strict';
+ let uid=null,timers={},saving={};
+ const status=(id,s)=>{const el=document.getElementById(id);if(el)el.textContent=s;};
+ const open=()=>new Promise((resolve,reject)=>{
+  if(!('indexedDB' in window))return reject(new Error('IndexedDB 미지원'));
+  const r=indexedDB.open('sna_editor_drafts_v1',1);
+  r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('drafts'))r.result.createObjectStore('drafts',{keyPath:'key'});};
+  r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+ });
+ async function tx(method,key,obj){
+  const db=await open();return new Promise((resolve,reject)=>{
+   const tr=db.transaction('drafts',method==='get'?'readonly':'readwrite');
+   const store=tr.objectStore('drafts');
+   const req=method==='get'?store.get(key):method==='put'?store.put(obj):store.delete(key);
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);tr.oncomplete=()=>db.close();tr.onabort=()=>reject(tr.error);
+  });
+ }
+ const key=type=>'user:'+uid+':'+type;
+ const label=type=>type==='board'?'대필판':'킬로그';
+ const sink=type=>type==='board'?'sna-session-status':'kl-batch-state';
+ const sizeOf=files=>files.reduce((a,f)=>a+(f?.size||0),0);
+ async function save(type,manual=false){
+  if(!uid)return false;
+  if(saving[type])return false;
+  saving[type]=true;
+  try{
+   const data=type==='board'?window.SnaBoard?.snapshot():await window.SnaKilllog?.save();
+   if(!data)return false;
+   const files=type==='board'?[...(data.clothes||[]),...(data.guns||[])]:
+    Object.values(data.albums||{}).flatMap(a=>[...(a.photos||[]),...(a.results||[]).map(r=>r.master)]);
+   if(sizeOf(files)>60*1024*1024){status(sink(type),'임시 저장 보류: 원본 합계가 60MB를 넘습니다. 사진 수를 줄이세요.');return false;}
+   await tx('put',key(type),{key:key(type),savedAt:Date.now(),data});
+   if(manual)status(sink(type),`${label(type)} 작업이 이 기기에 저장되었습니다.`);
+   else if(type==='board')status(sink(type),'자동 저장 완료 · '+new Date().toLocaleTimeString('ko-KR'));
+   return true;
+  }catch(e){console.warn('임시 작업 저장 실패',e);status(sink(type),'저장 실패: 저장 공간 또는 브라우저 권한을 확인해 주세요.');return false;
+  }finally{saving[type]=false;}
+ }
+ function queue(type){
+  if(!uid)return;
+  clearTimeout(timers[type]);timers[type]=setTimeout(()=>void save(type),2700);
+ }
+ async function resume(type){
+  if(!uid){status(sink(type),'로그인 후 이어할 수 있습니다.');return;}
+  try{
+   const rec=await tx('get',key(type));
+   if(!rec){status(sink(type),'저장된 임시 작업이 없습니다.');return;}
+   const confirm=await window.uiConfirm?.(`${new Date(rec.savedAt).toLocaleString('ko-KR')}에 저장된 ${label(type)} 작업을 불러올까요? 현재 화면의 같은 종류 작업은 교체됩니다.`);
+   if(!confirm)return;
+   if(type==='board')await window.SnaBoard?.restore(rec.data);
+   else await window.SnaKilllog?.restore(rec.data);
+   status(sink(type),'임시 작업을 불러왔습니다.');
+  }catch(e){console.warn(e);status(sink(type),'불러오기 실패: 사진 파일 또는 저장소를 확인해 주세요.');}
+ }
+ async function clear(type){
+  if(!uid)return;
+  if(!await window.uiConfirm?.('저장된 임시 작업을 삭제할까요? 현재 편집 화면은 유지됩니다.'))return;
+  await tx('delete',key(type));status(sink(type),'저장된 임시 작업을 삭제했습니다.');
+ }
+ window.SnaDraft={
+  setUser(next){uid=next||null;for(const timer of Object.values(timers))clearTimeout(timer);timers={};},
+  queue,save,resume,clear
+ };
+ document.getElementById('sna-session-save')?.addEventListener('click',()=>save('board',true));
+ document.getElementById('sna-session-load')?.addEventListener('click',()=>resume('board'));
+ document.getElementById('sna-session-clear')?.addEventListener('click',()=>clear('board'));
+ // 모든 대필판 입력값(텍스트/슬라이더)과 사진 추가·삭제 후 작업 스냅샷 저장.
+ const panel=document.getElementById('board-tab');
+ if(panel){
+  panel.addEventListener('input',e=>{if(e.target.matches('input,select,textarea'))queue('board');});
+  panel.addEventListener('change',()=>queue('board'));
+  panel.addEventListener('click',e=>{if(e.target.closest('button'))queue('board');});
+ }
+})();
+
+</script>
 </body>
 </html>
-
