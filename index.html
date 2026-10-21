@@ -2617,7 +2617,7 @@ window.closeAdmin=()=>{
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>일괄 작업</strong><span id="kl-batch-state" style="font-size:12px;color:#adbfdf" role="status">준비</span></div>
    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="photo-button" type="button" id="kl-batch-start">🔎 현재 사진함 일괄 추출</button><button class="photo-button" type="button" id="kl-batch-stop" disabled>중단</button><button class="photo-button" type="button" id="kl-resume">↩ 임시 작업 이어하기</button><button class="photo-button" type="button" id="kl-save-draft">💾 지금 저장</button></div>
-   <p style="font-size:12px;color:#afc2db;margin:7px 0 0">사진별 한 개의 킬로그를 검출하며, 실패한 사진은 직접 터치해 확인하세요. 자동 정밀 보정은 실행하지 않습니다.</p>
+   <p style="font-size:12px;color:#afc2db;margin:7px 0 0">원본 사진에서 킬로그 후보를 찾습니다. 실패한 사진은 직접 터치해 확인하세요. 자동 정밀 보정은 실행하지 않습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>사진 목록</strong><button class="photo-button" id="kl-clear" type="button" title="현재 선택한 킬로그 종류의 사진과 결과만 삭제합니다">현재 사진함 비우기</button></div><div id="kl-photos" class="photo-list"></div></div>
   <div class="photo-panel"><div class="panel-head"><strong>원본 사진 · 자를 킬로그 선택</strong><span id="kl-status" style="font-size:12px;color:#9fb2cc">사진을 추가해 주세요.</span></div>
@@ -6642,7 +6642,8 @@ saveBtn.addEventListener("click",async()=>{
  }
 
  async function encodeResult(r){
-  if(!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
+  // Special blue banners are measured from the source; never apply broad cleanup.
+  if(!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
@@ -6831,8 +6832,8 @@ saveBtn.addEventListener("click",async()=>{
   if(maxX<minX||maxY<minY)return null;
   master.getContext('2d').putImageData(img,0,0);
   const sx=view.width/1536,sy=(view.width/view.height<1.98?view.width/1536:view.height/709);
-  const marginX=meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.18)):Math.max(5,Math.round((mode==='special'?12:35)*sx));
-  const marginY=meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.15)):Math.max(5,Math.round((mode==='special'?14:23)*sy));
+  const marginX=meta.pixelBased?Math.max(2,Math.round((meta.band?.bottom-meta.band?.top||12)*.12)):meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.18)):Math.max(5,Math.round((mode==='special'?12:35)*sx));
+  const marginY=meta.pixelBased?Math.max(2,Math.round((meta.band?.bottom-meta.band?.top||12)*.12)):meta.dynamicLocal?Math.max(2,Math.round(meta.barHeight*.15)):Math.max(5,Math.round((mode==='special'?14:23)*sy));
   const inner={x:clamp(minX-marginX,0,w-1),y:clamp(minY-marginY,0,h-1)};
   inner.w=clamp(maxX+marginX,inner.x,w-1)-inner.x+1;
   inner.h=clamp(maxY+marginY,inner.y,h-1)-inner.y+1;
@@ -7633,7 +7634,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  }
  function isTouchedMaskedKilllog(result,tx,ty){
   if(!result?.master)return false;
-  if(result.meta?.scaleFree && result.meta.band){
+  if((result.meta?.scaleFree || result.meta?.pixelBased) && result.meta.band){
    const b=result.meta.band;
    const pixelPerCss=view.width/Math.max(1,view.getBoundingClientRect().width);
    const touchPad=clamp(Math.round(pixelPerCss*7),4,34);
@@ -7681,7 +7682,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  // Measure the source banner edges and keep its whole continuous body instead.
  function detectCompleteIcyBlueKilllog(tx,ty,canonical=false){
   const W=view.width,H=view.height;
-  if(!photos[active]||tx<4||ty<4||ty>H*.38)return null;
+  if(!photos[active]||tx<4||ty<4)return null;
   const x0=Math.max(0,Math.floor(tx-780)),x1=Math.min(W,Math.ceil(tx+780));
   const y0=Math.max(0,Math.floor(ty-145)),y1=Math.min(H,Math.ceil(ty+145));
   const pw=x1-x0,ph=y1-y0;if(pw<140||ph<85)return null;
@@ -7724,7 +7725,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    else if(start>=0)consider(i-1);
   }
   if(start>=0)consider(rows.length-1);
-  if(!best||best.score<.69)return null;
+  if(!best||best.score<1.30)return null;
   const top=Math.max(0,best.top-1),bottom=Math.min(H-1,best.bottom+2);
   const height=bottom-top+1;
   // Measure the colored horizontal run, not a screenshot-width percentage.
@@ -7761,6 +7762,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   // Trim that overshoot so no dark vertical rectangle is left of the banner.
   const left=band.l+Math.max(2,Math.round(height*.075));
   const right=band.r,width=right-left;
+  if(width/Math.max(1,height)<6.2)return null;
   // White weapon icon and white Korean label must coexist in a cyan bar.
   let weaponWhite=0,labelWhite=0,cyan=0,seen=0;
   for(let y=top+4;y<bottom-2;y+=3){
@@ -7891,7 +7893,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   miss=0;
   for(let j=anchor;j<smooth.length;j++){if(smooth[j]<threshold)miss++;else miss=0;if(miss>=allowance){r=j-miss;break;}r=j;}
   const left=sx0+l*2,right=sx0+r*2,barW=right-left;
-  if(barW<height*4||barW>height*28||barW<58)return null;
+  if(barW<height*4||barW>height*20||barW<58)return null;
   // Two separated bright groups (gun silhouette and Korean label) plus a continuous bar.
   let whiteLeft=0,whiteRight=0,coreContrast=0,n=0;
   for(let yy=Math.ceil(top+height*.18);yy<=bottom-height*.12;yy+=3){
@@ -7937,105 +7939,232 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   });
  }
 
- async function extractKilllog(tx,ty,mode){
-  const photo=photos[active];
-  const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
-  const cached=photo&&photo[cacheKey];
-  if(cached){
-   if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
-   if(!(await encodeResult(cached)))return null;
-   return validKilllogResult(cached)?cached:null;
-  }
-  // 글자 특징의 높은 일치도가 없으면 어디를 눌러도 잘라내지 않습니다.
-  if(mode==='special'){
-   const orange=detectOrangeSpecial();
-   if(orange){
-    const b=orange.meta?.band||orange.band;
-    // 실제 결과의 투명 영역은 클릭 판정에서 제외하되 로고 근처에서는 조금 관대하게 검사.
-    if(isTouchedMaskedKilllog(orange,tx,ty)){
-     if(!(await encodeResult(orange)))return null;
-     return validKilllogResult(orange)?orange:null;
-    }
-    return null;
+ // Small icy-blue banners in special/high-number mode are not orange and may not
+ // match the special OCR template. Identify the actual colored bar before masking.
+ // Every coordinate below is in ORIGINAL IMAGE PIXELS, never in CSS/display pixels.
+ function detectCompactBlueSpecial(tx,ty){
+  if(killlogMode!=='special'||!photos[active])return null;
+  const W=view.width,H=view.height;
+  if(W<250||H<150||ty>H*.43)return null;
+  const probe=detectLocalBannerFromTap(tx,ty);
+  const initial=probe?.meta?.band;
+  if(!initial)return null;
+  // Re-anchor to the measured bar center, making the result independent of tap location.
+  const midX=Math.round((initial.left+initial.right)/2);
+  const midY=Math.round((initial.top+initial.bottom)/2);
+  const centered=detectLocalBannerFromTap(midX,midY);
+  const band=centered?.meta?.band||initial;
+  const l=Math.round(band.left),r=Math.round(band.right);
+  const t=Math.round(band.top),b=Math.round(band.bottom);
+  const width=r-l+1,height=b-t+1;
+  if(width<65||height<10||width/height<4||width/height>23||l<0||t<0||r>=W||b>=H)return null;
+  // Reject the weapon below and the user's blue markup: require a contiguous
+  // cyan-colored body plus bright weapon and white text groups within the bar.
+  const raw=ctx.getImageData(l,t,width,height).data;
+  let cyan=0,whiteLeft=0,whiteRight=0,total=0;
+  for(let y=Math.round(height*.14);y<height*.84;y+=2){
+   for(let x=Math.round(width*.12);x<width*.90;x+=3){
+    const k=(y*width+x)*4,R=raw[k],G=raw[k+1],B=raw[k+2];
+    if(B>R+20&&G>R+8&&B>95)cyan++;
+    const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+    if(lo>145&&hi-lo<94){if(x<width*.52)whiteLeft++;else whiteRight++;}
+    total++;
    }
   }
-  // Known original-purple template is identifiable from actual image pixels in O(1).
-  // It is insensitive to screen zoom and allows left-head taps before slow OCR.
-  if(mode==='normal'&&isPurpleBarPhoto()){
-   const ready=buildPurpleMascotResult();
-   if(ready&&isTouchedMaskedKilllog(ready,tx,ty)){
-    if(await encodeResult(ready)&&validKilllogResult(ready)){
-     photo[cacheKey]=ready;return ready;
+  if(total<90||cyan/total<.30||whiteLeft<6||whiteRight<5)return null;
+  const hitPadding=clamp(Math.round(8*W/Math.max(1,view.getBoundingClientRect().width)),5,40);
+  if(tx<l-hitPadding||tx>r+hitPadding||ty<t-hitPadding||ty>b+hitPadding)return null;
+  const x0=Math.max(0,l-3),x1=Math.min(W,r+Math.max(6,Math.round(height*.55)));
+  const y0=Math.max(0,t-2),y1=Math.min(H,b+3);
+  const ww=x1-x0,hh=y1-y0;
+  const source=ctx.getImageData(x0,y0,ww,hh).data;
+  const alpha=new Uint8Array(ww*hh);
+  for(let y=0;y<hh;y++)for(let x=0;x<ww;x++){
+   const X=x+x0,Y=y+y0;if(X<l||Y<t||Y>b||X>x1)continue;
+   let a=255;
+   // Only the very end fades; preserve the full height of the blue body.
+   const fadeStart=r-Math.max(9,Math.round(width*.11));
+   if(X>fadeStart){const z=clamp((r+height*.20-X)/(r+height*.20-fadeStart),0,1);a=Math.round(255*z*z*(3-2*z));}
+   if(X>r)a=Math.min(a,60);
+   alpha[y*ww+x]=a;
+  }
+  const out=createMaskedResult(x0,y0,ww,hh,new Uint8Array(source),alpha,'special',{
+   compactBlueSpecial:true,band:{left:l,right:r,top:t,bottom:b}
+  });
+  return out;
+ }
+
+ // PHOTO PIXEL DETECTION (normal + high-number): detect physical banner features,
+ // never assume a location, display resolution, screen aspect ratio, or 1536px screenshot.
+ // On unknown appearances, reject rather than crop a random weapon or UI element.
+ function detectChromaBannerAtTap(tx,ty,mode){
+  if(!photos[active])return null;
+  const W=view.width,H=view.height;
+  const radiusLevels=[16,24,36,54,80,112];
+  let best=null;
+  for(const rad of radiusLevels){
+   const L=Math.max(0,Math.round(tx-rad*24)),R=Math.min(W,Math.round(tx+rad*24));
+   const T=Math.max(0,Math.round(ty-rad)),B=Math.min(H,Math.round(ty+rad));
+   const pw=R-L,ph=B-T;
+   if(pw<65||ph<16)continue;
+   const pix=ctx.getImageData(L,T,pw,ph).data;
+   const up=ctx.getImageData(L,clamp(Math.round(ty-rad*2),0,H-1),pw,1).data;
+   const dn=ctx.getImageData(L,clamp(Math.round(ty+rad*2),0,H-1),pw,1).data;
+   const fg=new Uint8Array(pw*ph);
+   for(let y=0;y<ph;y++)for(let x=0;x<pw;x++){
+    const k=y*pw+x,j=k*4,z=x*4,R=pix[j],G=pix[j+1],Bl=pix[j+2];
+    const d=Math.max(Math.abs(R-(up[z]+dn[z])/2),Math.abs(G-(up[z+1]+dn[z+1])/2),Math.abs(Bl-(up[z+2]+dn[z+2])/2));
+    const hi=Math.max(R,G,Bl),lo=Math.min(R,G,Bl);
+    if(d>31&&(hi-lo>30||hi>155))fg[k]=1;
+   }
+   // Close short gaps inside ornamental banner pixels horizontally. The kernel
+   // is fixed in LOCAL PIXELS, not proportional to the screenshot dimensions.
+   for(let y=0;y<ph;y++){
+    const off=y*pw;let last=-10;
+    for(let x=0;x<pw;x++)if(fg[off+x]){
+     if(x-last<=9)for(let xx=last+1;xx<x;xx++)fg[off+xx]=1;
+     last=x;
     }
    }
-   return null;
-  }
-  // Blue stripe is recognized from its own source-pixel boundaries before the
-  // old screenshot-scaled crop can cut its lower half. Other designs use old flow.
-  if(mode==='normal'){
-   const blue=detectCompleteIcyBlueKilllog(tx,ty);
-   if(blue&&isTouchedMaskedKilllog(blue,tx,ty)&&await encodeResult(blue)&&validKilllogResult(blue)){
-    photo[cacheKey]=blue;return blue;
-   }
-  }
-  // 먼저 텍스트가 실제 킬로그인지 확인. 금속 장식 검색이 붉은 총기 스킨이나 메뉴를
-  // 파란 킬로그로 잘못 판단하는 경우가 있어 템플릿 인식보다 앞에서 실행하지 않는다.
-  const signature=killlogSignature(mode,tx,ty);
-  if(!signature){
-   if(mode==='normal'){
-    const classic=await extractKilllogClassic(tx,ty);
-    if(classic&&isTouchedMaskedKilllog(classic,tx,ty)&&await encodeResult(classic)&&validKilllogResult(classic)){
-     photo[cacheKey]=classic;return classic;
+   const seen=new Uint8Array(pw*ph),queue=new Int32Array(pw*ph);
+   for(let idx=0;idx<fg.length;idx++){
+    if(!fg[idx]||seen[idx])continue;
+    let head=0,tail=1,minX=pw,minY=ph,maxX=0,maxY=0;
+    queue[0]=idx;seen[idx]=1;
+    while(head<tail){
+     const k=queue[head++],x=k%pw,y=(k/pw)|0;
+     if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+     for(let yy=Math.max(0,y-1);yy<=Math.min(ph-1,y+1);yy++)
+      for(let xx=Math.max(0,x-1);xx<=Math.min(pw-1,x+1);xx++){
+       const j=yy*pw+xx;
+       if(!seen[j]&&fg[j]){seen[j]=1;queue[tail++]=j;}
+      }
     }
-    const metallic=detectBlueMechanicalNormal();
-    if(metallic&&isTouchedMaskedKilllog(metallic,tx,ty)){
-     if(await encodeResult(metallic)&&validKilllogResult(metallic)){
-      photo[cacheKey]=metallic;return metallic;
+    const width=maxX-minX+1,height=maxY-minY+1,density=tail/(width*height);
+    if(width<55||height<8||width/height<2.6||width/height>15.5||density<.24)continue;
+    const left=L+minX,right=L+maxX,top=T+minY,bottom=T+maxY;
+    const hitPad=Math.max(12,height*1.7);
+    if(tx<left-hitPad||tx>right+hitPad||ty<top-Math.max(12,height*.9)||ty>bottom+Math.max(12,height*.9))continue;
+    // Reject generic decorative strips: a kill alert has two separated
+    // light clusters (weapon silhouette and the kill notification label).
+    let whiteL=0,whiteR=0,colors=0,n=0,whiteMin=Infinity,whiteMax=-Infinity;
+    for(let yy=minY+1;yy<maxY;yy+=2)for(let xx=minX+1;xx<maxX;xx+=3){
+     const j=(yy*pw+xx)*4,A=pix[j],G=pix[j+1],Bl=pix[j+2];
+     const hi=Math.max(A,G,Bl),lo=Math.min(A,G,Bl);
+     if(lo>140&&hi-lo<94){if(xx<minX+width*.53)whiteL++;else whiteR++;whiteMin=Math.min(whiteMin,xx);whiteMax=Math.max(whiteMax,xx);}
+     if(hi-lo>30&&hi>95)colors++;n++;
+    }
+    if(n<38||whiteL+whiteR<6||whiteMax-whiteMin<width*.13||colors/n<.13)continue;
+    const centerDistance=Math.max(0,top-ty,ty-bottom);
+    const score=density*23+Math.min(width/height,14)+Math.min(12,(whiteL+whiteR)/10)-centerDistance*.16-Math.abs(height-rad*1.2)*.09;
+    if(!best||score>best.score)best={left,right,top,bottom,width,height,score,density};
+   }
+   // A strong, well-bounded banner should not be replaced by a giant merged
+   // foreground object from a larger search region.
+   if(best&&best.score>28)break;
+  }
+  if(!best)return null;
+  const {left,right,top,bottom,width,height}=best;
+  const x0=clamp(Math.floor(left-height*1.9),0,W-2),x1=clamp(Math.ceil(right+height*.48),x0+1,W);
+  const y0=clamp(Math.floor(top-height*.9),0,H-2),y1=clamp(Math.ceil(bottom+height*.9),y0+1,H);
+  const w=x1-x0,h=y1-y0;
+  const src=ctx.getImageData(x0,y0,w,h).data;
+  const bgTop=ctx.getImageData(x0,clamp(Math.round(top-height*1.8),0,H-1),w,1).data;
+  const bgBottom=ctx.getImageData(x0,clamp(Math.round(bottom+height*1.8),0,H-1),w,1).data;
+  const alpha=new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const X=x0+x,Y=y0+y,k=y*w+x,j=k*4,z=x*4;
+   let a=0;
+   if(X>=left&&X<=right&&Y>=top&&Y<=bottom){
+    a=255;
+    if(X>right-height*.9){
+     const t=clamp((right+height*.22-X)/(height*1.12),0,1);
+     a=Math.round(255*t*t*(3-2*t));
+    }
+   }
+   // Ornament preservation uses ORIGINAL PIXEL contrast, with reach measured
+   // relative to the banner height rather than the screenshot dimensions.
+   if(X>=left-height*1.9&&X<left+height*2.4&&Y>=top-height*.9&&Y<=bottom+height*.9){
+    const R=src[j],G=src[j+1],Bl=src[j+2],hi=Math.max(R,G,Bl),lo=Math.min(R,G,Bl);
+    const d=Math.max(Math.abs(R-(bgTop[z]+bgBottom[z])/2),Math.abs(G-(bgTop[z+1]+bgBottom[z+1])/2),Math.abs(Bl-(bgTop[z+2]+bgBottom[z+2])/2));
+    if(d>34&&(hi-lo>22||hi>154))a=Math.max(a,Math.round(255*clamp((d-24)/32,0,1)));
+   }
+   alpha[k]=a;
+  }
+  return createMaskedResult(x0,y0,w,h,new Uint8Array(src),alpha,mode,{
+   pixelBased:true,chromaBanner:true,band:{left,right,top,bottom},confidence:best.score
+  });
+ }
+ function quietBannerTail(result){
+  // Kill-alert labels live in the icon/text portion; the extreme right tail
+  // is normally decorative/fading. A gun or a large UI title often has
+  // substantial white details all the way through its right edge.
+  const b=result?.meta?.band||result?.meta?.measuredBand;
+  if(!b)return true;
+  const left=Math.round(b.left??b.x),right=Math.round(b.right??((b.x||0)+(b.w||0)));
+  const top=Math.round(b.top??b.y),bottom=Math.round(b.bottom??((b.y||0)+(b.h||0)));
+  const w=right-left+1,h=bottom-top+1;
+  if(w<50||h<9)return false;
+  const x0=clamp(Math.round(right-w*.18),0,view.width-1),x1=clamp(right,0,view.width-1);
+  const y0=clamp(top+1,0,view.height-1),y1=clamp(bottom-1,y0,view.height-1);
+  const data=ctx.getImageData(x0,y0,Math.max(1,x1-x0+1),Math.max(1,y1-y0+1)).data;
+  let n=0,white=0;
+  for(let k=0;k<data.length;k+=4){
+   const R=data[k],G=data[k+1],B=data[k+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+   if(lo>145&&hi-lo<94)white++;
+   n++;
+  }
+  const limit=result.meta.chromaBanner?.068:.42;
+  return white/Math.max(1,n)<limit;
+ }
+ function detectPixelOnlyBanner(tx,ty,mode,canonical=false){
+  // Recognize long cyan bars by measured edge + separated icon/label regions.
+  const cyan=detectCompleteIcyBlueKilllog(tx,ty);
+  if(cyan){cyan.mode=mode;cyan.meta={...cyan.meta,pixelBased:true};return cyan;}
+  let local=detectLocalBannerFromTap(tx,ty);
+  let chroma=detectChromaBannerAtTap(tx,ty,mode);
+  if(local&&!quietBannerTail(local))local=null;
+  if(chroma&&!quietBannerTail(chroma))chroma=null;
+  // Red/flame banners have patterned dark portions: the foreground-color
+  // component gives a more complete bar than the local edge mask.
+  const cc=ctx.getImageData(clamp(Math.round(tx),0,view.width-1),clamp(Math.round(ty),0,view.height-1),1,1).data;
+  const stronglyRed=cc[0]>80&&cc[0]>cc[1]*1.55&&cc[0]>cc[2]*1.24;
+  const localWidth=local?.meta?.band?(local.meta.band.right-local.meta.band.left):local?.inner?.w||0;
+  const chromaWidth=chroma?.meta?.band?(chroma.meta.band.right-chroma.meta.band.left):0;
+  const result=chroma&&(stronglyRed||!local||(localWidth>0&&chromaWidth>localWidth*1.27))?chroma:(local||chroma);
+  if(result){
+   result.mode=mode;result.meta={...result.meta,pixelBased:true};
+   // Repeat recognition from the measured banner center. The first finger
+   // position chooses the object; it must not determine the exported box.
+   if(!canonical&&result.meta.band){
+    const b=result.meta.band;
+    const cx=clamp(Math.round(((b.left+b.right)/2)/16)*16,0,view.width-1),cy=clamp(Math.round(((b.top+b.bottom)/2)/8)*8,0,view.height-1);
+    if(Math.hypot(cx-tx,cy-ty)>2){
+     const stable=detectPixelOnlyBanner(cx,cy,mode,true);
+     if(stable){
+      // A second scan must never discard protruding ornaments that the first
+      // scan already recovered. Some fire/fantasy styles have tall decorations.
+      if(stable.inner.h>=result.inner.h*.85 && stable.inner.w>=result.inner.w*.84 &&
+         !(result.meta.chromaBanner&&!stable.meta.chromaBanner))return stable;
      }
     }
    }
-   if(mode!=='normal')return null;
-   // Only fall back to the scale-free detector when earlier verified styles do not match.
-   // This preserves long decorated killlogs that the legacy design-specific masks handle well.
-   const small=detectLocalBannerFromTap(tx,ty);
-   if(small && isTouchedMaskedKilllog(small,tx,ty) && await encodeResult(small) && validKilllogResult(small)){
-    photo[cacheKey]=small;return small;
-   }
-   // 오인식 위험이 있는 비템플릿 추출은 색상·글자 검증을 통과할 때만 생성한다.
-   let candidate=photo._klFallbackNormal;
-   if(!candidate){
-    if(ty<view.height*.065||ty>view.height*.38||tx<view.width*.1||tx>view.width*.77)return null;
-    candidate=extractTapRelativeKilllog(tx,ty,'normal');
-    if(!verifyNonTemplateBanner(candidate,tx,ty))return null;
-   }
-   if(!isTouchedMaskedKilllog(candidate,tx,ty))return null;
-   if(!(await encodeResult(candidate)))return null;
-   if(!validKilllogResult(candidate)){
-    if(candidate.url)URL.revokeObjectURL(candidate.url);
-    return null;
-   }
-   photo._klFallbackNormal=candidate;
-   photo[cacheKey]=candidate;
-   return candidate;
   }
-  // 터치한 좌표가 아닌, 원본 사진에서 검출한 동일한 텍스트 기준점으로 추출.
-  // 아이폰 / 삼성패드 / 아이패드의 화면 배율과 터치 위치에 무관하게 동일한 바운드입니다.
-  const cx=Math.round(signature.x),cy=Math.round(signature.y);
-  let result=mode==='normal'
-   ? (buildPurpleMascotResult()||await extractKilllogClassic(cx,cy))
-   : buildSpecialMaskedResult(cx,cy);
-  // 가로 띠 보조 감지는 검증된 킬로그 중심점에서만 허용; 임의 터치 주변에서는 절대 검색하지 않음.
-  if(!result)result=extractTapRelativeKilllog(cx,cy,mode);
-  if(!result)return null;
-  // 실제 킬로그의 불투명한 픽셀/장식을 눌러야 함. 빈 배경을 누르면 중단.
-  if(!isTouchedMaskedKilllog(result,tx,ty))return null;
-  if(!(await encodeResult(result)))return null;
-  if(!validKilllogResult(result)){
-   if(result.url)URL.revokeObjectURL(result.url);
-   return null;
-  }
-  photo[cacheKey]=result;
   return result;
+ }
+ async function extractKilllog(tx,ty,mode){
+  const photo=photos[active];if(!photo)return null;
+  const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
+  const cached=photo[cacheKey];
+  if(cached){
+   if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
+   return cached;
+  }
+  const candidate=detectPixelOnlyBanner(tx,ty,mode);
+  if(!candidate||!isTouchedMaskedKilllog(candidate,tx,ty))return null;
+  if(!(await encodeResult(candidate))||!validKilllogResult(candidate))return null;
+  photo[cacheKey]=candidate;
+  return candidate;
  }
 
  // 장식 자동 감지가 어려운 디자인을 위한 원본 픽셀 마스크 보정.
@@ -8402,6 +8531,50 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   finally{busy=false;}
  }
  let batchStop=false,batchRunning=false;
+ function pixelBannerBatchSeeds(){
+  const W=view.width,H=view.height;
+  if(W<75||H<45)return [];
+  const pix=ctx.getImageData(0,0,W,H).data;
+  const locations=[];
+  const xStep=9,yStep=12,refGap=35;
+  const at=(x,y)=>{const i=(clamp(y,0,H-1)*W+clamp(x,0,W-1))*4;return [pix[i],pix[i+1],pix[i+2]];};
+  for(let y=refGap;y<H-refGap;y+=yStep){
+   let current=null,gap=0;
+   for(let x=refGap;x<W-refGap;x+=xStep){
+    const p=at(x,y),a=at(x,y-refGap),b=at(x,y+refGap);
+    const d=Math.max(...p.map((c,k)=>Math.abs(c-(a[k]+b[k])/2)));
+    const high=Math.max(...p),low=Math.min(...p);
+    const on=d>31&&(high-low>27||high>157);
+    if(on){
+     if(!current)current={start:x,last:x,n:0,white:0,strength:0};
+     current.last=x;current.n++;current.strength+=d;
+     if(low>145&&high-low<94)current.white++;
+     gap=0;
+    }else if(current){
+     gap++;
+     if(gap>5){
+      const width=current.last-current.start;
+      if(width>=65&&current.n>=8&&current.white>=2)
+       locations.push({x:(current.start+current.last)/2|0,y,score:current.strength/current.n+current.n*.14,span:width});
+      current=null;gap=0;
+     }
+    }
+   }
+   if(current){
+    const width=current.last-current.start;
+    if(width>=65&&current.n>=8&&current.white>=2)
+     locations.push({x:(current.start+current.last)/2|0,y,score:current.strength/current.n+current.n*.14,span:width});
+   }
+  }
+  locations.sort((a,b)=>b.score-a.score);
+  const selected=[];
+  for(const p of locations){
+   if(selected.some(q=>Math.abs(q.x-p.x)<Math.max(45,p.span*.4)&&Math.abs(q.y-p.y)<45))continue;
+   selected.push(p);
+   if(selected.length>=22)break;
+  }
+  return selected.map(p=>[p.x,p.y]);
+ }
  async function batchExtract(){
   if(batchRunning)return;
   if(!photos.length){status('사진을 먼저 추가해 주세요.');return;}
@@ -8409,7 +8582,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   $('kl-batch-start').disabled=true;$('kl-batch-stop').disabled=false;
   const original=active;let success=0,failed=0;
   const stateLabel=$('kl-batch-state');
-  // The original image pixels are sampled in the upper area only; no blind PNGs are accepted.
+  // Search color/contrast candidates across the full source; no blind PNGs.
   // All candidates are validated by the existing killlog detector before they are added.
   try{
    for(let i=0;i<photos.length;i++){
@@ -8417,16 +8590,36 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
     if(results.some(r=>r.photo===i)){stateLabel.textContent=`${i+1}/${photos.length} · 기존 결과 유지`;continue;}
     active=i;redraw();
     const W=view.width,H=view.height;
-    const tries=[];
-    for(const y of [.11,.12,.17,.23,.29])for(const x of [.44,.34,.24,.55])tries.push([Math.round(W*x),Math.round(Math.min(H*.43,W*y))]);
-    // The stored pixel coordinates are independent of the phone/tablet CSS screen width.
-    let found=null;
+    // Content-based seeds from pixel contrast + horizontal runs across the
+    // ENTIRE image. No predefined screenshot coordinates or aspect ratios.
+    const tries=pixelBannerBatchSeeds();
+    let best=null,runnerUp=null;
     for(const [x,y] of tries){
      if(batchStop)break;
-     try{const candidate=await extractKilllog(x,y,killlogMode);
-       if(candidate&&validKilllogResult(candidate)){found=candidate;break;}
-     }catch(e){console.warn('일괄 검출 후보 실패',e);}
+     try{
+      // Compare independent source-pixel proposals; do not accept the first
+      // horizontal object as a killlog (menus and large guns can fool it).
+      const candidate=detectPixelOnlyBanner(x,y,killlogMode);
+      if(!candidate||!isTouchedMaskedKilllog(candidate,x,y))continue;
+      const bb=candidate.inner,meta=candidate.meta||{},ratio=bb.w/Math.max(1,bb.h);
+      if(bb.w<55||ratio<2.7||ratio>20)continue;
+      let rank=meta.icyBlueComplete?1000+(meta.confidence||0)*100:meta.chromaBanner?750+(meta.confidence||0):meta.scaleFree?600+Math.min(300,(meta.edgeScore||0)*.8):0;
+      const bx=candidate.sourceX+bb.x,by=candidate.sourceY+bb.y;
+      if(bx<Math.max(22,bb.h*.72)||by<Math.max(16,bb.h*.52))rank-=260;
+      if(!best||rank>best.rank){runnerUp=best;best={candidate,rank,x,y};}
+      else if(!runnerUp||rank>runnerUp.rank)runnerUp={candidate,rank,x,y};
+     }catch(e){console.warn('일괄 후보 검사 실패',e);}
      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    let found=null;
+    if(best&&best.rank>=500){
+     // Two similarly scored objects far apart mean the image is ambiguous.
+     const ambiguous=runnerUp&&Math.abs(best.rank-runnerUp.rank)<12&&
+       Math.hypot(best.x-runnerUp.x,best.y-runnerUp.y)>Math.max(80,best.candidate.inner.w*.7);
+     if(!ambiguous&&await encodeResult(best.candidate)&&validKilllogResult(best.candidate)){
+      found=best.candidate;
+      photos[i][killlogMode==='normal'?'_klReadyNormal':'_klReadySpecial']=found;
+     }
     }
     if(found){found.photo=i;results.push(found);success++;}
     else failed++;
