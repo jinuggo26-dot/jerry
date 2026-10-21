@@ -1,3 +1,178 @@
+
+이전 메시지 불러오는 중…
+그냥 게임 내 캡쳐한 사진으로 킬로그를 컷팅하는거야
+이제 정확히 이해했어.
+
+스나 대필 편집기의 킬로그 커팅은 게임 안에서 직접 캡처한 스크린샷에서 킬로그만 추출하는 기능이야.
+
+중요한 건 다음과 같아.
+
+사진 해상도 무관: 아이폰·삼성패드·아이패드에서 캡처한 사진 모두 지원
+
+킬로그 위치 무관: 사진 속 킬로그가 어디에 있든 인식
+
+킬로그 크기 무관: 작거나 크게 표시돼도 실제 막대의 특징으로 감지
+
+장식 완전 보존: 왼쪽 장식, 위아래 테두리, 오른쪽 끝까지 포함
+
+배경 제거: 킬로그 이외의 총기, 메뉴, 게임 배경은 제외
+
+동일 원본 = 동일 결과: 어떤 기기에서 작업하든 같은 원본 파일은 동일한 PNG로 추출
+
+특히 사진 전체 크기를 기준으로 킬로그 위치나 크기를 추정하는 방식은 없애고, 킬로그 자체의 모양·색상·테두리·글자 등을 기준으로 인식해야 해.
+
+그리고 일반 킬로그와 고번 킬로그 모두 이 원칙을 적용해야 하고.
+
+앞으로는 게임 내 캡처 원본을 기준으로 인식 알고리즘을 수정하는 방향으로 진행할게.
+
+그렇게 수정해줘
+게임 내 캡처 사진의 킬로그를 직접 인식하도록 최신 스나 대필 편집기 전체 코드를 수정했어. 기존 다른 기능은 유지했어.
+
+수정된 전체 코드
+전체 코드 TXT 다운로드
+
+전체 코드 ZIP 다운로드
+
+GitHub용 index.html 다운로드
+
+이번에 바꾼 부분
+사진 크기 기준 인식 제거: 기존의 1536px 기준 위치 추정은 실제 추출 경로에서 사용하지 않도록 변경
+
+킬로그 특징으로 인식: 원본 픽셀에서 막대의 경계, 색상, 무기 표시, 글자 영역을 검사
+
+일반·고번 모두 적용: 두 모드에 동일한 원본 픽셀 기반 검출 방식 적용
+
+장식 보존: 검출된 막대 주변의 돌출 장식도 함께 검사
+
+일괄 추출 개선: 정해진 화면 위치가 아니라 사진 전체에서 후보를 검색하고, 불확실한 결과는 수동 검토 대상으로 분류
+
+실제 테스트 결과
+테스트
+
+결과
+
+일반 킬로그 원본 11장
+
+추출 성공
+
+고번 모드 원본 4장
+
+추출 성공
+
+화면 폭 390px·1024px
+
+동일 원본 PNG 일치
+
+해상도를 변경한 원본
+
+여러 크기에서 인식 확인
+
+자바스크립트 문법
+
+통과
+
+특히 같은 원본 파일을 휴대폰 크기와 패드 크기 화면에서 처리했을 때 동일한 PNG가 생성되는 것을 확인했어.
+
+다만 모든 새로운 킬로그 디자인에서 장식이 완벽히 보존되거나 게임 UI를 절대 오인하지 않는다고 보장할 수는 없어. 실제 삼성패드·아이폰 Safari 실기 테스트도 아직 필요해.
+
+기존 좌우·상하 인식 범위 조절, 장식 보정, 실행 취소·다시 실행, 작업 저장, Firebase 관리자 기능, 삼성 10장 초과 저장 경고는 유지했어.
+
+GitHub의 index.html을 새 파일로 교체하고, 이전에 잘못 잘린 결과는 원본 스크린샷에서 다시 추출하면 돼.
+
+사용자 첨부 파일
+이거 차량 인식이 안돼
+
+
+
+
+차량 인식 문제를 찾아서 수정했어. 이번에는 보내준 IMG_3067.jpeg 원본으로 직접 테스트했어.
+
+원인은 기존 총기 카드 인식기가 밝은 빨강·보라색을 중심으로 감지해서, 차량 카드의 어두운 붉은색 배경을 제대로 인식하지 못하는 것이었어.
+
+수정 후 차량 추출 결과
+원본에서 추출한 차량 카드
+보내준 원본에서 차량 카드 1개를 검출해 추출한 예시
+수정된 전체 코드
+전체 코드 TXT 다운로드
+
+전체 코드 ZIP 다운로드
+
+GitHub용 index.html 다운로드
+
+이번 수정 사항
+차량 카드의 어두운 빨간 배경도 인식
+
+사진 속 카드의 실제 색상·사각형 경계를 기준으로 감지
+
+오른쪽 차량 목록의 작은 자동차 그림과 구분
+
+기존 총기 카드 인식 기능 유지
+
+차량 카드 추출 방법을 통합 사용방법에 추가
+
+테스트 결과: 원본에서 차량 카드 1개를 정상 검출했고, 휴대폰 화면 폭 390px과 패드 화면 폭 1024px에서도 동일한 선택 영역이 나왔어. 원본 자체를 축소·확대한 경우에도 차량 카드 검출을 확인했어.
+
+사용 방법
+총 자르기 → 사진 추가하기 → 차량 카드 터치 → 선택한 카드 자르기
+
+이번 차량 카드는 기존 총 자르기에서 추출하도록 추가했어. 별도의 차량 메뉴를 만들지는 않았어.
+
+다만 다른 디자인의 차량 카드까지 전부 검증한 건 아니야. 기존 회원 관리, 킬로그, 대필판, 삼성 10장 초과 저장 경고 등 다른 기능은 유지했어.
+
+사용자 첨부 파일
+사용자 첨부 파일
+이 차량 수정 사항 포함 시켜주고 이 사진봐봐 너가 준 코드로 적용 해서 터치 했을때 인식이 저렇게 되서 범위를 늘려도 다 안돼 그리고 두 번째 사진 경우는 애초에 인식 조차 안돼 고번 킬로그로 해야해 두 번째 사진은  제발 사진크기로 인식하는거 넣지마
+요청한 내용을 반영해서 스나 대필 편집기 전체 코드를 수정했어. 차량 카드 인식 수정도 포함했고, 일반·고번 킬로그 인식도 함께 변경했어.
+
+수정한 내용
+문제
+
+수정 사항
+
+첫 번째 사진의 킬로그가 일부만 선택됨
+
+검출된 막대의 좌우 끝을 원본에서 다시 추적하도록 개선
+
+인식 범위를 늘려도 복원되지 않음
+
+범위를 확장하면 어두운 막대의 원본 픽셀도 포함하도록 변경
+
+두 번째 사진의 고번 킬로그 인식 실패
+
+파란색 소형 고번 검출기를 실제 선택 과정에 연결
+
+터치 위치마다 결과가 달라짐
+
+검출된 막대 중심을 기준으로 추출 범위를 다시 확정
+
+차량 카드 인식
+
+이전에 추가한 차량 카드 검출 기능 유지
+
+중요: 킬로그의 위치를 사진 전체 너비나 화면 비율로 추정하지 않도록 실제 사용되는 검출 경로를 구성했어. 킬로그 자체의 경계·색상·글자 영역을 검사하는 방식이야.
+
+수정된 전체 코드
+전체 코드 TXT 다운로드
+
+전체 코드 ZIP 다운로드
+
+GitHub용 index.html 다운로드
+
+테스트 결과
+파란색 고번 킬로그 추출 성공
+
+보내준 두 번째 사진과 같은 게임 원본에서 왼쪽·가운데·오른쪽을 각각 눌러 검사했어. 화면 폭 390px과 1024px에서도 저장된 PNG가 동일했어.
+
+일반 장식형 킬로그의 터치별 결과 일치 확인
+
+기존 일반 킬로그 원본으로 가로 막대 재검출과 중앙 기준 추출을 확인했어.
+
+다만 첫 번째 사진은 편집기에서 이미 선택한 화면이라 해당 디자인의 게임 원본으로 장식 전체 보존을 최종 검증하지는 못했어. 자동 선택이 여전히 짧다면 원본 사진으로 추가 조정이 필요해.
+
+기존 회원 관리, 오류 신고, 임시 저장, 원본 비교, 삼성 10장 초과 경고 등 다른 기능도 유지했어.
+
+GitHub의 index.html을 교체한 다음, 이전 추출 결과를 삭제하고 게임 원본에서 다시 선택해 줘.
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -2355,7 +2530,7 @@ window.closeAdmin=()=>{
   <div class="guide-body">
    <div class="guide-alert"><strong>처음 시작할 때</strong> 회원가입 후 관리자 승인이 완료되면 사용할 수 있어요. 사진은 가급적 게임의 원본 스크린샷을 사용하세요. 이미 한 번 잘린 사진은 빠진 장식을 완전히 복구하지 못할 수 있어요.</div>
    <section><h3>1. 👕 옷 사진 추출</h3><ol><li><strong>옷 추출</strong>을 선택하고 게임 스크린샷을 추가하세요.</li><li>사진에서 자를 옷 카드를 터치해 선택하세요. 여러 장도 선택할 수 있어요.</li><li><strong>선택한 옷 자르기</strong>를 누르고 결과를 확인하세요.</li><li><strong>개별 저장</strong> 또는 <strong>모두 저장</strong>으로 필요한 사진을 저장하세요.</li></ol></section>
-   <section><h3>2. ✂ 총기 카드 자르기</h3><ol><li><strong>총 자르기</strong>에서 스크린샷을 불러오세요.</li><li>총기 카드를 선택하고 <strong>선택한 카드 자르기</strong>를 누르세요.</li><li>누락되거나 잘못 선택한 카드는 확인 후 다시 선택하세요.</li><li>개별 저장 또는 모두 저장을 사용하세요.</li></ol></section>
+   <section><h3>2. ✂ 총기·차량 카드 자르기</h3><ol><li><strong>총 자르기</strong>에서 총기 또는 차량 카드가 표시된 게임 스크린샷을 불러오세요.</li><li>총기·차량 카드를 선택하고 <strong>선택한 카드 자르기</strong>를 누르세요.</li><li>누락되거나 잘못 선택한 카드는 확인 후 다시 선택하세요.</li><li>개별 저장 또는 모두 저장을 사용하세요.</li></ol></section>
    <section><h3>3. 🎯 킬로그 커팅과 장식 보정</h3><ol><li><strong>킬로그 커팅</strong>에서 일반/고번 모드를 고르고 <strong>자르기 전 원본 스크린샷</strong>을 추가하세요.</li><li>사진 속 <strong>‘킬 알림’ 막대나 장식</strong>을 터치하세요. 작으면 사진 확대(＋) 후 눌러보세요.</li><li>아래 추출 결과에서 <strong>인식 범위·장식 보정</strong>을 눌러 왼쪽·오른쪽·위·아래 인식 범위를 조절하세요.</li><li><strong>전체 보기</strong>로 킬로그 전체를 보고, 필요할 때 ＋로 확대해 <strong>↔ 이동</strong>으로 움직이고 <strong>복원/지우기</strong>와 표시되는 브러쉬 원으로 세부 부분을 보정하세요.</li><li><strong>보정 적용</strong> 후 가운데 정렬된 PNG를 미리보기로 확인하고 저장하세요.</li></ol><p style="margin-top:9px">어두운 네모·잡티가 남으면 지우기로 정리하세요. <strong>이미 제거된 장식은 잘린 PNG만으로 되살릴 수 없으므로</strong> 원본 스크린샷을 다시 불러와야 해요.</p></section>
    <section><h3>4. 🖼️ 이미지 합치기</h3><ol><li><strong>합치기</strong>에서 여러 사진을 추가하세요.</li><li>배치와 순서를 확인하고 위치 옵션을 선택하세요.</li><li>미리보기에 문제가 없는지 확인한 뒤 <strong>JPG 이미지 저장</strong>을 누르세요.</li></ol></section>
    <section><h3>5. 📝 대필판 만들기</h3><ol><li><strong>대필판</strong>에서 옷 사진과 총기·차량 사진을 각각 추가하세요.</li><li>저스펙·중스펙·고스펙 판을 선택하고 사진 순서와 배치를 확인하세요.</li><li>문의 문구, 보조 문구, 대필 이름, 옷·총 이름과 레벨을 입력하세요.</li><li>필요하면 글자 크기·위치·색상·그림자를 조절하고 미리보기를 확인하세요.</li><li><strong>PNG 저장</strong>을 누르면 대필판 결과를 저장할 수 있어요.</li></ol></section>
@@ -2510,7 +2685,7 @@ window.closeAdmin=()=>{
   <div class="logo">✂</div>
   <div class="title-wrap">
    <h1>Card Cutter</h1>
-   <p>총기 카드를 선택하고 저장하세요.</p>
+   <p>총기·차량 카드를 선택하고 저장하세요.</p>
   </div>
  </div>
 </header>
@@ -2541,7 +2716,7 @@ window.closeAdmin=()=>{
   <span style="width:7px;height:7px;display:inline-block;border-radius:50%;background:#4ade9b"></span>
   <span id="g_currentPhoto">사진을 선택해주세요</span>
  </div>
- <span style="color:#646c7b;font-size:11px">총기 상자를 눌러 선택</span>
+ <span style="color:#646c7b;font-size:11px">총기·차량 카드를 눌러 선택</span>
 </div>
 
 <section class="viewer">
@@ -2552,7 +2727,7 @@ window.closeAdmin=()=>{
 </section>
 
 <div style="margin-top:10px;padding:12px 14px;border-radius:14px;background:#10131a;border:1px solid #202530;color:#858d9c;font-size:12px;line-height:1.55;text-align:center">
- 인식된 총기를 <b style="color:#dbe5ff">한 번 누르면 선택</b> / 다시 누르면 해제됩니다.<br>
+ 인식된 총기·차량 카드를 <b style="color:#dbe5ff">한 번 누르면 선택</b> / 다시 누르면 해제됩니다.<br>
  모든 인식 박스가 <b style="color:#629aff">동일한 크기</b>로 맞춰집니다.
 </div>
 
@@ -4125,6 +4300,58 @@ function isCardPixel(r,g,b){
 }
 
 
+// 차량/총기 카드가 어두운 붉은색인 경우를 위한 원본 카드 배경 인식.
+// 화면 위치나 원본 사진의 너비를 전제로 하지 않고, 붉은 배경의 실제 연결 영역과
+// 직사각형 형태(면적, 가로세로 비율)를 검사합니다. 오른쪽의 차량 아이콘은 제외됩니다.
+function detectVehicleCards(){
+ const iw=imageCanvas.width,ih=imageCanvas.height;
+ if(iw<2||ih<2)return [];
+ const scale=Math.min(1,1100/Math.max(iw,ih));
+ const sw=Math.max(1,Math.round(iw*scale)),sh=Math.max(1,Math.round(ih*scale));
+ const analysis=document.createElement('canvas');analysis.width=sw;analysis.height=sh;
+ const c=analysis.getContext('2d',{willReadFrequently:true});
+ c.drawImage(image,0,0,sw,sh);
+ const px=c.getImageData(0,0,sw,sh).data;
+ const mask=new Uint8Array(sw*sh),queue=new Int32Array(sw*sh);
+ for(let i=0;i<mask.length;i++){
+  const k=i*4,R=px[k],G=px[k+1],B=px[k+2];
+  // 카드 상단의 짙은 적색까지 허용하되 회색 게임 배경은 배제합니다.
+  if(R>58&&R>G*1.26&&R>B*1.11&&R-G>18&&R-B>10&&G<175)mask[i]=1;
+ }
+ const found=[];
+ for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){
+  const seed=y*sw+x;
+  if(mask[seed]!==1)continue;
+  let head=0,tail=1,left=x,right=x,top=y,bottom=y;
+  queue[0]=seed;mask[seed]=2;
+  while(head<tail){
+   const idx=queue[head++],cx=idx%sw,cy=(idx/sw)|0;
+   if(cx<left)left=cx;if(cx>right)right=cx;
+   if(cy<top)top=cy;if(cy>bottom)bottom=cy;
+   // 8방향 연결: JPEG 계단형 압축에서도 배경이 끊어지지 않게 합니다.
+   for(let yy=Math.max(0,cy-1);yy<=Math.min(sh-1,cy+1);yy++)
+    for(let xx=Math.max(0,cx-1);xx<=Math.min(sw-1,cx+1);xx++){
+     const q=yy*sw+xx;if(mask[q]===1){mask[q]=2;queue[tail++]=q;}
+    }
+  }
+  const rw=right-left+1,rh=bottom-top+1,ratio=rw/rh,fill=tail/(rw*rh);
+  // 실제 직사각 카드 배경은 넓게 채워져 있지만 차량 그림/장식은 분절된 형태입니다.
+  if(rw<26||rh<14||ratio<1.35||ratio>3.05||
+    rw>sw*.8||rh>sh*.65||tail<180||fill<.68)continue;
+  // 테두리와 내부를 모두 보존하고, 원본 카드 픽셀 크기는 기기별로 환산하지 않습니다.
+  const pad=Math.max(1,Math.round(Math.min(rw,rh)*.012));
+  const ox=Math.max(0,Math.floor((left-pad)*iw/sw)),oy=Math.max(0,Math.floor((top-pad)*ih/sh));
+  const ex=Math.min(iw,Math.ceil((right+1+pad)*iw/sw));
+  const ey=Math.min(ih,Math.ceil((bottom+1+pad)*ih/sh));
+  // 카드 테두리가 잘리지 않게 원본 경계를 약간 보존합니다.
+  const fw=ex-ox,fh=ey-oy;
+  const cl=Math.round(fw*LEFT_TRIM_RATIO),cr=Math.round(fw*RIGHT_TRIM_RATIO);
+  const ct=Math.round(fh*TOP_TRIM_RATIO),cb=Math.round(fh*BOTTOM_TRIM_RATIO);
+  found.push({x:ox+cl,y:oy+ct,width:Math.max(1,fw-cl-cr),height:Math.max(1,fh-ct-cb)});
+ }
+ return found.sort((a,b)=>Math.abs(a.y-b.y)<Math.min(a.height,b.height)*.4?a.x-b.x:a.y-b.y);
+}
+
 /* =====================================================
    ★ 총기 자동 인식
    모든 총기 박스의 크기를 완전히 동일하게 맞춤
@@ -4267,7 +4494,7 @@ function detectCards(){
  }
 
 
- if(!rawRects.length)return;
+ if(!rawRects.length){cards=detectVehicleCards();return;}
 
 
  /* =========================================
@@ -4309,7 +4536,7 @@ function detectCards(){
  });
 
 
- if(!validRects.length)return;
+ if(!validRects.length){cards=detectVehicleCards();return;}
 
 
  /* =========================================
@@ -4411,6 +4638,23 @@ function detectCards(){
 
   });
  });
+ // 차량의 어두운 붉은 배경을 포함한 전체 카드 범위를 우선합니다.
+ // 기존의 밝은 빨강 일부만 검출된 카드와 겹치면 더 온전한 큰 카드로 교체합니다.
+ for(const vehicle of detectVehicleCards()){
+  let duplicate=false;
+  for(let i=0;i<cards.length;i++){
+   const existing=cards[i];
+   const dx=Math.max(0,Math.min(vehicle.x+vehicle.width,existing.x+existing.width)-Math.max(vehicle.x,existing.x));
+   const dy=Math.max(0,Math.min(vehicle.y+vehicle.height,existing.y+existing.height)-Math.max(vehicle.y,existing.y));
+   const overlapArea=dx*dy,smaller=Math.min(vehicle.width*vehicle.height,existing.width*existing.height);
+   if(smaller<=0||overlapArea/smaller<=.48)continue;
+   duplicate=true;
+   if(vehicle.width*vehicle.height>existing.width*existing.height*1.10){cards[i]=vehicle;}
+   break;
+  }
+  if(!duplicate)cards.push(vehicle);
+ }
+ cards.sort((a,b)=>Math.abs(a.y-b.y)<Math.min(a.height,b.height)*.42?a.x-b.x:a.y-b.y);
 }
 
 
@@ -4625,7 +4869,7 @@ window.g_extractSelected=()=>{
   resultCard.innerHTML=`
    <img src="${dataURL}">
    <div class="card-info">
-    사진 ${item.photoIndex+1} · 총기 ${index+1}
+    사진 ${item.photoIndex+1} · 총기·차량 ${index+1}
    </div>
    <button class="save"
     onclick="shareFile('${dataURL}','gun_${index+1}.jpg')">
@@ -7637,7 +7881,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   if((result.meta?.scaleFree || result.meta?.pixelBased) && result.meta.band){
    const b=result.meta.band;
    const pixelPerCss=view.width/Math.max(1,view.getBoundingClientRect().width);
-   const touchPad=clamp(Math.round(pixelPerCss*7),4,34);
+   const touchPad=clamp(Math.round(pixelPerCss*10),6,46);
    // The artwork/text and the narrow bar were already verified from image data.
    // On a phone the bar can be only 6–8 CSS px tall: allow a finger-size hit target.
    return tx>=b.left-Math.max(touchPad,b.bottom-b.top)*1.5 &&
@@ -7945,7 +8189,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
  function detectCompactBlueSpecial(tx,ty){
   if(killlogMode!=='special'||!photos[active])return null;
   const W=view.width,H=view.height;
-  if(W<250||H<150||ty>H*.43)return null;
+  if(W<250||H<150)return null;
   const probe=detectLocalBannerFromTap(tx,ty);
   const initial=probe?.meta?.band;
   if(!initial)return null;
@@ -8117,12 +8361,119 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const limit=result.meta.chromaBanner?.068:.42;
   return white/Math.max(1,n)<limit;
  }
+ // Expand a previously verified patterned killlog across its actual horizontal body.
+ // Only the killlog's measured band height/contrast are used, NOT image-size ratios.
+ function extendVerifiedBannerBody(r){
+  if(!r?.master||!r.meta?.band||r.meta.icyBlueComplete||r.meta.compactBlueSpecial)return r;
+  const b=r.meta.band,W=view.width,H=view.height;
+  const left=Math.round(b.left),right=Math.round(b.right),top=Math.round(b.top),bottom=Math.round(b.bottom);
+  const bw=right-left+1,bh=bottom-top+1;
+  if(bw<60||bh<9||bh>180||bw/bh<2.8)return r;
+  const reach=Math.max(100,Math.round(bh*17));
+  const l=Math.max(2,left-reach),rr=Math.min(W-3,right+reach);
+  const t=Math.max(2,top-Math.round(bh*.9)),bt=Math.min(H-3,bottom+Math.round(bh*.9));
+  const ww=rr-l+1,hh=bt-t+1;
+  if(ww<80||hh<16)return r;
+  const pixels=ctx.getImageData(l,t,ww,hh).data;
+  const color=(x,y)=>{let i=((clamp(Math.round(y),t,bt)-t)*ww+clamp(Math.round(x),l,rr)-l)*4;return [pixels[i],pixels[i+1],pixels[i+2]]};
+  const delta=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+  // Find rows of continuous banner material (decorative spikes alone do not qualify).
+  const rowHits=[];
+  for(let y=top;y<=bottom;y++){
+   let hit=0,total=0;
+   for(let x=left+Math.round(bw*.38);x<right-Math.round(bw*.08);x+=Math.max(2,Math.round(bw/55))){
+    const mid=color(x,y),bg1=color(x,top-bh*.85),bg2=color(x,bottom+bh*.85);
+    const ref=mid.map((_,j)=>(bg1[j]+bg2[j])/2);
+    if(delta(mid,ref)>20)hit++;total++;
+   }
+   if(total&&hit/total>.43)rowHits.push(y);
+  }
+  if(rowHits.length<Math.max(6,bh*.26))return r;
+  const coreTop=rowHits[0],coreBottom=rowHits[rowHits.length-1],coreH=coreBottom-coreTop+1;
+  if(coreH<7||coreH>bh*1.2)return r;
+  const scoreAt=x=>{
+   let hits=0;
+   for(const f of [.18,.40,.61,.82]){
+    const y=coreTop+coreH*f,mid=color(x,y),up=color(x,coreTop-bh*.9),down=color(x,coreBottom+bh*.9);
+    let d=delta(mid,mid.map((_,j)=>(up[j]+down[j])/2));
+    if(d>18)hits++;
+   }
+   return hits;
+  };
+  const stride=Math.max(1,Math.round(coreH/11));
+  const xSamples=[];
+  for(let x=l;x<=rr;x+=stride)xSamples.push({x,score:scoreAt(x)});
+  const pivot=Math.round((left+right)/2);
+  let at=xSamples.findIndex(q=>q.x>=pivot);
+  if(at<0)at=xSamples.length-1;
+  const needed=Math.max(3,Math.round(coreH*.42/stride));
+  // Walk through short dark decorations, but not a second separate UI object.
+  const trace=direction=>{
+   let best=pivot,miss=0;
+   for(let i=at;i>=0&&i<xSamples.length;i+=direction){
+    const sample=xSamples[i];
+    if(sample.score>=2){best=sample.x;miss=0;}
+    else if(++miss>needed)break;
+   }
+   return best;
+  };
+  const from=trace(-1),to=trace(1);
+  // Only correct demonstrably cropped horizontal body, not all foreground pixels.
+  if(to<right+Math.max(7,coreH*.18)&&from>left-Math.max(7,coreH*.18))return r;
+  const newLeft=Math.max(l,Math.min(left,from)),newRight=Math.min(rr,Math.max(right,to));
+  // Extension beyond the original body is accepted only where column contrast
+  // is visible. Other pixels retain the original (often decorative) alpha.
+  const minX=Math.min(r.sourceX,newLeft-Math.round(coreH*2.6));
+  const minY=Math.min(r.sourceY,coreTop-Math.round(coreH*1.5));
+  const maxX=Math.max(r.sourceX+r.master.width,newRight+Math.round(coreH*.5));
+  const maxY=Math.max(r.sourceY+r.master.height,coreBottom+Math.round(coreH*1.5));
+  const sx=Math.max(0,Math.floor(minX)),sy=Math.max(0,Math.floor(minY));
+  const ex=Math.min(W,Math.ceil(maxX)),ey=Math.min(H,Math.ceil(maxY));
+  const w=ex-sx,h=ey-sy;
+  if(w<50||h<10||w*h>3500000)return r;
+  const source=ctx.getImageData(sx,sy,w,h).data;
+  const alpha=new Uint8Array(w*h);
+  const old=r.master.getContext('2d',{willReadFrequently:true}).getImageData(0,0,r.master.width,r.master.height).data;
+  for(let y=0;y<r.master.height;y++)for(let x=0;x<r.master.width;x++){
+   const X=r.sourceX+x-sx,Y=r.sourceY+y-sy;
+   if(X>=0&&Y>=0&&X<w&&Y<h)alpha[Y*w+X]=old[(y*r.master.width+x)*4+3];
+  }
+  for(let x=newLeft;x<=newRight;x++){
+   let score=scoreAt(x);
+   if(score<2)continue;
+   const taperStart=newRight-coreH*1.3;
+   const fade=x>taperStart?clamp((newRight+coreH*.3-x)/(coreH*1.6),0,1):1;
+   for(let y=coreTop;y<=coreBottom;y++){
+    const k=(y-sy)*w+x-sx;
+    if(k>=0&&k<alpha.length)alpha[k]=Math.max(alpha[k],Math.round(255*fade));
+   }
+  }
+  const out=createMaskedResult(sx,sy,w,h,new Uint8Array(source),alpha,r.mode,{...r.meta,
+   fullBodyTrace:true,band:{left:newLeft,right:newRight,top:coreTop,bottom:coreBottom}});
+  return out||r;
+ }
+
  function detectPixelOnlyBanner(tx,ty,mode,canonical=false){
+  // Special/high-number cyan kill alert: verify the observed colored bar first,
+  // rather than falling through to a partial standard-style rectangle.
+  if(mode==='special'){
+   const blue=detectCompactBlueSpecial(tx,ty);
+   if(blue){blue.meta={...blue.meta,pixelBased:true};return blue;}
+  }
   // Recognize long cyan bars by measured edge + separated icon/label regions.
   const cyan=detectCompleteIcyBlueKilllog(tx,ty);
   if(cyan){cyan.mode=mode;cyan.meta={...cyan.meta,pixelBased:true};return cyan;}
   let local=detectLocalBannerFromTap(tx,ty);
   let chroma=detectChromaBannerAtTap(tx,ty,mode);
+  // A finger near (rather than precisely on) a small cyan alert may first find
+  // a chroma candidate. Re-probe its VERIFIED center, not a screen coordinate.
+  // This canonicalizes the crop no matter which part was touched.
+  if(mode==='special'&&chroma?.meta?.band){
+   const b=chroma.meta.band;
+   const verified=detectCompactBlueSpecial(
+    Math.round((b.left+b.right)/2),Math.round((b.top+b.bottom)/2));
+   if(verified){verified.meta={...verified.meta,pixelBased:true};return verified;}
+  }
   if(local&&!quietBannerTail(local))local=null;
   if(chroma&&!quietBannerTail(chroma))chroma=null;
   // Red/flame banners have patterned dark portions: the foreground-color
@@ -8131,21 +8482,28 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const stronglyRed=cc[0]>80&&cc[0]>cc[1]*1.55&&cc[0]>cc[2]*1.24;
   const localWidth=local?.meta?.band?(local.meta.band.right-local.meta.band.left):local?.inner?.w||0;
   const chromaWidth=chroma?.meta?.band?(chroma.meta.band.right-chroma.meta.band.left):0;
-  const result=chroma&&(stronglyRed||!local||(localWidth>0&&chromaWidth>localWidth*1.27))?chroma:(local||chroma);
+  let result=chroma&&(stronglyRed||!local||(localWidth>0&&chromaWidth>localWidth*1.27))?chroma:(local||chroma);
   if(result){
+   const traced=extendVerifiedBannerBody(result);
+   if(traced!==result){result=traced;}
    result.mode=mode;result.meta={...result.meta,pixelBased:true};
    // Repeat recognition from the measured banner center. The first finger
    // position chooses the object; it must not determine the exported box.
    if(!canonical&&result.meta.band){
     const b=result.meta.band;
-    const cx=clamp(Math.round(((b.left+b.right)/2)/16)*16,0,view.width-1),cy=clamp(Math.round(((b.top+b.bottom)/2)/8)*8,0,view.height-1);
-    if(Math.hypot(cx-tx,cy-ty)>2){
-     const stable=detectPixelOnlyBanner(cx,cy,mode,true);
-     if(stable){
-      // A second scan must never discard protruding ornaments that the first
-      // scan already recovered. Some fire/fantasy styles have tall decorations.
-      if(stable.inner.h>=result.inner.h*.85 && stable.inner.w>=result.inner.w*.84 &&
-         !(result.meta.chromaBanner&&!stable.meta.chromaBanner))return stable;
+    // Anchor to a pixel-grid point inside the VERIFIED banner, not the tap.
+    // This is an output-stabilization rule; grid coordinates do not infer any
+    // object size or location from the screenshot dimensions.
+    const cx=clamp(Math.floor(((b.left+b.right)/2)/32)*32,0,view.width-1);
+    const cy=clamp(Math.floor(((b.top+b.bottom)/2)/32)*32+8,0,view.height-1);
+    const stable=detectPixelOnlyBanner(cx,cy,mode,true);
+    if(stable){
+     const q=stable.meta?.band||stable.meta?.measuredBand;
+     if(q){
+      const l=Math.max(b.left,q.left),r=Math.min(b.right,q.right);
+      const overlap=Math.max(0,r-l)/Math.max(1,Math.min(b.right-b.left,q.right-q.left));
+      const ym=(q.top+q.bottom)/2;
+      if(overlap>.58&&Math.abs(ym-(b.top+b.bottom)/2)<Math.max(26,(b.bottom-b.top)*1.7))return stable;
      }
     }
    }
@@ -8174,7 +8532,7 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   const r=results[index];if(!r?.bounds||!r.master)return;
   active=r.photo;redraw();
   const W=view.width,H=view.height,b=r.bounds;
-  const maxExpand=Math.min(220,Math.max(100,Math.round(b.h*2.2)));
+  const maxExpand=Math.min(650,Math.max(350,Math.round(b.h*6)));
   const x0=Math.max(0,Math.floor(b.x-maxExpand));
   const y0=Math.max(0,Math.floor(b.y-maxExpand));
   const x1=Math.min(W,Math.ceil(b.x+b.w+maxExpand));
@@ -8354,12 +8712,25 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const k=y*w+x;
     let a=baseAlpha[k];
-    if(candidates[k]&&withinExpandedRect(x+x0,y+y0)){
+    if(withinExpandedRect(x+x0,y+y0)){
      const X=x+x0,Y=y+y0;
      const leftDecor=X<leftDecorEnd;
      const upper=barTop-(leftDecor?barHeight*1.1:barHeight*.32);
      const lower=barBottom+(leftDecor?barHeight*.40:Math.max(2,barHeight*.045));
-     if(Y>=upper&&Y<=lower)a=Math.max(a,candidates[k]);
+     if(candidates[k]&&Y>=upper&&Y<=lower)a=Math.max(a,candidates[k]);
+     // The user's direction sliders control ACTUAL inclusion, not just the
+     // search viewport. Preserve contiguous dark portions of the banner body.
+     const outsideOriginal=X<b.x||X>=b.x+b.w||Y<b.y||Y>=b.y+b.h;
+     if(outsideOriginal&&(expandLeft||expandRight||expandTop||expandBottom)&&
+        Y>=barTop&&Y<=barBottom&&X>=b.x-expandLeft&&X<b.x+b.w+expandRight){
+      const j=k*4,R=source[j],G=source[j+1],B=source[j+2];
+      const above=clamp(Math.round(barTop-y0-barHeight),0,h-1),below=clamp(Math.round(barBottom-y0+barHeight),0,h-1);
+      const ta=(above*w+x)*4,ba=(below*w+x)*4;
+      const d=Math.max(Math.abs(R-(source[ta]+source[ba])/2),Math.abs(G-(source[ta+1]+source[ba+1])/2),Math.abs(B-(source[ta+2]+source[ba+2])/2));
+      // Explicit slider expansion includes dark banner material as well as bright pixels.
+      // This is intentional manual inclusion; the erase brush can remove unwanted background.
+      a=Math.max(a,Math.max(195,Math.min(255,Math.round((d+12)*7))));
+     }
     }
     if(painted[k]!==-1)a=painted[k];
     alpha[k]=a;
@@ -8867,3 +9238,4 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
 </script>
 </body>
 </html>
+
