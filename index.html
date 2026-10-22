@@ -901,6 +901,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 .global-tabs > #btn-guide{width:100%!important;min-width:0!important;max-width:100%!important;min-height:49px!important;white-space:normal!important;}
 @media(max-width:640px){.guide-body{padding:12px}.guide-body section{padding:12px}.guide-header{padding:13px}.guide-footer{padding:10px 12px}.global-tabs > #btn-guide{font-size:clamp(11.5px,3.25vw,14px)!important;min-height:48px!important;}}
 
+@media(max-width:600px){#kill-tab .results{grid-template-columns:minmax(0,1fr)!important}}
 </style>
 <style>
 #sna-report-open{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:100001;min-height:42px;padding:9px 14px;border:1px solid #7892bc;background:#263c5e;color:#f4f7ff;border-radius:25px;font-weight:750;box-shadow:0 4px 16px #0008;display:none}
@@ -6981,6 +6982,72 @@ saveBtn.addEventListener("click",async()=>{
   if(edited)g.putImageData(rgba,0,0);
   return edited;
  }
+
+ function suppressVerifiedBackdrop(r){
+  if(!r?.meta?.verifiedTextRibbon||!r.meta.band||!r.master)return false;
+  const band=r.meta.band, bh=band.bottom-band.top+1;
+  if(bh<9)return false;
+  const W=view.width,H=view.height,c=r.master,w=c.width,h=c.height;
+  const g=c.getContext('2d',{willReadFrequently:true});
+  const im=g.getImageData(0,0,w,h),pix=im.data;
+  const topY=clamp(Math.round(band.top-bh*1.75),0,H-1);
+  const botY=clamp(Math.round(band.bottom+bh*.33),0,H-1);
+  const bx=Math.max(0,Math.floor(r.sourceX)),rx=Math.min(W,bx+w);
+  if(rx-bx<10)return false;
+  const refT=ctx.getImageData(bx,topY,rx-bx,1).data;
+  const refB=ctx.getImageData(bx,botY,rx-bx,1).data;
+  const inRibbonStart=band.left+bh*.55;
+  const headEnd=band.left+bh*3.0;
+  let changed=false;
+  for(let y=0;y<h;y++){
+   const Y=y+r.sourceY;
+   for(let x=0;x<w;x++){
+    const X=x+r.sourceX,j=(y*w+x)*4,old=pix[j+3];
+    if(old<5||X<bx||X>=rx)continue;
+    const ref=(X-bx)*4;
+    const t=clamp((Y-topY)/Math.max(1,botY-topY),0,1);
+    const bgR=refT[ref]*(1-t)+refB[ref]*t,bgG=refT[ref+1]*(1-t)+refB[ref+1]*t,bgB=refT[ref+2]*(1-t)+refB[ref+2]*t;
+    const R=pix[j],G=pix[j+1],B=pix[j+2];
+    const max=Math.max(R,G,B),min=Math.min(R,G,B),sat=max-min;
+    const diff=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
+    const inCore=Y>=band.top-2&&Y<=band.bottom+2;
+    const outsideHead=X<inRibbonStart;
+    // Only subtract scene-colored pixels; keep bright/saturated emblem strokes.
+    const protect=(min>146&&sat<98)||(sat>69&&max>93)||(R>145&&R>G+25)||(B>145&&B>R+27);
+    let a=old;
+    if(!protect){
+     const threshold=(inCore&&X>headEnd)?8:(inCore?12:19);
+     const span=(inCore&&X>headEnd)?22:28;
+     const confidence=clamp((diff-threshold)/span,0,1);
+     a=Math.min(old,Math.round(255*confidence));
+    }else if(!inCore&&X>headEnd&&diff<12){
+     a=Math.min(old,Math.round(255*clamp((diff-6)/20,0,1)));
+    }
+    // Below the actual banner, loose dark rectangles are scene scenery.
+    // A small hanging colored pendant next to the emblem is protected.
+    if(Y>band.bottom+bh*.18&&Y<band.bottom+bh*1.2&&
+       X<band.left+bh*3.7&&X>band.left-bh*6&&
+       max<107&&sat<34&&diff<37){a=Math.min(a,Math.round(255*clamp((diff-12)/35,0,1)));}
+    if(X>band.right-bh*.26&&X<=band.right+bh*.12){
+     // Follow the observed ribbon's own edge, not the screenshot border.
+     const fade=clamp((band.right+bh*.08-X)/(bh*.34),0,1);
+     a=Math.min(a,Math.round(old*fade));
+    }
+    if(X<band.left+bh*1.2&&Y>band.bottom+bh*.13&&
+       Y<band.bottom+bh*.58&&max<119&&min<79&&sat<65){
+     a=Math.min(a,Math.round(255*clamp((diff-23)/55,0,1)));
+    }
+    if(X>band.right-bh*.55&&max<99&&sat<29){
+     // Transparent charcoal scenery beyond the last colored glyph/trim.
+     a=Math.min(a,Math.round(255*clamp((diff-15)/45,0,1)));
+    }
+    if(a!==old){pix[j+3]=a;changed=true;}
+   }
+  }
+  if(changed)g.putImageData(im,0,0);
+  return changed;
+ }
+
 async function encodeResult(r){
   // Special blue banners are measured from the source; never apply broad cleanup.
   if(!r?.meta?.verifiedTextRibbon&&!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
@@ -6991,6 +7058,7 @@ async function encodeResult(r){
   // Erase only verified scenery leakage below the extracted notification.
   if(!r?.meta?.manualRepair){
    cleanVerifiedKilllogArtifact(r);
+   suppressVerifiedBackdrop(r);
   }
   recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
@@ -7079,15 +7147,15 @@ async function encodeResult(r){
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
   if(!results.length){const d=document.createElement('div');d.className='empty';d.textContent='아직 선택된 킬로그가 없습니다.';wrap.append(d);return;}
   results.forEach((r,i)=>{
-   const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');
+   const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');card.style.cssText='box-sizing:border-box;min-width:0;max-width:100%;overflow:hidden';
    card.style.borderColor=i===editingIndex?'#ffb020':'';
    const img=document.createElement('img');img.src=r.url;img.alt='킬로그 추출 결과: 누르면 확대해서 볼 수 있습니다';img.style.cursor='zoom-in';img.onclick=()=>showPreview(r,i);
    img.style.cssText='display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
    const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${r.mode==='special'?'고번':'일반'} · ${OUTPUT_W}×${r.outputH}`;
    card.append(img,info);
    const warn=resultWarning(r);if(warn){const note=document.createElement('div');note.style.cssText='font-size:12px;color:#ffcb7d;margin:4px 0 8px';note.textContent='주의: '+warn;card.append(note);}
-   const btnRow=document.createElement('div');btnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
-   const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
+   const btnRow=document.createElement('div');btnRow.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;min-width:0;width:100%;max-width:100%;box-sizing:border-box';
+   const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.style.cssText='display:block;box-sizing:border-box;min-width:0;max-width:100%;width:100%;height:auto;white-space:normal;overflow-wrap:anywhere;word-break:keep-all;text-align:center;line-height:1.4;padding:10px 6px;font-size:13px';b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
     mk('원본·결과 비교',()=>compareResult(r,i)),
@@ -9432,6 +9500,14 @@ function detectVerifiedTextRibbon(tx,ty,mode){
  return found;
 }
 
+
+ function touchNearVerifiedRibbon(r,tx,ty){
+  const band=r?.meta?.band;
+  if(!band)return false;
+  const h=Math.max(8,band.bottom-band.top+1);
+  return tx>=band.left-h*3.8&&tx<=band.right+h*1.6&&
+   ty>=band.top-h*1.65&&ty<=band.bottom+h*1.55;
+ }
  async function extractKilllog(tx,ty,mode){
   const photo=photos[active];if(!photo)return null;
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
@@ -9439,7 +9515,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   if(cached){
    // Never redirect the user to a gun-shaped detector on a showcase photo:
    // the saved verified alert is the only extraction candidate.
-   if(cached.meta?.verifiedTextRibbon)return cached;
+   if(cached.meta?.verifiedTextRibbon)return touchNearVerifiedRibbon(cached,tx,ty)?cached:null;
    if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
    return cached;
   }
@@ -9451,7 +9527,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    const verifiedBand=textRibbon.meta?.band;
    const localH=verifiedBand?verifiedBand.bottom-verifiedBand.top:0;
    const belowTouch=verifiedBand&&verifiedBand.top>ty+Math.max(11,localH*1.25);
-   if(!belowTouch && await encodeResult(textRibbon)&&validKilllogResult(textRibbon)){
+   if(!belowTouch && touchNearVerifiedRibbon(textRibbon,tx,ty)&&await encodeResult(textRibbon)&&validKilllogResult(textRibbon)){
     photo[cacheKey]=textRibbon;return textRibbon;
    }
   }
