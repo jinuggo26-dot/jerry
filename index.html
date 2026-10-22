@@ -6456,6 +6456,50 @@ saveBtn.addEventListener("click",async()=>{
  const editStatus=text=>{const el=$('kl-edit-status');if(el)el.textContent=text;};
  const rgbDelta=(r1,g1,b1,r2,g2,b2)=>Math.max(Math.abs(r1-r2),Math.abs(g1-g2),Math.abs(b1-b2));
  
+ let manualBoxMode=false,manualDrag=null,manualRect=null,manualPointerId=null;
+ let manualBoxButton=null,manualBoxCancelButton=null,manualBoxHint=null;
+ function manualStatusText(){
+  return '정밀 누끼 모드입니다. 킬로그 전체를 사각형으로 감싸도록 드래그해 주세요. 자동 인식이 예쁘지 않을 때 사용하는 수동 콘텐츠 기반 추출입니다.';
+ }
+ function refreshManualBoxUi(){
+  if(manualBoxButton)manualBoxButton.classList.toggle('active',manualBoxMode);
+  if(manualBoxCancelButton)manualBoxCancelButton.style.display=manualBoxMode?'':'none';
+  if(manualBoxHint)manualBoxHint.style.display=manualBoxMode?'':'none';
+ }
+ function setManualBoxMode(on){
+  manualBoxMode=!!on;manualDrag=null;manualRect=null;manualPointerId=null;refreshManualBoxUi();drawSelections();
+  if(manualBoxMode)status(manualStatusText());
+  else if(active>=0&&photos[active])status(`${killlogMode==='normal'?'일반':'고번'} 킬로그 모드입니다. 사진 속 ‘킬 알림’ 막대를 눌러주세요.`);
+  else status('사진을 추가해 주세요.');
+ }
+ function clientToImagePoint(clientX,clientY){
+  const rect=view.getBoundingClientRect(),W=view.width,H=view.height;
+  return {
+   x:clamp(Math.round((clientX-rect.left)*W/Math.max(1,rect.width)),0,Math.max(0,W-1)),
+   y:clamp(Math.round((clientY-rect.top)*H/Math.max(1,rect.height)),0,Math.max(0,H-1))
+  };
+ }
+ function normalizedBox(a,b){
+  return {x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),w:Math.abs(a.x-b.x)+1,h:Math.abs(a.y-b.y)+1};
+ }
+ async function finalizeManualBox(clientX,clientY){
+  if(!manualDrag)return;
+  const end=clientToImagePoint(clientX,clientY),box=normalizedBox(manualDrag.start,end);
+  manualDrag=null;manualRect=box;drawSelections();
+  if(box.w<60||box.h<16){status('정밀 누끼 박스가 너무 작습니다. 킬로그 전체가 들어가도록 조금 더 크게 드래그해 주세요.');return;}
+  if(active<0||busy)return;
+  busy=true;status('정밀 누끼를 만드는 중…');
+  try{
+   const picked=extractKilllogFromManualBox(box,killlogMode);
+   if(!picked){status('정밀 누끼 추출에 실패했습니다. 박스를 조금 더 넓게 그리거나, 기존 자동 추출을 사용해 주세요.');return;}
+   picked.photo=active;results.push(picked);updatePhotoCounts();resultView();drawSelections();window.SnaDraft?.queue('kill');
+   status('정밀 누끼 추출 완료! 아래에서 확인하고 저장하세요.');
+   window.logActivity?.('킬로그 정밀 누끼 추출',{photo:active+1,width:picked.bounds.w,height:picked.bounds.h,mode:killlogMode});
+   setManualBoxMode(false);
+  }catch(err){console.error(err);status('정밀 누끼 추출 중 오류가 발생했습니다.');}
+  finally{busy=false;}
+ }
+ 
  function setMode(mode){
   if(!albums[mode])return;
   const previous=albums[killlogMode];
@@ -6478,6 +6522,21 @@ saveBtn.addEventListener("click",async()=>{
  }
  $('kl-mode-normal').addEventListener('click',()=>setMode('normal'));
  $('kl-mode-special').addEventListener('click',()=>setMode('special'));
+ 
+
+ const modeControls=$('kl-mode-controls');
+ manualBoxButton=document.createElement('button');
+ manualBoxButton.type='button';manualBoxButton.id='kl-manual-box';manualBoxButton.className='photo-button';manualBoxButton.textContent='✍ 정밀 누끼 박스 지정';
+ manualBoxButton.addEventListener('click',()=>{if(active<0){status('먼저 사진을 선택해 주세요.');return;}setManualBoxMode(!manualBoxMode);});
+ manualBoxCancelButton=document.createElement('button');
+ manualBoxCancelButton.type='button';manualBoxCancelButton.id='kl-manual-box-cancel';manualBoxCancelButton.className='photo-button';manualBoxCancelButton.textContent='취소';
+ manualBoxCancelButton.style.display='none';
+ manualBoxCancelButton.addEventListener('click',()=>setManualBoxMode(false));
+ manualBoxHint=document.createElement('span');
+ manualBoxHint.id='kl-manual-box-hint';manualBoxHint.style.cssText='display:none;font-size:11px;color:#ffd36e';
+ manualBoxHint.textContent='드래그해서 킬로그 전체를 감싸면 사진 크기와 무관하게 그 영역만 분석해 정밀 누끼를 만듭니다.';
+ modeControls.append(manualBoxButton,manualBoxCancelButton,manualBoxHint);
+ refreshManualBoxUi();
  
  function applyZoom(next,pointX,pointY){
   const newZoom=clamp(Math.round(next*100)/100,MIN_ZOOM,MAX_ZOOM);
@@ -6538,6 +6597,24 @@ saveBtn.addEventListener("click",async()=>{
    mark.font=`bold ${Math.round(radius*1.2)}px sans-serif`;mark.fillText(edit?'E':'✓',cx,cy+1);
    mark.restore();
   });
+  if(manualBoxMode&&(manualRect||(manualDrag&&manualDrag.box))){
+   const b=manualRect||(manualDrag&&manualDrag.box);
+   if(b){
+    mark.save();
+    mark.fillStyle='rgba(255,211,110,.16)';
+    mark.fillRect(b.x,b.y,b.w,b.h);
+    mark.strokeStyle='#ffd36e';
+    mark.lineWidth=Math.max(3,view.width*.0025);
+    mark.setLineDash([Math.max(10,view.width*.008),Math.max(6,view.width*.004)]);
+    mark.strokeRect(b.x,b.y,b.w,b.h);
+    mark.setLineDash([]);
+    mark.fillStyle='#ffd36e';
+    mark.font=`bold ${Math.max(16,Math.round(view.width*.016))}px sans-serif`;
+    mark.textAlign='left';mark.textBaseline='top';
+    mark.fillText('정밀 누끼 범위',Math.max(4,b.x+6),Math.max(4,b.y+6));
+    mark.restore();
+   }
+  }
  }
  function loadImage(file){return new Promise((resolve,reject)=>{
   const url=URL.createObjectURL(file),im=new Image();
@@ -6553,12 +6630,12 @@ saveBtn.addEventListener("click",async()=>{
   });
   if(active<0||!photos[active]){
    view.width=1;view.height=1;ctx.clearRect(0,0,1,1);
-   status('사진을 추가해 주세요.');applyZoom(1);drawSelections();editingIndex=-1;editStatus('추출한 결과를 선택하면 여백을 조절할 수 있습니다.');return;
+   manualRect=null;manualDrag=null;status('사진을 추가해 주세요.');applyZoom(1);drawSelections();editingIndex=-1;editStatus('추출한 결과를 선택하면 여백을 조절할 수 있습니다.');return;
   }
   const im=photos[active].image;
   view.width=im.naturalWidth;view.height=im.naturalHeight;
   ctx.clearRect(0,0,view.width,view.height);ctx.drawImage(im,0,0);
-  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;status(`${killlogMode==='normal'?'일반':'고번'} 킬로그 모드입니다. 사진 속 ‘킬 알림’ 막대를 눌러주세요.`);drawSelections();
+  applyZoom(1);viewport.scrollLeft=0;viewport.scrollTop=0;if(manualBoxMode)status(manualStatusText());else status(`${killlogMode==='normal'?'일반':'고번'} 킬로그 모드입니다. 사진 속 ‘킬 알림’ 막대를 눌러주세요.`);drawSelections();
  }
  // Only correct a very specific extraction artifact: a flat, opaque dark rectangle
  // directly above an icy-blue kill banner. Never erase actual colorful decorations.
@@ -6946,12 +7023,12 @@ saveBtn.addEventListener("click",async()=>{
 
 async function encodeResult(r){
   // Special blue banners are measured from the source; never apply broad cleanup.
-  if(!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
+  if(!r?.meta?.verifiedTextRibbon&&!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
   if(!r?.meta?.verifiedTextRibbon)if(!r?.meta?.verifiedTextRibbon)cleanupDarkSideMattes(r);
-  repairFocusedLeftDecorations(r);
+  // Verified alerts retain their source foreground mask; avoid post-crop paint.
   recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
@@ -7163,6 +7240,124 @@ async function encodeResult(r){
   const result={blob:null,url:null,outputH:MIN_OUTPUT_H,master,inner,baseInner:{...inner},sourceX,sourceY,mode,meta};
   return result;
  }
+
+ function extractKilllogFromManualBox(selection,mode){
+  const W=view.width,H=view.height;
+  if(!selection||selection.w<20||selection.h<8)return null;
+  const padX=Math.max(10,Math.round(selection.w*.06));
+  const padY=Math.max(10,Math.round(selection.h*.18));
+  const x0=clamp(Math.floor(selection.x-padX),0,Math.max(0,W-2));
+  const y0=clamp(Math.floor(selection.y-padY),0,Math.max(0,H-2));
+  const x1=clamp(Math.ceil(selection.x+selection.w+padX),x0+2,W);
+  const y1=clamp(Math.ceil(selection.y+selection.h+padY),y0+2,H);
+  const w=x1-x0,h=y1-y0;
+  if(w<70||h<18)return null;
+  const src=ctx.getImageData(x0,y0,w,h).data;
+  const rowsRef=Math.max(2,Math.min(8,Math.round(h*.08)));
+  const topBg=new Float32Array(w*3),botBg=new Float32Array(w*3);
+  for(let x=0;x<w;x++){
+   let tr=0,tg=0,tb=0,br=0,bg=0,bb=0;
+   for(let y=0;y<rowsRef;y++){
+    let i=(y*w+x)*4;tr+=src[i];tg+=src[i+1];tb+=src[i+2];
+    i=((h-1-y)*w+x)*4;br+=src[i];bg+=src[i+1];bb+=src[i+2];
+   }
+   const j=x*3;
+   topBg[j]=tr/rowsRef;topBg[j+1]=tg/rowsRef;topBg[j+2]=tb/rowsRef;
+   botBg[j]=br/rowsRef;botBg[j+1]=bg/rowsRef;botBg[j+2]=bb/rowsRef;
+  }
+  const diffAt=(x,y)=>{
+   const i=(y*w+x)*4,j=x*3,t=y/Math.max(1,h-1);
+   const br=topBg[j]*(1-t)+botBg[j]*t,bg=topBg[j+1]*(1-t)+botBg[j+1]*t,bb=topBg[j+2]*(1-t)+botBg[j+2]*t;
+   return Math.max(Math.abs(src[i]-br),Math.abs(src[i+1]-bg),Math.abs(src[i+2]-bb));
+  };
+  const rowLeft=Math.max(0,Math.floor(w*.18)),rowRight=Math.min(w-1,Math.ceil(w*.96));
+  const rowStep=Math.max(1,Math.floor((rowRight-rowLeft+1)/220));
+  const rowSignal=new Float32Array(h),rowColor=new Float32Array(h);
+  for(let y=0;y<h;y++){
+   let on=0,total=0,color=0;
+   for(let x=rowLeft;x<=rowRight;x+=rowStep){
+    const i=(y*w+x)*4,R=src[i],G=src[i+1],B=src[i+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B),d=diffAt(x,y);
+    total++;
+    if(d>16||hi-lo>24)on++;
+    if((hi-lo>34&&hi>85)||lo>160)color++;
+   }
+   rowSignal[y]=on/Math.max(1,total);rowColor[y]=color/Math.max(1,total);
+  }
+  let bestTop=-1,bestBottom=-1,bestScore=-1;
+  const minBand=Math.max(6,Math.round(h*.08)),maxBand=Math.max(minBand+2,Math.round(h*.55));
+  for(let start=Math.max(1,Math.floor(h*.05));start<Math.max(2,h-minBand);start++){
+   if(rowSignal[start]<.10&&rowColor[start]<.06)continue;
+   let sum=0,sumColor=0;
+   for(let end=start;end<Math.min(h,start+maxBand);end++){
+    sum+=rowSignal[end];sumColor+=rowColor[end];
+    const len=end-start+1;if(len<minBand)continue;
+    const avg=sum/len,avgColor=sumColor/len,center=(start+end)/2;
+    const score=avg*1.2+avgColor*.6-Math.abs(center-h*.45)/Math.max(1,h)*.18;
+    if(avg>.14&&score>bestScore){bestScore=score;bestTop=start;bestBottom=end;}
+   }
+  }
+  if(bestTop<0){bestTop=Math.floor(h*.30);bestBottom=Math.ceil(h*.62);}
+  const bandH=Math.max(8,bestBottom-bestTop+1);
+  const colTop=Math.max(0,bestTop+Math.round(bandH*.10)),colBottom=Math.min(h-1,bestBottom-Math.round(bandH*.10));
+  const colSignal=new Float32Array(w),colColor=new Float32Array(w);
+  for(let x=0;x<w;x++){
+   let on=0,total=0,color=0;
+   for(let y=colTop;y<=colBottom;y+=Math.max(1,Math.floor(bandH/10))){
+    const i=(y*w+x)*4,R=src[i],G=src[i+1],B=src[i+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B),d=diffAt(x,y);
+    total++;
+    if(d>15||hi-lo>20)on++;
+    if((hi-lo>30&&hi>78)||lo>160)color++;
+   }
+   colSignal[x]=on/Math.max(1,total);colColor[x]=color/Math.max(1,total);
+  }
+  let bodyL=-1,bodyR=-1,bestRun=-1,runStart=-1;
+  for(let x=Math.max(0,Math.floor(w*.10));x<w;x++){
+   const ok=colSignal[x]>.20||colColor[x]>.10;
+   if(ok&&runStart<0)runStart=x;
+   if((!ok||x===w-1)&&runStart>=0){
+    const end=ok&&x===w-1?x:x-1,len=end-runStart+1;
+    const score=len-(runStart<Math.floor(w*.28)?Math.floor((Math.floor(w*.28)-runStart)*.35):0);
+    if(len>=Math.max(18,Math.round(bandH*1.6))&&score>bestRun){bestRun=score;bodyL=runStart;bodyR=end;}
+    runStart=-1;
+   }
+  }
+  if(bodyL<0){bodyL=Math.floor(w*.18);bodyR=Math.floor(w*.96);}
+  const alpha=new Uint8Array(w*h);
+  const bodySeedTop=Math.max(0,bestTop+Math.round(bandH*.18));
+  const bodySeedBottom=Math.min(h-1,bestBottom-Math.round(bandH*.14));
+  const leftZone=Math.min(w-1,Math.round(bodyL+bandH*2.7));
+  const rightGlow=Math.min(w-1,Math.round(bodyR+bandH*.45));
+  for(let y=0;y<h;y++){
+   for(let x=0;x<w;x++){
+    const i=(y*w+x)*4,R=src[i],G=src[i+1],B=src[i+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B),d=diffAt(x,y);
+    const inBand=y>=bestTop&&y<=bestBottom;
+    const nearBand=y>=bestTop-Math.round(bandH*.80)&&y<=bestBottom+Math.round(bandH*.80);
+    let a=0;
+    if(inBand&&x>=bodyL&&x<=bodyR){
+      if(d>8||hi-lo>10)a=Math.max(a,Math.min(255,Math.round((d+6)*8)));
+      if(x<=bodyR-Math.round((bodyR-bodyL)*.18)&&d>5)a=Math.max(a,172);
+    }
+    if(nearBand&&x<=leftZone&&d>17&&((hi-lo>12&&hi>58)||hi>138||lo>150))a=Math.max(a,Math.min(255,Math.round((d-8)*9)));
+    if(nearBand&&x>=bodyL&&x<=rightGlow&&d>34&&hi-lo>26&&hi>82)a=Math.max(a,Math.min(255,Math.round((d-18)*8)));
+    if(mode==='special'&&nearBand&&d>15&&x<=leftZone&&hi>105)a=Math.max(a,Math.min(255,Math.round((d+10)*7)));
+    alpha[y*w+x]=a;
+   }
+  }
+  const seeds=[];
+  for(let y=bodySeedTop;y<=bodySeedBottom;y+=Math.max(1,Math.floor(bandH/6)))
+   for(let x=Math.max(0,bodyL+Math.round((bodyR-bodyL)*.08));x<=Math.min(w-1,bodyL+Math.round((bodyR-bodyL)*.40));x+=Math.max(1,Math.floor((bodyR-bodyL)/18)))
+    seeds.push(y*w+x);
+  const keep=connectedKeep(alpha,w,h,seeds,Math.max(18,Math.round(bandH*2.2)));
+  if(!keep)return null;
+  for(let i=0;i<alpha.length;i++)if(!keep[i])alpha[i]=0;
+  const result=createMaskedResult(x0,y0,w,h,new Uint8Array(src),alpha,mode,{
+   pixelBased:true,manualBox:true,
+   band:{left:x0+bodyL,right:x0+bodyR,top:y0+bestTop,bottom:y0+bestBottom}
+  });
+  if(!result)return null;
+  return result;
+ }
+
  function connectedKeep(alpha,w,h,seeds,minKeep=12){
   const seen=new Uint8Array(w*h),keep=new Uint8Array(w*h),stack=[];
   for(const p of seeds){if(p<0||p>=w*h||alpha[p]<16||seen[p])continue;seen[p]=1;stack.push(p);} 
@@ -8958,6 +9153,55 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
 // comparisons are scale-normalized to source pixels and checked against the
 // surrounding ribbon before any PNG is cut out.
 const KLG_LABEL_MARKS=[{name:'gray-00',w:36,h:14,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010100010010001010000000000000000000110100011010111010000000000000000000000100001110000010000000000000000000000100000010011110000000000000000000111100001110011110000000000000000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-01',w:36,h:14,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000110100011010011010000000000000000000110100010010001010000000000000000000100100001010000010000000000000000000111100000010000000000000000000000000111100001110010010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-10',w:36,h:14,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000101000000000000000000000000000100000101000110000000000000000000001000000011100000000000000000000000000001000000100011100000000000000000000111000011100011100000000000000000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-11',w:36,h:14,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001110000010000110000000000000000000001110000101010000000000000000000000001100000010000100000000000000000000000111000000000000000000000000000000000111000011100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'magenta-00',w:32,h:14,bits:'0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000011111000000000000000000000000000111111000000000000000000000000000000100000111010001101001100100000000000001110100010111011001000000000000011001000000000111010000000000000011110000001000000000000000000000111100001110000001000'},{name:'magenta-01',w:32,h:14,bits:'0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111100000000000000000000000000011111000000000000000000000000000111110000000001000000000000000000000000000001010001011100000100000000000000110100011110010001000000000000010000000011100000010000000000000000010000001000111100000000000000100000001000001001000'},{name:'magenta-10',w:32,h:14,bits:'0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000011110000000000000000000000000000111110000000000000000000000000000000000000111000001101011101000000000000001100000101010001010000000000000011000000000001111100000000000000011100000001000000000000000000000111000011110010010000'},{name:'magenta-11',w:32,h:14,bits:'0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111000000000000000000000000000011110000000000000000000000000000111100000000000000000000000100000000000000001000010101000101000000000000000100000011010100010000000000000010000000111100000100000000000000000000000001001111000000000000000100000010000010010000'},{name:'blue-00',w:35,h:16,bits:'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000000011110000000000000000000000000000000111111111000011101000110100110000001101001000000111010000001000100000010000010000001100100000000011100000100000100000001111000000100000000000000000000000011110001111001000000000000000000000111100001110001110000'},{name:'blue-01',w:35,h:16,bits:'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011110000000000000000000000000000000000000000000000000000000000000000001111000000000000000000000000000000011110000000000000100000000000000000111100111000000101000001100010000001100001000000010010001101001000000010000010000001000000011110000000000100000000000000001000000100111100000000000000000010000001000001001000000000000000000000000000000000000000'},{name:'blue-10',w:35,h:16,bits:'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000011100000000000000000000000000000000111111110000011010000110001110100001100001000000110100010101011101000010000010000001001000000000111010000000000100000011110000000000000000000000000000000111100001110001001000000000000000001111000011100011110000'},{name:'blue-11',w:35,h:16,bits:'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011100000000000000000000000000000000000000000000000000000000000000000001111000000000000000000000000000000011110000000000000000000000000010000111101110000001010001010100010100001000001000000110100011100010001000000000010000000000000011100000010000000000000000000010000000000111100000000000000000100000001000001001000000000000000000000000000000000000000'},{name:'orange-00',w:39,h:16,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000111000000000001010001010100010100000000100010000000011010001110001000100000000100000000000000000000111000000100000000100000000000000010000000000111100000000010000000000010000000100000100100000000'},{name:'orange-01',w:39,h:16,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011010000110001110100000000101110000000011010001010100010100000000100000000000010010000000001110100000000100000000000011110000000000000000000000010000000000011110000111000100100000000001000000000000000000000000000000000000'},{name:'orange-10',w:39,h:16,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000110000000000001010000001000100000000000000110000000010010001101001000000000000000000000000100000001111000000000000000100000000000000010000001001111000000000010000000000010000001000001001000000000'},{name:'orange-11',w:39,h:16,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000111010001101001100000000000111110000000111010000001000100000000000000000000000110010000000001100000000000100000000000011110000001000000000000000100000000000011100001110001000000000000011000000000000000000010000000000000000'},{name:'gray-native-0',w:37,h:14,bits:'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000100100010100000000000000000000110100011010111010000000000000000000000010000111000001000000000000000000000001000000100111100000000000000000000111100001110011110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-native-1',w:31,h:12,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000100100010100000000000000110100011010111010000000000000000010000111000001000000000000000001000000100111100000000000000111100001110011110000000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-native-2',w:29,h:12,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010100010010001010000000000000101000110101110100000000000000010000111000001000000000000000100000010011110000000000000111000011100111100000000000000000000000000000000000000000000000000000000000000000000000'},{name:'gray-native-3',w:30,h:11,bits:'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010001001000101000000000000011010001101011101000000000000000010000111000001000000000000000010000001001111000000000000011110000111001111000000000000000000000000000000000000000000000000000000000000000000000000'}];
+// Mask-only correction: find the physical TOP and BOTTOM of an already
+// verified short kill alert, using two horizontal source-image borders.
+// Does not create/select a candidate and cannot select a showroom weapon.
+function measureVerifiedRibbonRows(labelX,labelY,labelH){
+ const W=view.width,H=view.height;
+ const x0=clamp(Math.round(labelX+labelH*2),1,W-2);
+ const x1=clamp(Math.round(labelX+labelH*7),x0+5,W-1);
+ const y0=clamp(Math.round(labelY-labelH*1.5),5,H-9);
+ const y1=clamp(Math.round(labelY+labelH*3.7),y0+9,H-5);
+ if(x1-x0<20||y1-y0<21)return null;
+ const sampleStep=Math.max(2,Math.floor(labelH/4));
+ const cols=[];for(let x=x0;x<=x1;x+=sampleStep)cols.push(x);
+ const boxX=x0,boxY=Math.max(0,y0-4),boxW=x1-x0+1,boxH=y1-boxY+5;
+ const pixels=ctx.getImageData(boxX,boxY,boxW,boxH).data;
+ const bgY=clamp(Math.round(labelY-labelH*3),0,H-1);
+ const bg=ctx.getImageData(boxX,bgY,boxW,1).data;
+ const get=(x,y,c)=>pixels[((y-boxY)*boxW+x-boxX)*4+c];
+ const scores=new Float32Array(y1-y0+1),midContrast=new Float32Array(y1-y0+1);
+ for(let y=y0;y<=y1;y++){
+  const edges=[],contrasts=[];
+  for(const x of cols){
+   const d=Math.max(Math.abs(get(x,y-3,0)-get(x,y+3,0)),Math.abs(get(x,y-3,1)-get(x,y+3,1)),Math.abs(get(x,y-3,2)-get(x,y+3,2)));
+   const j=(x-boxX)*4;
+   const c=Math.max(Math.abs(get(x,y,0)-bg[j]),Math.abs(get(x,y,1)-bg[j+1]),Math.abs(get(x,y,2)-bg[j+2]));
+   edges.push(d);contrasts.push(c);
+  }
+  edges.sort((a,b)=>a-b);contrasts.sort((a,b)=>a-b);
+  scores[y-y0]=edges[Math.floor(edges.length/2)];
+  midContrast[y-y0]=contrasts[Math.min(contrasts.length-1,Math.floor(contrasts.length*.55))];
+ }
+ let best=null;
+ for(let top=y0;top<=y1;top++){
+  const te=scores[top-y0];if(te<18)continue;
+  const minB=Math.max(top+Math.ceil(labelH*.93),y0);
+  const maxB=Math.min(y1,top+Math.floor(labelH*2.55));
+  for(let bottom=minB;bottom<=maxB;bottom++){
+   const be=scores[bottom-y0];if(be<17)continue;
+   const centre=(top+bottom)/2;
+   if(Math.abs(centre-(labelY+labelH*.75))>labelH*1.35)continue;
+   const contrast=midContrast[clamp(Math.round(centre-y0),0,midContrast.length-1)];
+   if(contrast<18)continue;
+   const rating=te+be+Math.min(50,contrast)*.22-
+     Math.abs((bottom-top)-labelH*1.82)*.52-
+     Math.abs(centre-(labelY+labelH*.7))*.39;
+   if(!best||rating>best.rating)best={top,bottom,rating};
+  }
+ }
+ return best&&best.rating>=42?best:null;
+}
 function detectVerifiedTextRibbon(tx,ty,mode){
  const photo=photos[active];if(!photo)return null;
  if(!Object.prototype.hasOwnProperty.call(photo,'_verifiedTextRibbon')){
@@ -9019,15 +9263,19 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    }
    if(best&&best.score>=.39){
     const {x,y,tpl}=best,labelX=x*sc,labelY=y*sc,labelH=tpl.h*sc;
-    let ribbonTop=Math.round(labelY-labelH*.25),ribbonBottom=Math.round(labelY+labelH*1.15);
+    const physicalBand=measureVerifiedRibbonRows(labelX,labelY,labelH);
+    let ribbonTop=physicalBand?physicalBand.top-1:Math.round(labelY-labelH*.25);
+    let ribbonBottom=physicalBand?physicalBand.bottom+2:Math.round(labelY+labelH*1.15);
     // Expand the headpiece ONLY when the original ribbon is clearly violet.
     // A global expansion used to cause stray background and reject gray bars.
     const huePx=ctx.getImageData(clamp(Math.round(labelX+labelH*3.8),0,W-1),clamp(Math.round(labelY+labelH*.49),0,H-1),1,1).data;
     const violetHead=huePx[0]>huePx[1]+22&&huePx[2]>huePx[1]+18&&huePx[0]>65;
-    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*(violetHead?8.30:6.25));
+    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*(violetHead?8.30:10.3));
     const farRight=Math.round(labelX+labelH*11.3);
     const x0=clamp(ornamentStart,0,W-2),x1=clamp(farRight,x0+2,W);
-    const y0=clamp(Math.floor(labelY-labelH*(violetHead?2.75:.98)),0,H-2),y1=clamp(Math.ceil(labelY+labelH*(violetHead?3.35:1.85)),y0+2,H);
+    // Artwork can extend several text-heights past the ribbon; preserve the
+    // source sampling window without changing the verified alert location.
+    const y0=clamp(Math.floor(labelY-labelH*(violetHead?3.3:3.5)),0,H-2),y1=clamp(Math.ceil(labelY+labelH*(violetHead?3.8:4.2)),y0+2,H);
     const w=x1-x0,h=y1-y0;
     if(w>=110&&h>=18&&w*h<1200000){
      const image=ctx.getImageData(x0,y0,w,h).data,alpha=new Uint8Array(w*h);
@@ -9088,13 +9336,11 @@ function detectVerifiedTextRibbon(tx,ty,mode){
         if(match&&columnContrast[x]>10)lastHue=x;
        }
        if(lastHue>initial)lastSolid=Math.min(lastSolid,lastHue+Math.round(labelH*.16));
-       ribbonTop=Math.round(labelY-labelH*.13);
-       ribbonBottom=Math.round(labelY+labelH*1.03);
+       if(!physicalBand){ribbonTop=Math.round(labelY-labelH*.13);ribbonBottom=Math.round(labelY+labelH*1.03);}
       }else{
        // A charcoal display alert starts underneath the emblem, not at the gun glyph.
        bodyStart=Math.max(x0,Math.round(labelX-labelH*5.46));
-       ribbonTop=Math.round(labelY+labelH*.02);
-       ribbonBottom=Math.round(labelY+labelH*1.70);
+       if(!physicalBand){ribbonTop=Math.round(labelY+labelH*.02);ribbonBottom=Math.round(labelY+labelH*1.70);}
       }
       const tailEnd=Math.min(w-1,lastSolid+Math.round(labelH*(hue==='gray'?2.35:.90)));
       const mainL=bodyStart-x0;
@@ -9124,6 +9370,190 @@ function detectVerifiedTextRibbon(tx,ty,mode){
          a=Math.max(a,Math.round(255*clamp((diff-16)/34,0,1)));
        }
        alpha[yy*w+xx]=a;
+      }
+      // Recover only original pixels belonging to the ornament. No changes
+      // to glyph detection, ribbon center, right fade or the original text.
+      const headL=Math.max(x0,Math.round(labelX-labelH*10.1));
+      const headT=Math.max(y0,Math.round(ribbonTop-labelH*3.28));
+      const headB=Math.min(y1-1,Math.round(ribbonBottom+labelH*2.65));
+      const bgU=ctx.getImageData(x0,Math.max(0,y0+1),w,1).data;
+      const bgD=ctx.getImageData(x0,Math.min(H-1,y1-2),w,1).data;
+      const restored=new Uint8Array(w*h);
+      let headWarm=0,headViolet=0;
+      for(let Y=Math.max(y0,Math.round(ribbonTop-labelH*.5));Y<=Math.min(y1-1,Math.round(ribbonBottom+labelH*.1));Y+=3)
+       for(let X=Math.max(x0,Math.round(bodyStart-labelH*2.8));X<=Math.min(x1-1,Math.round(bodyStart+labelH*.6));X+=3){
+        const k=((Y-y0)*w+X-x0)*4,R=image[k],G=image[k+1],B=image[k+2];
+        if(R>G+25&&R>B+24&&R>90)headWarm++;
+        if(R>G+15&&B>G+15&&B>75)headViolet++;
+       }
+      const warmDominant=headWarm>Math.max(14,headViolet*1.3);
+      let bodyColour=0,bodySamples=0;
+      for(let Y=Math.max(y0,Math.round(ribbonTop+labelH*.12));Y<=Math.min(y1-1,Math.round(ribbonBottom-labelH*.10));Y+=3)
+       for(let X=Math.max(x0,Math.round(labelX+labelH*2));X<Math.min(x1,Math.round(labelX+labelH*6));X+=4){
+        const k=((Y-y0)*w+X-x0)*4,R=image[k],G=image[k+1],B=image[k+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B);
+        bodySamples++;if(mx-mn>40&&mx>90)bodyColour++;
+       }
+      // These two exotic decorations have broad pale foreground shapes.
+      // Classify them from the ORIGINAL ribbon palette, not the screen or tap.
+      const colorRatio=bodyColour/Math.max(1,bodySamples);
+      const nebulaOrnament=hue==='gray'&&colorRatio>.13&&colorRatio<.35&&
+       headWarm>32&&headViolet<85&&labelH<28;
+      const flameOrnament=hue==='gray'&&colorRatio>.66&&
+       headWarm<23&&headViolet<20;
+      // Dark charcoal banners can have a decorated lower gun behind them.
+      // Do not mistake that weapon for a projecting kill-alert ornament.
+      const mutedWarmBody=bodySamples>8&&colorRatio<.10&&headWarm<20;
+      for(let Y=headT;Y<=headB;Y++){
+       // The headpiece fans out above and around the ribbon, but the lower
+       // screenshot gun is separated and extends to the right underneath it.
+       let maxX=bodyStart+labelH*3.55;
+       if(Y>ribbonBottom+labelH*.65)maxX=bodyStart+labelH*3.4;
+       if(Y>ribbonBottom+labelH*1.36)maxX=bodyStart+labelH*2.0;
+       if(Y>ribbonBottom+labelH*2.05)maxX=bodyStart-labelH*1.6;
+       if(Y<ribbonTop-labelH*1.45)maxX=bodyStart+labelH*4.15;
+       if(nebulaOrnament&&Y>=ribbonTop-labelH*2.05&&Y<=ribbonBottom+labelH*.72)
+        maxX=Math.max(maxX,bodyStart+labelH*5.7);
+       if(flameOrnament&&Y>=ribbonTop-labelH*1.52&&Y<=ribbonBottom+labelH*.60)
+        maxX=Math.max(maxX,bodyStart+labelH*7.65);
+       for(let X=headL;X<=Math.min(x1-1,Math.round(maxX));X++){
+        if(mutedWarmBody&&Y>ribbonBottom+labelH*.35)continue;
+        const ix=X-x0,iy=Y-y0,k=(iy*w+ix)*4,j=ix*4;
+        if(X>=bodyStart&&Y>=ribbonTop&&Y<=ribbonBottom)continue;
+        const R=image[k],G=image[k+1],B=image[k+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B),sat=hi-lo;
+        const t=clamp((Y-y0)/Math.max(1,y1-y0),0,1);
+        const baseR=bgU[j]*(1-t)+bgD[j]*t,baseG=bgU[j+1]*(1-t)+bgD[j+1]*t,baseB=bgU[j+2]*(1-t)+bgD[j+2]*t;
+        const contrast=Math.max(Math.abs(R-baseR),Math.abs(G-baseG),Math.abs(B-baseB));
+        const warm=R>96&&R>G+22&&R>B+27&&sat>37;
+        const gold=R>108&&G>60&&R>B*1.13&&R>G*1.08;
+        const violet=R>G+15&&B>G+12&&hi>68;
+        const blue=B>R+16&&B>G+7&&B>64;
+        const icy=B>R+8&&G>R+3&&B>109;
+        // Locate original pale ornament strokes near the coloured head, not
+        // unrelated bright pixels elsewhere in the showroom.
+        const localDome=X<bodyStart+labelH*1.05&&
+          Y>=ribbonTop-labelH*2.50&&Y<=ribbonBottom+labelH*1.15;
+        const nebulaCanopy=nebulaOrnament&&X>=bodyStart-labelH*2.25&&
+         X<=bodyStart+labelH*5.65&&Y>=ribbonTop-labelH*2.05&&
+         Y<=ribbonBottom+labelH*.68;
+        const flameCanopy=flameOrnament&&X>=bodyStart+labelH*1.4&&
+         X<=bodyStart+labelH*7.5&&Y>=ribbonTop-labelH*1.48&&
+         Y<=ribbonBottom+labelH*.55;
+        const nearHeadWhite=lo>142&&sat<110&&(localDome||nebulaCanopy||flameCanopy);
+        let connectedColor=false;
+        if(nearHeadWhite){
+         const reach=warmDominant?9:7;
+         for(let dy=-reach;dy<=reach&&!connectedColor;dy+=2)for(let dx=-reach;dx<=reach;dx+=2){
+          const qx=ix+dx,qy=iy+dy;if(qx<0||qy<0||qx>=w||qy>=h)continue;
+          const q=(qy*w+qx)*4,r=image[q],g=image[q+1],b=image[q+2];
+          if((r>g+18&&r>b+23&&r>93)||(r>g+12&&b>g+12&&Math.max(r,b)>67)||(b>r+14&&b>g+5&&b>70)||(r>109&&g>60&&r>b*1.15)){
+           connectedColor=true;break;
+          }
+         }
+        }
+        // In flame designs the ivory skull rises above the red ribbon.
+        // Previous code discarded this white face unconditionally.
+        const white=nearHeadWhite&&(
+         connectedColor||(nebulaCanopy&&lo>165&&contrast>43));
+        if(!(((warm||gold||violet||blue||icy)&&contrast>22)||(white&&contrast>36)))continue;
+        // Anti-aliasing only at the contour, never fill the dark background.
+        let a=Math.round(255*clamp((contrast-(white?26:16))/33,0,1));
+        const edgeX=maxX-X;
+        if(edgeX<labelH*1.18)a=Math.round(a*clamp(edgeX/(labelH*1.18),0,1));
+        const fadeBottom=(headB-Y)/Math.max(1,labelH*.80);
+        if(fadeBottom<1)a=Math.round(a*clamp(fadeBottom,0,1));
+        restored[iy*w+ix]=a;
+       }
+      }
+      // Detached pale UI specks are not part of the ornament. Keep strongly
+      // coloured decorative sparkles, but not isolated white letter fragments.
+      const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+      for(let p=0;p<restored.length;p++){
+       if(visited[p]||restored[p]<24)continue;
+       let first=0,last=1,colour=0,nearCore=0,minX=w,maxX=0,minY=h,maxY=0;
+       queue[0]=p;visited[p]=1;
+       while(first<last){
+        const pos=queue[first++],x=pos%w,y=Math.floor(pos/w),k=pos*4;
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+        const R=image[k],G=image[k+1],B=image[k+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+        if(hi-lo>42)colour++;
+        if(alpha[pos]>128)nearCore++;
+        for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++)for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
+         const n=yy*w+xx;
+         if(!visited[n]&&restored[n]>=24){visited[n]=1;queue[last++]=n;}
+        }
+       }
+       const Xmax=maxX+x0,Ymin=minY+y0,Ymax=maxY+y0;
+       const nearHead=Xmax<=bodyStart+labelH*3.5&&Ymax>=ribbonTop-labelH*2.1&&Ymin<=ribbonBottom+labelH*2.6;
+       // A true fringe or sparkle is chromatic, never distant white UI text.
+       // Tiny detached neutral glyphs above warm/dark alert graphics are
+       // usually unrelated showroom UI, not ornament sparkles.
+       const bodyRatio=bodyColour/Math.max(1,bodySamples);
+       const spectralAlert=bodyRatio>.65||bodyRatio<.10;
+       const partOfDome=Xmax<bodyStart+labelH*1.06&&
+        Ymin>=ribbonTop-labelH*2.45&&Ymax<=ribbonBottom+labelH*.9;
+       const largeWhiteCanopy=(nebulaOrnament||flameOrnament)&&
+        Xmax<=bodyStart+labelH*(flameOrnament?7.55:5.7)&&
+        Ymin>=ribbonTop-labelH*(nebulaOrnament?2.0:1.45)&&
+        Ymax<=ribbonBottom+labelH*.75;
+       const paleSpeck=spectralAlert&&!partOfDome&&!largeWhiteCanopy&&
+        Ymax<ribbonTop-labelH*.22&&last<labelH*3&&colour/Math.max(1,last)<.26;
+       const keep=!paleSpeck&&(nearHead||largeWhiteCanopy)&&((last>Math.max(28,labelH*1.5))||
+        (last>Math.max(6,labelH*.15)&&colour>last*.17)||colour>last*.57);
+       if(keep)for(let t=0;t<last;t++){
+        const q=queue[t];if(restored[q]>alpha[q])alpha[q]=restored[q];
+       }
+      }
+      // Lavender decorative alerts may sit immediately above a much larger
+      // showroom weapon. The dark violet object beneath is NOT part of the
+      // kill-alert, while the tiny gem pendant at the head is intentional.
+      // Operate solely on the already constructed ALPHA mask, not detection.
+      const lavenderShowcase=hue==='gray'&&headViolet>175&&
+       colorRatio>.26&&colorRatio<.61&&headWarm<27;
+      if(lavenderShowcase){
+       const cutAbove=ribbonTop-labelH*2.16;
+       const clipBelow=ribbonBottom+labelH*.84;
+       const underCore=ribbonBottom+labelH*.37;
+       const fadeEnd=Math.min(x1-1,labelX+labelH*4.85);
+       const fadeStart=fadeEnd-labelH*1.20;
+       for(let Y=y0;Y<y1;Y++)for(let X=x0;X<x1;X++){
+        const k=(Y-y0)*w+X-x0;
+        if(Y<cutAbove||Y>clipBelow||
+         (Y>underCore&&X<bodyStart-labelH*.16)){
+          alpha[k]=0;continue;
+        }
+        if(Y>underCore&&X<bodyStart+labelH*3.18){
+         const q=k*4,R=image[q],G=image[q+1],B=image[q+2];
+         const hi=Math.max(R,G,B),lo=Math.min(R,G,B),sat=hi-lo;
+         // Remove dark, near-neutral wall patches behind the hanging gem.
+         // Preserve actual coloured gem highlights, metal, and violet light.
+         if(hi<110&&sat<33){alpha[k]=0;continue;}
+         if(hi<88&&sat<65){alpha[k]=0;continue;}
+        }
+        if(X>fadeStart){
+         const z=clamp((fadeEnd-X)/Math.max(1,fadeEnd-fadeStart),0,1);
+         alpha[k]=Math.round(alpha[k]*z*z*(3-2*z));
+        }
+       }
+      }
+      // Remove detached neutral screenshot/UI glyphs that occurred far
+      // above warm/dark decoration headers. This filter NEVER touches the
+      // measured ribbon, caption, colored sparks or other banner styles.
+      const texturedOrMuted=(hue==='gray'&&bodySamples>8&&
+       (bodyColour/bodySamples>.65||bodyColour/bodySamples<.10));
+      if(texturedOrMuted){
+       const filterTop=Math.min(y1-1,Math.floor(ribbonTop-labelH*1.07));
+       for(let Y=y0;Y<=filterTop;Y++)for(let X=x0;X<x1;X++){
+        const idx=((Y-y0)*w+X-x0),j=idx*4;
+        if(alpha[idx]<8)continue;
+        const R=image[j],G=image[j+1],B=image[j+2];
+        const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
+        if(lo>82&&hi-lo<28)alpha[idx]=0;
+       }
+       // Muted charcoal bars cannot extend into the preview weapon below.
+       if(bodyColour/bodySamples<.10&&headWarm<20){
+        for(let Y=Math.max(y0,Math.ceil(ribbonBottom+labelH*.62));Y<y1;Y++)
+         for(let X=x0;X<x1;X++)alpha[(Y-y0)*w+X-x0]=0;
+       }
       }
       // Detect a real opaque body AND a white label in its expected place.
       let textWhite=0;
@@ -9525,31 +9955,45 @@ function detectVerifiedTextRibbon(tx,ty,mode){
  }
  function tapped(x,y){lastHandledTouch=Date.now();void chooseKilllog(x,y);}
  stage.addEventListener('pointerdown',e=>{
+  if(manualBoxMode&&e.isPrimary&&e.button===0&&active>=0&&!busy){
+   const start=clientToImagePoint(e.clientX,e.clientY);
+   manualPointerId=e.pointerId;manualDrag={start,box:{x:start.x,y:start.y,w:1,h:1}};drawSelections();
+   try{stage.setPointerCapture(e.pointerId);}catch(_e){}
+   e.preventDefault();
+   return;
+  }
   if(e.pointerType==='mouse')return;
   gesturePointer=e.isPrimary&&e.button===0&&!pinch?gestureStart(e.pointerId,e.clientX,e.clientY):null;
- },{passive:true});
+ },{passive:false});
  stage.addEventListener('pointermove',e=>{
+  if(manualBoxMode&&manualDrag&&e.pointerId===manualPointerId){
+   const now=clientToImagePoint(e.clientX,e.clientY);manualDrag.box=normalizedBox(manualDrag.start,now);drawSelections();e.preventDefault();return;
+  }
   if(gesturePointer&&e.pointerId===gesturePointer.id&&
    Math.hypot(e.clientX-gesturePointer.x,e.clientY-gesturePointer.y)>TAP_DRIFT)gesturePointer=null;
- },{passive:true});
- stage.addEventListener('pointercancel',()=>{gesturePointer=null;},{passive:true});
+ },{passive:false});
+ stage.addEventListener('pointercancel',e=>{if(manualBoxMode){manualDrag=null;manualPointerId=null;drawSelections();}gesturePointer=null;},{passive:true});
  stage.addEventListener('pointerup',e=>{
+  if(manualBoxMode&&manualDrag&&e.pointerId===manualPointerId){manualPointerId=null;e.preventDefault();void finalizeManualBox(e.clientX,e.clientY);return;}
   if(e.pointerType==='mouse')return;
   const start=gesturePointer;gesturePointer=null;
   if(!start||e.pointerId!==start.id||lastHandledTouch>=start.at||!validTap(start,e.clientX,e.clientY))return;
   e.preventDefault();tapped(e.clientX,e.clientY);
  });
  stage.addEventListener('touchstart',e=>{
+  if(manualBoxMode)return;
   if(e.touches.length!==1){gestureTouch=null;gesturePointer=null;return;}
   const t=e.touches[0];gestureTouch=gestureStart(t.identifier,t.clientX,t.clientY);
  },{passive:true});
  stage.addEventListener('touchmove',e=>{
+  if(manualBoxMode)return;
   if(!gestureTouch||e.touches.length!==1){gestureTouch=null;return;}
   const t=e.touches[0];if(t.identifier!==gestureTouch.id||
    Math.hypot(t.clientX-gestureTouch.x,t.clientY-gestureTouch.y)>TAP_DRIFT)gestureTouch=null;
  },{passive:true});
- stage.addEventListener('touchcancel',()=>{gestureTouch=null;gesturePointer=null;},{passive:true});
+ stage.addEventListener('touchcancel',()=>{if(manualBoxMode)return;gestureTouch=null;gesturePointer=null;},{passive:true});
  stage.addEventListener('touchend',e=>{
+  if(manualBoxMode)return;
   const start=gestureTouch;gestureTouch=null;
   if(!start||e.touches.length||lastHandledTouch>=start.at)return;
   const t=Array.from(e.changedTouches).find(p=>p.identifier===start.id);
@@ -9557,6 +10001,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   e.preventDefault();tapped(t.clientX,t.clientY);
  },{passive:false});
  stage.addEventListener('click',e=>{
+  if(manualBoxMode)return;
   if(Date.now()-lastHandledTouch<850||Date.now()<suppressClickUntil)return;
   void chooseKilllog(e.clientX,e.clientY);
  });
@@ -9929,3 +10374,4 @@ function detectVerifiedTextRibbon(tx,ty,mode){
 </script>
 </body>
 </html>
+ 
