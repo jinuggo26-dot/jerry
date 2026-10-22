@@ -6710,23 +6710,118 @@ saveBtn.addEventListener("click",async()=>{
   return true;
  }
 
+
+ function recalcInnerFromAlpha(r,padX=2,padY=2){
+  if(!r?.master||!r.inner)return false;
+  const c=r.master,w=c.width,h=c.height,box=r.inner;
+  const lx=Math.max(0,Math.round(box.x)),rx=Math.min(w-1,Math.round(box.x+box.w-1));
+  const ty=Math.max(0,Math.round(box.y)),by=Math.min(h-1,Math.round(box.y+box.h-1));
+  const px=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+  let minX=rx,maxX=lx,minY=by,maxY=ty,seen=false;
+  for(let y=ty;y<=by;y++)for(let x=lx;x<=rx;x++){
+   if(px[(y*w+x)*4+3]>=9){seen=true;if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
+  }
+  if(!seen)return false;
+  const nx=Math.max(lx,minX-padX),ny=Math.max(ty,minY-padY);
+  const nr=Math.min(rx,maxX+padX),nb=Math.min(by,maxY+padY);
+  r.inner={...r.inner,x:nx,y:ny,w:nr-nx+1,h:nb-ny+1};
+  return true;
+ }
+ function cleanupDarkSideMattes(r){
+  if(!r?.master||!r.inner)return false;
+  const c=r.master,w=c.width,h=c.height;
+  const box=r.inner;
+  const lx=Math.max(0,Math.round(box.x)),rx=Math.min(w-1,Math.round(box.x+box.w-1));
+  const ty=Math.max(0,Math.round(box.y)),by=Math.min(h-1,Math.round(box.y+box.h-1));
+  const bw=rx-lx+1,bh=by-ty+1;
+  if(bw<110||bh<14)return false;
+  const ctx2=c.getContext('2d',{willReadFrequently:true});
+  const im=ctx2.getImageData(0,0,w,h),px=im.data;
+  const colStats=x=>{
+   let opaque=0,dark=0,bright=0,first=-1,last=-1;
+   for(let y=ty;y<=by;y++){
+    const k=(y*w+x)*4,A=px[k+3];
+    if(A<14)continue;
+    opaque++;
+    if(first<0)first=y;last=y;
+    const R=px[k],G=px[k+1],B=px[k+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx-mn;
+    if(mx<92&&sat<28)dark++;
+    if(mx>132||sat>44)bright++;
+   }
+   return {opaque,dark,bright,span:opaque&&first>=0?(last-first+1):0};
+  };
+  const removeMatte=(fromLeft=true)=>{
+   const step=fromLeft?1:-1,edge=fromLeft?lx:rx,limit=Math.min(Math.round(bw*.22),90);
+   const cols=[];
+   let encountered=false;
+   for(let i=0;i<limit;i++){
+    const x=edge+i*step,st=colStats(x),coverage=st.opaque/Math.max(1,bh),darkRatio=st.dark/Math.max(1,st.opaque),brightRatio=st.bright/Math.max(1,st.opaque),spanRatio=st.span/Math.max(1,bh);
+    if(st.opaque<2){if(encountered)break;continue;}
+    encountered=true;
+    const matteLike=coverage>=.44&&darkRatio>=.78&&brightRatio<=.16&&spanRatio>=.58;
+    if(matteLike){cols.push(x);continue;}
+    if(cols.length>=4)break;
+    if(i<6)break;
+    break;
+   }
+   if(cols.length<4)return false;
+   let changed=false;
+   for(const x of cols){
+    for(let y=ty;y<=by;y++){
+     const k=(y*w+x)*4,A=px[k+3];
+     if(A<10)continue;
+     const R=px[k],G=px[k+1],B=px[k+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx-mn;
+     if((mx<118&&sat<34)||(mx<145&&sat<18)){
+      px[k+3]=0;changed=true;
+     }
+    }
+   }
+   return changed;
+  };
+  const changed=removeMatte(true)||removeMatte(false);
+  if(!changed)return false;
+  ctx2.putImageData(im,0,0);
+  recalcInnerFromAlpha(r,2,2);
+  r.meta={...r.meta,sideMatteCleaned:true};
+  return true;
+ }
+
  async function encodeResult(r){
   // Special blue banners are measured from the source; never apply broad cleanup.
   if(!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
+  cleanupDarkSideMattes(r);
+  recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
   const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
   const cropW=rr-l+1,cropH=bb-t+1;
+  const sourceCtx=r.master.getContext('2d',{willReadFrequently:true});
+  const sourceImage=sourceCtx.getImageData(0,0,r.master.width,r.master.height).data;
+  let alphaMinX=rr,alphaMaxX=l,alphaMinY=bb,alphaMaxY=t,alphaSeen=false;
+  for(let y=t;y<=bb;y++)for(let x=l;x<=rr;x++){
+   if(sourceImage[(y*r.master.width+x)*4+3]>=8){
+    alphaSeen=true;
+    if(x<alphaMinX)alphaMinX=x;if(x>alphaMaxX)alphaMaxX=x;
+    if(y<alphaMinY)alphaMinY=y;if(y>alphaMaxY)alphaMaxY=y;
+   }
+  }
+  const visibleL=alphaSeen?alphaMinX:l,visibleR=alphaSeen?alphaMaxX:rr;
+  const visibleT=alphaSeen?alphaMinY:t,visibleB=alphaSeen?alphaMaxY:bb;
   const scale=(OUTPUT_W-12)/cropW;
   const dw=Math.max(1,Math.round(cropW*scale));
   const dh=Math.max(1,Math.round(cropH*scale));
   const outH=Math.max(MIN_OUTPUT_H,dh+12);
   const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
   const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
-  g.drawImage(r.master,l,t,cropW,cropH,Math.round((OUTPUT_W-dw)/2),Math.round((outH-dh)/2),dw,dh);
+  const cropCx=(l+rr)/2,cropCy=(t+bb)/2;
+  const visibleCx=(visibleL+visibleR)/2,visibleCy=(visibleT+visibleB)/2;
+  const shiftX=(visibleCx-cropCx)*scale,shiftY=(visibleCy-cropCy)*scale;
+  const destX=Math.round((OUTPUT_W-dw)/2-shiftX);
+  const destY=Math.round((outH-dh)/2-shiftY);
+  g.drawImage(r.master,l,t,cropW,cropH,destX,destY,dw,dh);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)return false;
   if(r.url)URL.revokeObjectURL(r.url);
@@ -8452,7 +8547,15 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
   }
   // Ornament is a local foreground shape against background sampled in the
   // same screenshot column, never a rectangular copy of the surrounding scene.
-  const decorRight=Math.min(x1,bodyL+Math.round(bh*2.0));
+  // Nebula UZI has a luminous dome and gold bracket extending far beyond
+  // the first two bar-heights; the old hard boundary cut its right half off.
+  let nebulaInterior=0;
+  for(const f of [.47,.55,.63,.71,.78,.84]){
+   const q=get(bodyL+(bodyR-bodyL)*f,(top+bottom)/2);
+   if(original[q+2]>original[q+1]+12&&original[q+2]>original[q]+13&&
+      original[q+1]>original[q]*.63&&original[q]<95)nebulaInterior++;
+  }
+  const decorRight=Math.min(x1,bodyL+Math.round(bh*(nebulaInterior>=2?3.6:2.0)));
   for(let Y=y0;Y<y1;Y++){
    for(let X=x0;X<decorRight;X++){
     const ii=((Y-y0)*w+X-x0)*4,j=(X-x0)*4;
@@ -8515,11 +8618,180 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    }
   }
   const output=createMaskedResult(x0,y0,w,h,new Uint8Array(raw),a,r.mode,{
-   ...r.meta,rebuiltFromHorizontalEdges:true,
+   ...r.meta,rebuiltFromHorizontalEdges:true,nebulaStyle:nebulaInterior>=2,
    band:{left:bodyL,right:bodyR,top,bottom}, measuredEdges:{top,bottom,bodyL,bodyR}
   });
   return output||r;
  }
+ function detectStrictSpecialKilllog(tx,ty){
+  const orange=detectOrangeSpecial();
+  if(orange?.meta?.band){
+   const b=orange.meta.band;
+   const padX=Math.max(18,Math.round((b.w||0)*.55));
+   const padY=Math.max(14,Math.round((b.h||0)*1.9));
+   const within=tx>=b.x-padX&&tx<=b.x+b.w+padX&&ty>=b.y-padY&&ty<=b.y+b.h+padY;
+   if(within)return orange;
+  }
+  const blue=detectCompactBlueSpecial(tx,ty);
+  if(blue)return blue;
+  return null;
+ }
+
+ // A genuine kill alert is a long, closed ribbon: its top and bottom
+ // boundaries remain parallel across the right half. A gun barrel may be a
+ // long line but usually does not have BOTH boundaries in the same columns.
+ // This is measured on the source screenshot pixels, never screen dimensions.
+ function hasPairedRibbonEdges(r){
+  const b=r?.meta?.band||r?.meta?.measuredBand;
+  if(!b)return false;
+  const l=Math.round(b.left),rr=Math.round(b.right),top=Math.round(b.top),bt=Math.round(b.bottom);
+  const w=rr-l,h=bt-top;
+  // Ratio is measured from the detected ribbon itself, never screenshot size.
+  // Extremely wide, thin proposals are usually gun barrels/menu dividers.
+  if(w<60||h<9||w/h>15.5||top<4||bt+4>=view.height)return false;
+  const edgeOffset=Math.max(1,Math.round(h*.05));
+  const starts=Math.round(l+w*.35),end=Math.round(l+w*.90);
+  const step=Math.max(1,Math.floor((end-starts)/60));
+  const px=ctx.getImageData(0,0,view.width,view.height).data;
+  const delta=(x,y1,y2)=>{
+   const i=(y1*view.width+x)*4,j=(y2*view.width+x)*4;
+   return Math.max(Math.abs(px[i]-px[j]),Math.abs(px[i+1]-px[j+1]),Math.abs(px[i+2]-px[j+2]));
+  };
+  let total=0,paired=0;
+  const threshold=h<30?13:17;
+  for(let x=starts;x<=end;x+=step){
+   if(x<0||x>=view.width)continue;
+   const up=delta(x,top-edgeOffset,top+edgeOffset);
+   const down=delta(x,bt-edgeOffset,bt+edgeOffset);
+   if(up>threshold&&down>threshold)paired++;
+   total++;
+  }
+  return total>=15&&paired/total>=.52;
+ }
+
+ // A verified banner has clustered *small white Korean letter strokes* in its
+ // middle, not merely the long high-contrast edges of a gun or vehicle.
+ // Examine ORIGINAL captured pixels only; device CSS/viewport is irrelevant.
+ function verifyKilllogLetterCluster(r){
+  if(!r?.meta)return false;
+  if(r.meta.icyBlueComplete||r.meta.compactBlueSpecial||r.meta.orangeVehicle)return true;
+  const band=r.meta.band||r.meta.measuredBand;
+  if(!band)return false;
+  const l=Math.max(0,Math.round(band.left)),right=Math.min(view.width-1,Math.round(band.right));
+  const top=Math.max(0,Math.round(band.top)),bottom=Math.min(view.height-1,Math.round(band.bottom));
+  const h=bottom-top+1,w=right-l+1;
+  if(h<10||w<70)return false;
+  const x0=Math.max(0,Math.floor(l+w*.22));
+  const x1=Math.min(view.width,Math.ceil(l+w*.72));
+  const y0=Math.max(0,top),y1=Math.min(view.height,bottom+1);
+  const ww=x1-x0,hh=y1-y0;
+  if(ww<20||hh<7)return false;
+  const rgba=ctx.getImageData(x0,y0,ww,hh).data;
+  const lit=new Uint8Array(ww*hh),seen=new Uint8Array(ww*hh);
+  for(let i=0;i<lit.length;i++){
+   const j=i*4,R=rgba[j],G=rgba[j+1],B=rgba[j+2];
+   const lo=Math.min(R,G,B),hi=Math.max(R,G,B);
+   // Bright near-neutral strokes, not colorful material or horizontal trim.
+   if(lo>142&&hi-lo<90)lit[i]=1;
+  }
+  const stack=new Int32Array(ww*hh);
+  const sizes=[];
+  const minGlyphHeight=Math.max(4,Math.round(h*.12));
+  const maxGlyphHeight=Math.max(17,Math.round(h*.65));
+  const maxGlyphWidth=Math.max(25,Math.round(h*.80));
+  for(let i=0;i<lit.length;i++){
+   if(!lit[i]||seen[i])continue;
+   let n=0,tail=1,minX=ww,minY=hh,maxX=-1,maxY=-1;
+   stack[0]=i;seen[i]=1;
+   while(n<tail){
+    const p=stack[n++],x=p%ww,y=(p/ww)|0;
+    if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=ww||yy>=hh)continue;
+     const q=yy*ww+xx;
+     if(lit[q]&&!seen[q]){seen[q]=1;stack[tail++]=q;}
+    }
+   }
+   const cw=maxX-minX+1,ch=maxY-minY+1;
+   if(tail>=Math.max(3,Math.floor(h*.08))&&cw>=2&&cw<=maxGlyphWidth&&
+      ch>=minGlyphHeight&&ch<=maxGlyphHeight&&tail<=h*h*.25){
+    sizes.push({x:minX+cw*.5,y:minY+ch*.5,width:cw,height:ch});
+   }
+  }
+  // Lavender AKM alerts have an almost-white luminous ribbon, so their
+  // lettering merges with the pale banner in a binary white-component test.
+  // Accept only a sustained pink/lavender colored fill across the ribbon;
+  // isolated shiny pixels on a gun cannot meet this condition.
+  const mid=hh*.50;
+  const nearMid=sizes.filter(v=>Math.abs(v.y-mid)<hh*.38);
+  if(nearMid.length<3){
+   if(r.meta.nebulaStyle&&sizes.length>=1)return true;
+   let lavender=0,total=0;
+   for(let y=top+Math.round(h*.25);y<=bottom-Math.round(h*.25);y+=Math.max(1,Math.round(h*.18))){
+    for(let x=l+Math.round(w*.40);x<=l+Math.round(w*.85);x+=Math.max(2,Math.round(w*.045))){
+     const k=ctx.getImageData(x,y,1,1).data;
+     total++;
+     if(k[0]>157&&k[1]>130&&k[2]>184&&k[2]>k[1]+16&&k[2]>k[0]+7)lavender++;
+    }
+   }
+   return total>=16&&lavender/total>.52;
+  }
+  return true;
+ }
+
+ // Avoid leaving the rectangular game backdrop around a purple/gold nebula
+ // headpiece. Uses a per-column vertical background estimate in ORIGINAL image.
+ function refineNebulaHeadpiece(r){
+  const b=r?.meta?.band;
+  if(!b||!r?.meta?.rebuiltFromHorizontalEdges||!r.master)return r;
+  const h=b.bottom-b.top+1,w=b.right-b.left+1;
+  if(h<20||w<160)return r;
+  const sampleY=Math.round((b.top+b.bottom)/2);
+  let nebula=0,seen=0;
+  // The interior of this specific dark nebula is muted blue-violet;
+  // lavender, red and metal banners don't pass this palette check.
+  for(const t of [.46,.53,.60,.67,.74,.81]){
+   const x=clamp(Math.round(b.left+w*t),0,view.width-1);
+   const q=ctx.getImageData(x,sampleY,1,1).data;
+   seen++;if(q[2]>q[1]+12&&q[2]>q[0]+13&&q[1]>q[0]*.63&&q[0]<95)nebula++;
+  }
+  if(nebula<3)return r;
+  const canvas=r.master,C=canvas.getContext('2d',{willReadFrequently:true});
+  const im=C.getImageData(0,0,canvas.width,canvas.height),px=im.data;
+  const headEnd=Math.min(b.right,Math.round(b.left+h*3.25));
+  const X0=Math.max(0,Math.floor(r.sourceX));
+  const refUpper=clamp(Math.round(b.top-h*1.65),0,view.height-1);
+  const refLower=clamp(Math.round(b.bottom+h*1.17),0,view.height-1);
+  const upper=ctx.getImageData(X0,refUpper,Math.min(canvas.width,view.width-X0),1).data;
+  const lower=ctx.getImageData(X0,refLower,Math.min(canvas.width,view.width-X0),1).data;
+  let changed=0;
+  for(let y=0;y<canvas.height;y++){
+   const Y=r.sourceY+y;
+   if(Y<refUpper||Y>refLower)continue;
+   const mix=clamp((Y-refUpper)/Math.max(1,refLower-refUpper),0,1);
+   for(let x=0;x<canvas.width;x++){
+    const X=r.sourceX+x;if(X>=headEnd||X<b.left-h*2.8||x>=upper.length/4)continue;
+    const k=(y*canvas.width+x)*4,j=x*4;
+    if(px[k+3]<5)continue;
+    const R=px[k],G=px[k+1],B=px[k+2];
+    const er=upper[j]*(1-mix)+lower[j]*mix;
+    const eg=upper[j+1]*(1-mix)+lower[j+1]*mix;
+    const eb=upper[j+2]*(1-mix)+lower[j+2]*mix;
+    const d=Math.max(Math.abs(R-er),Math.abs(G-eg),Math.abs(B-eb));
+    const bright=Math.max(R,G,B),chroma=bright-Math.min(R,G,B);
+    // Keep bright white swords and gold/purple elements, but make background
+    // nearly transparent and feather uncertain edges rather than solid grey.
+    let confidence=clamp((d-18)/44,0,1);
+    if(chroma<16&&bright<115)confidence*=.60;
+    if(bright>174&&d>28)confidence=Math.max(confidence,.9);
+    const a=Math.min(px[k+3],Math.round(255*confidence));
+    if(a!==px[k+3]){px[k+3]=a;changed++;}
+   }
+  }
+  if(changed){C.putImageData(im,0,0);r.meta.nebulaBackgroundRefined=true;}
+  return r;
+ }
+
  async function extractKilllog(tx,ty,mode){
   const photo=photos[active];if(!photo)return null;
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
@@ -8528,9 +8800,13 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
    if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
    return cached;
   }
-  const found=detectPixelOnlyBanner(tx,ty,mode);
+  let found=mode==='special'?detectStrictSpecialKilllog(tx,ty):detectPixelOnlyBanner(tx,ty,mode);
+  // Only when primary candidates fail: evaluate an independent color proposal.
+  // It still must pass the glyph/foreground and touch checks below.
+  if(!found&&mode==='normal')found=detectChromaBannerAtTap(tx,ty,mode);
   if(!found)return null;
-  const candidate=rebuildVerifiedBanner(found);
+  const candidate=mode==='special'?found:refineNebulaHeadpiece(rebuildVerifiedBanner(found));
+  if(mode==='normal'&&(!verifyKilllogLetterCluster(candidate)||!hasPairedRibbonEdges(candidate)))return null;
   // Validate against the measured foreground: tapping outside the killlog
   // must never trigger a crop even if it is horizontally near the banner.
   if(!isTouchedMaskedKilllog(candidate,tx,ty))return null;
@@ -8984,8 +9260,11 @@ KLG_TEMPLATES.special.push({w:20,h:10,hex:"0000000000000000000000000000000000000
      try{
       // Compare independent source-pixel proposals; do not accept the first
       // horizontal object as a killlog (menus and large guns can fool it).
-      const candidate=detectPixelOnlyBanner(x,y,killlogMode);
-      if(!candidate||!isTouchedMaskedKilllog(candidate,x,y))continue;
+      const rawCandidate=killlogMode==='special'?detectStrictSpecialKilllog(x,y):detectPixelOnlyBanner(x,y,killlogMode);
+      if(!rawCandidate)continue;
+      const candidate=killlogMode==='normal'?refineNebulaHeadpiece(rebuildVerifiedBanner(rawCandidate)):rawCandidate;
+      if(!isTouchedMaskedKilllog(candidate,x,y)||
+        (killlogMode==='normal'&&(!verifyKilllogLetterCluster(candidate)||!hasPairedRibbonEdges(candidate))))continue;
       const bb=candidate.inner,meta=candidate.meta||{},ratio=bb.w/Math.max(1,bb.h);
       if(bb.w<55||ratio<2.7||ratio>20)continue;
       let rank=meta.icyBlueComplete?1000+(meta.confidence||0)*100:meta.chromaBanner?750+(meta.confidence||0):meta.scaleFree?600+Math.min(300,(meta.edgeScore||0)*.8):0;
