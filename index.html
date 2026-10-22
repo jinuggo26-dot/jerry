@@ -6792,7 +6792,7 @@ saveBtn.addEventListener("click",async()=>{
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
-  if(!r?.meta?.verifiedTextRibbon)cleanupDarkSideMattes(r);
+  if(!r?.meta?.verifiedTextRibbon)if(!r?.meta?.verifiedTextRibbon)cleanupDarkSideMattes(r);
   recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
@@ -8831,6 +8831,10 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     const limitX=Math.min(vw-tpl.w,Math.round(vw*.85));
     const limitY=Math.min(vh-tpl.h,Math.round(vh*.72));
     const evaluate=(x,y)=>{
+     // Only a notification near the requested horizontal position can win.
+     // Otherwise an unrelated white game menu on a larger screenshot can
+     // outscore the much smaller and antialiased «킬 알림» label.
+     if(Math.abs((x+tpl.w*.5)*sc-tx)>W*.20)return -1;
      const patch=sumRect(x,y,tpl.w,tpl.h),varPatch=patch-patch*patch/area;
      if(varPatch<=1)return -1;
      const off=y*vw+x;
@@ -8854,11 +8858,11 @@ function detectVerifiedTextRibbon(tx,ty,mode){
       }
     }
    }
-   if(best&&best.score>=.49){
+   if(best&&best.score>=.46){
     const {x,y,tpl}=best,labelX=x*sc,labelY=y*sc,labelH=tpl.h*sc;
     let ribbonTop=Math.round(labelY-labelH*.25),ribbonBottom=Math.round(labelY+labelH*1.15);
-    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*5.0);
-    const farRight=Math.round(labelX+labelH*8.9);
+    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*6.25);
+    const farRight=Math.round(labelX+labelH*11.3);
     const x0=clamp(ornamentStart,0,W-2),x1=clamp(farRight,x0+2,W);
     const y0=clamp(Math.floor(labelY-labelH*.98),0,H-2),y1=clamp(Math.ceil(labelY+labelH*1.85),y0+2,H);
     const w=x1-x0,h=y1-y0;
@@ -8925,11 +8929,11 @@ function detectVerifiedTextRibbon(tx,ty,mode){
        ribbonBottom=Math.round(labelY+labelH*1.03);
       }else{
        // A charcoal display alert starts underneath the emblem, not at the gun glyph.
-       bodyStart=Math.max(x0,Math.round(labelX-labelH*4.62));
-       ribbonTop=Math.round(labelY+labelH*.05);
-       ribbonBottom=Math.round(labelY+labelH*1.02);
+       bodyStart=Math.max(x0,Math.round(labelX-labelH*5.46));
+       ribbonTop=Math.round(labelY+labelH*.02);
+       ribbonBottom=Math.round(labelY+labelH*1.70);
       }
-      const tailEnd=Math.min(w-1,lastSolid+Math.round(labelH*.72));
+      const tailEnd=Math.min(w-1,lastSolid+Math.round(labelH*(hue==='gray'?2.35:.90)));
       const mainL=bodyStart-x0;
       for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){
        const X=xx+x0,Y=yy+y0,p=(yy*w+xx)*4,j=xx*4;
@@ -8990,6 +8994,9 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
   const cached=photo[cacheKey];
   if(cached){
+   // Never redirect the user to a gun-shaped detector on a showcase photo:
+   // the saved verified alert is the only extraction candidate.
+   if(cached.meta?.verifiedTextRibbon)return cached;
    if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
    return cached;
   }
@@ -9465,8 +9472,18 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     if(results.some(r=>r.photo===i)){stateLabel.textContent=`${i+1}/${photos.length} · 기존 결과 유지`;continue;}
     active=i;redraw();
     const W=view.width,H=view.height;
-    // Content-based seeds from pixel contrast + horizontal runs across the
-    // ENTIRE image. No predefined screenshot coordinates or aspect ratios.
+    // Batch mode must use the SAME validated text+ribbon detector as manual
+    // selection. Otherwise its older pixel-only path can select the exhibit gun.
+    const labelCandidate=detectVerifiedTextRibbon(Math.round(W*.40),Math.round(H*.26),killlogMode);
+    if(labelCandidate&&await encodeResult(labelCandidate)&&validKilllogResult(labelCandidate)){
+     labelCandidate.photo=i;results.push(labelCandidate);success++;
+     photos[i][killlogMode==='normal'?'_klReadyNormal':'_klReadySpecial']=labelCandidate;
+     stateLabel.textContent=`${i+1}/${photos.length} · 성공 ${success} · 검토 ${failed}`;
+     resultView();drawSelections();
+     await new Promise(resolve=>setTimeout(resolve,0));
+     continue;
+    }
+    // Fall back to source-pixel structure detection for different glyph designs.
     const tries=pixelBannerBatchSeeds();
     let best=null,runnerUp=null;
     for(const [x,y] of tries){
