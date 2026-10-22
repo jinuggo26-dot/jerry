@@ -8829,7 +8829,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     const area=tpl.w*tpl.h,lit=on.length,tplVar=lit-lit*lit/area;
     if(lit<10||tplVar<=0)continue;
     const limitX=Math.min(vw-tpl.w,Math.round(vw*.85));
-    const limitY=Math.min(vh-tpl.h,Math.round(vh*.72));
+    const limitY=Math.min(vh-tpl.h,Math.round(vh*.36));
     const evaluate=(x,y)=>{
      // Only a notification near the requested horizontal position can win.
      // Otherwise an unrelated white game menu on a larger screenshot can
@@ -8858,13 +8858,17 @@ function detectVerifiedTextRibbon(tx,ty,mode){
       }
     }
    }
-   if(best&&best.score>=.46){
+   if(best&&best.score>=.39){
     const {x,y,tpl}=best,labelX=x*sc,labelY=y*sc,labelH=tpl.h*sc;
     let ribbonTop=Math.round(labelY-labelH*.25),ribbonBottom=Math.round(labelY+labelH*1.15);
-    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*6.25);
+    // Expand the headpiece ONLY when the original ribbon is clearly violet.
+    // A global expansion used to cause stray background and reject gray bars.
+    const huePx=ctx.getImageData(clamp(Math.round(labelX+labelH*3.8),0,W-1),clamp(Math.round(labelY+labelH*.49),0,H-1),1,1).data;
+    const violetHead=huePx[0]>huePx[1]+22&&huePx[2]>huePx[1]+18&&huePx[0]>65;
+    let bodyStart=Math.round(labelX-labelH*3.45);const ornamentStart=Math.round(labelX-labelH*(violetHead?8.30:6.25));
     const farRight=Math.round(labelX+labelH*11.3);
     const x0=clamp(ornamentStart,0,W-2),x1=clamp(farRight,x0+2,W);
-    const y0=clamp(Math.floor(labelY-labelH*.98),0,H-2),y1=clamp(Math.ceil(labelY+labelH*1.85),y0+2,H);
+    const y0=clamp(Math.floor(labelY-labelH*(violetHead?2.75:.98)),0,H-2),y1=clamp(Math.ceil(labelY+labelH*(violetHead?3.35:1.85)),y0+2,H);
     const w=x1-x0,h=y1-y0;
     if(w>=110&&h>=18&&w*h<1200000){
      const image=ctx.getImageData(x0,y0,w,h).data,alpha=new Uint8Array(w*h);
@@ -8954,7 +8958,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
         a=Math.round(255*Math.min(1,byColumn+.37)*fade*fade*(3-2*fade));
         if(X>=bodyStart+labelH*.35&&X<=labelX+labelH*2.3) a=Math.max(a,230);
        }
-       if(X>=bodyStart-labelH*(hue==='gray'?.42:hue==='orange'?.42:.70)&&
+       if(X>=bodyStart-labelH*(hue==='gray'?.42:hue==='orange'?.42:hue==='magenta'?3.65:.70)&&
           X<bodyStart+labelH*.95&&Y>=y0&&Y<y1){
         // Keep the compact head ornament, not the horizontal horizon behind it.
         if(diff>23&&(hi-lo>24||hi>178))
@@ -8971,7 +8975,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
        }
       if(textWhite>=8){
        const candidate=createMaskedResult(x0,y0,w,h,new Uint8Array(image),alpha,mode,{
-        verifiedTextRibbon:true,textScore:best.score,scaleFree:true,
+        verifiedTextRibbon:true,textScore:best.score,detectedHue:hue,scaleFree:true,
         band:{left:Math.max(x0,bodyStart),right:Math.min(x1-1,tailEnd+x0),top:ribbonTop,bottom:ribbonBottom}
        });
        if(candidate)verified=candidate;
@@ -9025,9 +9029,13 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   let found=mode==='special'?detectStrictSpecialKilllog(tx,ty):detectPixelOnlyBanner(tx,ty,mode);
   if(!found&&mode==='normal')found=detectChromaBannerAtTap(tx,ty,mode);
   if(!found)return null;
-  const b=found.meta?.band;
-  // A bottom-half exhibit gun must never be offered as a special kill alert.
-  if(mode==='special'&&b&&Number(b.top??b.y)>view.height*.60)return null;
+  const b=found.meta?.band||found.meta?.measuredBand;
+  // Regression guard: a long weapon in the showroom may resemble an alert
+  // and even contain white glyph-like reflections. An unverified fallback
+  // below the actual upper notification zone must NEVER become a killlog.
+  // Text-verified ribbons are handled above and are not subject to this guard.
+  const fallbackTop=Number(b?.top??b?.y??(found.sourceY+found.inner?.y));
+  if(Number.isFinite(fallbackTop)&&fallbackTop>view.height*.42)return null;
   const candidate=mode==='special'?found:refineNebulaHeadpiece(rebuildVerifiedBanner(found));
   if(mode==='normal'&&(!verifyKilllogLetterCluster(candidate)||!hasPairedRibbonEdges(candidate)))return null;
   if(!isTouchedMaskedKilllog(candidate,tx,ty))return null;
