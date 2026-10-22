@@ -6786,13 +6786,172 @@ saveBtn.addEventListener("click",async()=>{
   return true;
  }
 
- async function encodeResult(r){
+ 
+ function repairFocusedLeftDecorations(r){
+  if(!r?.master||!r?.inner)return false;
+  let changed=false;
+  changed=repairDeepBlueLeftDecor(r)||changed;
+  changed=repairIcyLeftDecor(r)||changed;
+  changed=repairPurpleMascotLeftDecor(r)||changed;
+  if(changed)recalcInnerFromAlpha(r,2,2);
+  return changed;
+ }
+ function withRepairBuffers(r,fn){
+  if(!r?.master||!r?.inner)return false;
+  const c=r.master,w=c.width,h=c.height;
+  const box=r.inner;
+  const lx=Math.max(0,Math.round(box.x)),rx=Math.min(w-1,Math.round(box.x+box.w-1));
+  const ty=Math.max(0,Math.round(box.y)),by=Math.min(h-1,Math.round(box.y+box.h-1));
+  const bw=rx-lx+1,bh=by-ty+1;
+  if(bw<120||bh<14)return false;
+  const ctx2=c.getContext('2d',{willReadFrequently:true});
+  const im=ctx2.getImageData(0,0,w,h),px=im.data;
+  const refTop=Math.max(0,ty-Math.max(3,Math.round(bh*.65)));
+  const refBot=Math.min(h-1,by+Math.max(3,Math.round(bh*.65)));
+  const bgTop=ctx2.getImageData(0,refTop,w,1).data;
+  const bgBot=ctx2.getImageData(0,refBot,w,1).data;
+  const finish=ok=>{if(ok)ctx2.putImageData(im,0,0);return !!ok;};
+  return finish(fn({ctx2,im,px,w,h,lx,rx,ty,by,bw,bh,bgTop,bgBot,refTop,refBot}));
+ }
+ function repairDeepBlueLeftDecor(r){
+  return withRepairBuffers(r,({px,w,h,lx,rx,ty,by,bw,bh,bgTop,bgBot})=>{
+   let sampleBlue=0,sampleN=0;
+   for(let y=ty+Math.max(1,Math.round(bh*.25));y<=Math.min(by,ty+Math.round(bh*.72));y+=Math.max(1,Math.round(bh*.16))){
+    for(let x=lx+Math.round(bw*.38);x<=Math.min(rx,lx+Math.round(bw*.82));x+=5){
+     const k=(y*w+x)*4,A=px[k+3],R=px[k],G=px[k+1],B=px[k+2];
+     if(A<18)continue;sampleN++;if(B>R+28&&B>G+9&&B>95)sampleBlue++;
+    }
+   }
+   if(sampleN<12||sampleBlue/sampleN<.46)return false;
+   // Exclude icy/lavender/purple banners: this repair is only for the deep-blue body.
+   let icy=0,icyN=0;
+   for(let y=ty+Math.round(bh*.28);y<=Math.min(by,ty+Math.round(bh*.7));y+=Math.max(1,Math.round(bh*.18))){
+    for(let x=lx+Math.round(bw*.20);x<=Math.min(rx,lx+Math.round(bw*.55));x+=6){
+     const k=(y*w+x)*4,R=px[k],G=px[k+1],B=px[k+2],mx=Math.max(R,G,B),mn=Math.min(R,G,B);
+     icyN++; if(B>R+12&&G>R+4&&mx-mn<115)icy++;
+    }
+   }
+   if(icyN>10&&icy/icyN>.62)return false;
+   let changed=false;
+   const zoneR=Math.min(rx,lx+Math.round(Math.max(26,bh*2.45)));
+   const zoneB=Math.min(h-1,by+Math.round(bh*.08));
+   for(let y=ty;y<=zoneB;y++){
+    const t=(y-ty)/Math.max(1,zoneB-ty);
+    for(let x=lx;x<=zoneR;x++){
+     const k=(y*w+x)*4,j=x*4,R=px[k],G=px[k+1],B=px[k+2],A=px[k+3];
+     const bgR=bgTop[j]*(1-t)+bgBot[j]*t,bgG=bgTop[j+1]*(1-t)+bgBot[j+1]*t,bgB=bgTop[j+2]*(1-t)+bgBot[j+2]*t;
+     const d=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
+     const hi=Math.max(R,G,B),lo=Math.min(R,G,B),sat=hi-lo;
+     const strongBlue=B>R+22&&B>G+6&&B>82;
+     const redAccent=R>135&&R>G*1.25&&R>B*1.06;
+     const brightWhite=lo>150&&sat<100;
+     if(d>17&&((strongBlue&&sat>14)||(redAccent&&sat>20)||(brightWhite&&x<=lx+Math.round(bh*1.75)))){
+      const next=Math.max(A,Math.min(255,Math.round(255*clamp((d-12)/24,0,1))));
+      if(next!==A){px[k+3]=next;changed=true;}
+     }
+    }
+   }
+   return changed;
+  });
+ }
+ function repairIcyLeftDecor(r){
+  return withRepairBuffers(r,({px,w,h,lx,rx,ty,by,bw,bh,bgTop,bgBot})=>{
+   let icy=0,total=0;
+   for(let y=ty+Math.max(1,Math.round(bh*.24));y<=Math.min(by,ty+Math.round(bh*.70));y+=Math.max(1,Math.round(bh*.14))){
+    for(let x=lx+Math.round(bw*.22);x<=Math.min(rx,lx+Math.round(bw*.72));x+=5){
+     const k=(y*w+x)*4,A=px[k+3],R=px[k],G=px[k+1],B=px[k+2];
+     if(A<14)continue;total++; if(B>R+10&&G>R-6&&B>96&&Math.max(R,G,B)-Math.min(R,G,B)<135)icy++;
+    }
+   }
+   if(total<10||icy/total<.44)return false;
+   // Not the deep navy banner and not the purple mascot.
+   let magenta=0,magN=0;
+   for(let y=ty+Math.round(bh*.25);y<=Math.min(by,ty+Math.round(bh*.72));y+=Math.max(1,Math.round(bh*.18))){
+    for(let x=lx+Math.round(bw*.34);x<=Math.min(rx,lx+Math.round(bw*.80));x+=6){
+     const k=(y*w+x)*4,R=px[k],G=px[k+1],B=px[k+2];
+     magN++; if(R>G+12&&B>G+12)magenta++;
+    }
+   }
+   if(magN>8&&magenta/magN>.42)return false;
+   let changed=false;
+   const zoneR=Math.min(rx,lx+Math.round(Math.max(32,bh*2.8)));
+   const zoneB=Math.min(h-1,by+Math.round(bh*.85));
+   for(let y=ty;y<=zoneB;y++){
+    const t=(y-ty)/Math.max(1,zoneB-ty);
+    for(let x=lx;x<=zoneR;x++){
+     const k=(y*w+x)*4,j=x*4,R=px[k],G=px[k+1],B=px[k+2],A=px[k+3];
+     const bgR=bgTop[j]*(1-t)+bgBot[j]*t,bgG=bgTop[j+1]*(1-t)+bgBot[j+1]*t,bgB=bgTop[j+2]*(1-t)+bgBot[j+2]*t;
+     const d=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
+     const hi=Math.max(R,G,B),lo=Math.min(R,G,B),sat=hi-lo;
+     const icyBlue=B>R+8&&G>R-6&&B>88;
+     const brightWhite=lo>146&&sat<102;
+     if(d>14&&((icyBlue&&sat>9)||(brightWhite&&x<=lx+Math.round(bh*1.85)))){
+      const next=Math.max(A,Math.min(255,Math.round(255*clamp((d-9)/23,0,1))));
+      if(next!==A){px[k+3]=next;changed=true;}
+     }
+    }
+   }
+   return changed;
+  });
+ }
+ function repairPurpleMascotLeftDecor(r){
+  return withRepairBuffers(r,({px,w,h,lx,rx,ty,by,bw,bh,bgTop,bgBot})=>{
+   let magenta=0,total=0;
+   for(let y=ty+Math.max(1,Math.round(bh*.26));y<=Math.min(by,ty+Math.round(bh*.72));y+=Math.max(1,Math.round(bh*.14))){
+    for(let x=lx+Math.round(bw*.30);x<=Math.min(rx,lx+Math.round(bw*.82));x+=5){
+     const k=(y*w+x)*4,A=px[k+3],R=px[k],G=px[k+1],B=px[k+2];
+     if(A<10)continue;total++;if(R>G+13&&B>G+13)magenta++;
+    }
+   }
+   if(total<10||magenta/total<.34)return false;
+   let changed=false;
+   const zoneR=Math.min(rx,lx+Math.round(Math.max(42,bh*3.25)));
+   const zoneB=Math.min(h-1,by+Math.round(bh*.30));
+   for(let y=ty;y<=zoneB;y++){
+    const t=(y-ty)/Math.max(1,zoneB-ty);
+    for(let x=lx;x<=zoneR;x++){
+     const k=(y*w+x)*4,j=x*4,R=px[k],G=px[k+1],B=px[k+2],A=px[k+3];
+     const bgR=bgTop[j]*(1-t)+bgBot[j]*t,bgG=bgTop[j+1]*(1-t)+bgBot[j+1]*t,bgB=bgTop[j+2]*(1-t)+bgBot[j+2]*t;
+     const d=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
+     const hi=Math.max(R,G,B),lo=Math.min(R,G,B),sat=hi-lo;
+     const mag=(R>G+8&&B>G+8&&hi>68);
+     const gold=(R>108&&G>72&&R>B*1.02);
+     const white=(lo>145&&sat<108);
+     if(d>14&&(mag||gold||(white&&x<=lx+Math.round(bh*2.1)))){
+      const next=Math.max(A,Math.min(255,Math.round(255*clamp((d-9)/22,0,1))));
+      if(next!==A){px[k+3]=next;changed=true;}
+     }
+    }
+   }
+   // close only tiny 1~4px gaps inside the restored face/teeth area.
+   const zoneFillR=Math.min(rx,lx+Math.round(Math.max(40,bh*2.55)));
+   for(let y=Math.max(ty+1,0);y<Math.min(zoneB,h-1);y++){
+    let prev=-1;
+    for(let x=lx;x<=zoneFillR;x++){
+     const a=px[(y*w+x)*4+3];
+     if(a>=145){
+      if(prev>=0&&x-prev<=4){
+       for(let fx=prev+1;fx<x;fx++){
+        const kk=(y*w+fx)*4,R=px[kk],G=px[kk+1],B=px[kk+2];
+        if((R>G+5&&B>G+5)||(R>98&&G>66&&R>B))px[kk+3]=Math.max(px[kk+3],185);
+       }
+      }
+      prev=x;
+     }
+    }
+   }
+   return changed;
+  });
+ }
+
+async function encodeResult(r){
   // Special blue banners are measured from the source; never apply broad cleanup.
   if(!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
   if(!r?.meta?.verifiedTextRibbon)if(!r?.meta?.verifiedTextRibbon)cleanupDarkSideMattes(r);
+  repairFocusedLeftDecorations(r);
   recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
