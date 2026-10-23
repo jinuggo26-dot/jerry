@@ -901,7 +901,6 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 .global-tabs > #btn-guide{width:100%!important;min-width:0!important;max-width:100%!important;min-height:49px!important;white-space:normal!important;}
 @media(max-width:640px){.guide-body{padding:12px}.guide-body section{padding:12px}.guide-header{padding:13px}.guide-footer{padding:10px 12px}.global-tabs > #btn-guide{font-size:clamp(11.5px,3.25vw,14px)!important;min-height:48px!important;}}
 
-@media(max-width:600px){#kill-tab .results{grid-template-columns:minmax(0,1fr)!important}}
 </style>
 <style>
 #sna-report-open{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:100001;min-height:42px;padding:9px 14px;border:1px solid #7892bc;background:#263c5e;color:#f4f7ff;border-radius:25px;font-weight:750;box-shadow:0 4px 16px #0008;display:none}
@@ -6982,265 +6981,142 @@ saveBtn.addEventListener("click",async()=>{
   if(edited)g.putImageData(rgba,0,0);
   return edited;
  }
-
- function suppressVerifiedBackdrop(r){
-  if(!r?.meta?.verifiedTextRibbon||!r.meta.band||!r.master)return false;
-  const band=r.meta.band, bh=band.bottom-band.top+1;
-  if(bh<9)return false;
-  const W=view.width,H=view.height,c=r.master,w=c.width,h=c.height;
-  const g=c.getContext('2d',{willReadFrequently:true});
-  const im=g.getImageData(0,0,w,h),pix=im.data;
-  const topY=clamp(Math.round(band.top-bh*1.75),0,H-1);
-  const botY=clamp(Math.round(band.bottom+bh*.33),0,H-1);
-  const bx=Math.max(0,Math.floor(r.sourceX)),rx=Math.min(W,bx+w);
-  if(rx-bx<10)return false;
-  const refT=ctx.getImageData(bx,topY,rx-bx,1).data;
-  const refB=ctx.getImageData(bx,botY,rx-bx,1).data;
-  const inRibbonStart=band.left+bh*.55;
-  const headEnd=band.left+bh*3.0;
-  let changed=false;
-  for(let y=0;y<h;y++){
-   const Y=y+r.sourceY;
-   for(let x=0;x<w;x++){
-    const X=x+r.sourceX,j=(y*w+x)*4,old=pix[j+3];
-    if(old<5||X<bx||X>=rx)continue;
-    const ref=(X-bx)*4;
-    const t=clamp((Y-topY)/Math.max(1,botY-topY),0,1);
-    const bgR=refT[ref]*(1-t)+refB[ref]*t,bgG=refT[ref+1]*(1-t)+refB[ref+1]*t,bgB=refT[ref+2]*(1-t)+refB[ref+2]*t;
-    const R=pix[j],G=pix[j+1],B=pix[j+2];
-    const max=Math.max(R,G,B),min=Math.min(R,G,B),sat=max-min;
-    const diff=Math.max(Math.abs(R-bgR),Math.abs(G-bgG),Math.abs(B-bgB));
-    const inCore=Y>=band.top-2&&Y<=band.bottom+2;
-    const outsideHead=X<inRibbonStart;
-    // Only subtract scene-colored pixels; keep bright/saturated emblem strokes.
-    const protect=(min>146&&sat<98)||(sat>69&&max>93)||(R>145&&R>G+25)||(B>145&&B>R+27);
-    let a=old;
-    if(!protect){
-     const threshold=(inCore&&X>headEnd)?8:(inCore?12:19);
-     const span=(inCore&&X>headEnd)?22:28;
-     const confidence=clamp((diff-threshold)/span,0,1);
-     a=Math.min(old,Math.round(255*confidence));
-    }else if(!inCore&&X>headEnd&&diff<12){
-     a=Math.min(old,Math.round(255*clamp((diff-6)/20,0,1)));
-    }
-    // Below the actual banner, loose dark rectangles are scene scenery.
-    // A small hanging colored pendant next to the emblem is protected.
-    if(Y>band.bottom+bh*.18&&Y<band.bottom+bh*1.2&&
-       X<band.left+bh*3.7&&X>band.left-bh*6&&
-       max<107&&sat<34&&diff<37){a=Math.min(a,Math.round(255*clamp((diff-12)/35,0,1)));}
-    if(X>band.right-bh*.26&&X<=band.right+bh*.12){
-     // Follow the observed ribbon's own edge, not the screenshot border.
-     const fade=clamp((band.right+bh*.08-X)/(bh*.34),0,1);
-     a=Math.min(a,Math.round(old*fade));
-    }
-    if(X<band.left+bh*1.2&&Y>band.bottom+bh*.13&&
-       Y<band.bottom+bh*.58&&max<119&&min<79&&sat<65){
-     a=Math.min(a,Math.round(255*clamp((diff-23)/55,0,1)));
-    }
-    if(X>band.right-bh*.55&&max<99&&sat<29){
-     // Transparent charcoal scenery beyond the last colored glyph/trim.
-     a=Math.min(a,Math.round(255*clamp((diff-15)/45,0,1)));
-    }
-    if(a!==old){pix[j+3]=a;changed=true;}
-   }
+// Source-pixel-aware finishing pass.  The selection mask may include the game
+// showroom or the weapon shown immediately underneath the actual notification.
+// Measure the long banner's horizontal lower edge, then discard background
+// scenery without relying on screen or device dimensions.
+function trimVerifiedBackground(r){
+ if(!r?.meta?.verifiedTextRibbon||!r?.meta?.band||!r.master||r?.meta?.manualRepair)return false;
+ const b=r.meta.band,W=view.width,H=view.height;
+ if(!(b.right>b.left+30&&b.bottom>b.top+12&&W>2&&H>2))return false;
+ const U=b.bottom-b.top,BW=b.right-b.left;
+ const raw=ctx.getImageData(0,0,W,H).data;
+ const at=(x,y)=>{
+  const j=(clamp(y|0,0,H-1)*W+clamp(x|0,0,W-1))*4;
+  return [raw[j],raw[j+1],raw[j+2]];
+ };
+ // Median difference of two rows across the text ribbon, so a bright letter
+ // or a weapon at one x cannot relocate the detected continuous lower edge.
+ const xs=Array.from({length:44},(_,i)=>Math.round(b.left+BW*(.38+.35*i/43)));
+ let bestY=-1,bestStrength=-1;
+ const yStart=Math.max(4,Math.round(b.top+Math.max(12,U*.25)));
+ const yEnd=Math.min(H-5,Math.round(b.bottom+Math.min(24,U*.3)));
+ for(let y=yStart;y<=yEnd;y++){
+  const diffs=[];
+  for(const x of xs){
+   const a=at(x,y-3),z=at(x,y+3);
+   diffs.push(Math.max(Math.abs(a[0]-z[0]),Math.abs(a[1]-z[1]),Math.abs(a[2]-z[2])));
   }
-  if(changed)g.putImageData(im,0,0);
-  return changed;
+  diffs.sort((a,b)=>a-b);
+  const strength=diffs[Math.floor(diffs.length*.5)];
+  if(strength>bestStrength){bestStrength=strength;bestY=y;}
  }
-
-function readKilllogVisibleFrame(pixels,w,h,box){
-  // Source alpha and actual colored pixels define the saved center, never a
-  // screenshot coordinate, CSS scale, or the location of the user's tap.
-  const left=clamp(Math.floor(box.x),0,w-1);
-  const right=clamp(Math.ceil(box.x+box.w),left+1,w);
-  const top=clamp(Math.floor(box.y),0,h-1);
-  const bottom=clamp(Math.ceil(box.y+box.h),top+1,h);
-  let minX=right,minY=bottom,maxX=left-1,maxY=top-1;
-  let weightedX=0,weightedY=0,totalWeight=0,seen=0;
-  for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){
-    const k=(y*w+x)*4, a=pixels[k+3];
-    if(a<6)continue;
-    seen++;
-    if(x<minX)minX=x;if(x>maxX)maxX=x;
-    if(y<minY)minY=y;if(y>maxY)maxY=y;
-    // Low-contrast stray background pixels should not move the visible ribbon.
-    // Bright lettering and colorful ornamental details receive higher weight.
-    if(a<12)continue;
-    const R=pixels[k],G=pixels[k+1],B=pixels[k+2];
-    const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
-    const contrast=clamp((hi-lo+hi*.18)/105,0,1);
-    const weight=(a/255)*(.35+.65*contrast);
-    weightedX+=(x+.5)*weight;
-    weightedY+=(y+.5)*weight;
-    totalWeight+=weight;
-  }
-  if(!seen||minX>maxX||minY>maxY)return null;
-  // A fully dark banner may have no strong-color center; fall back to its bbox.
-  let cx=totalWeight>0?weightedX/totalWeight:(minX+maxX+1)/2;
-  let cy=totalWeight>0?weightedY/totalWeight:(minY+maxY+1)/2;
-  const bw=maxX-minX+1,bh=maxY-minY+1;
-  cx=clamp(cx,minX+bw*.20,maxX+1-bw*.20);
-  cy=clamp(cy,minY+bh*.15,maxY+1-bh*.15);
-  return {minX,minY,maxX,maxY,cx,cy};
- }
-
- 
- // Remove only tiny, detached, near-neutral scenery pieces at the very END
- // of a verified alert.  Headpieces, title, colored sparks and connected
- // ribbon material are intentionally untouched.
- function trimDetachedAlertBackdrop(r){
-  if(!r?.meta?.verifiedTextRibbon||!r?.meta?.band||!r?.master||r.meta.manualRepair)return false;
-  const c=r.master,w=c.width,h=c.height,band=r.meta.band;
-  const bw=band.right-band.left,bh=band.bottom-band.top;
-  if(w<70||h<15||bw<90||bh<9)return false;
-  const g=c.getContext('2d',{willReadFrequently:true});
-  const img=g.getImageData(0,0,w,h),rgba=img.data;
-  const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
-  let total=0;
-  for(let i=0;i<w*h;i++)if(rgba[i*4+3]>30)total++;
-  let changed=false;
-  // For every 8-connected alpha island, only consider fully trailing islands.
-  for(let p=0;p<w*h;p++){
-   if(visited[p]||rgba[p*4+3]<28)continue;
-   visited[p]=1;queue[0]=p;
-   let head=0,tail=1,minX=w,maxX=-1,minY=h,maxY=-1,chromatic=0,bright=0;
-   while(head<tail){
-    const q=queue[head++],x=q%w,y=(q/w)|0,k=q*4;
-    minX=Math.min(minX,x);maxX=Math.max(maxX,x);
-    minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-    const R=rgba[k],G=rgba[k+1],B=rgba[k+2],hi=Math.max(R,G,B),lo=Math.min(R,G,B);
-    if(hi-lo>40&&hi>92)chromatic++;
-    if(lo>150)bright++;
-    for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++)
-     for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
-      const next=yy*w+xx;
-      if(!visited[next]&&rgba[next*4+3]>=28){visited[next]=1;queue[tail++]=next;}
-     }
-   }
-   const sourceMin=r.sourceX+minX,sourceMax=r.sourceX+maxX;
-   const lastSection=sourceMin>band.left+bw*.73;
-   const endsAfterRibbon=sourceMax>band.right-bh*1.6;
-   const detachedSmall=tail<Math.max(260,total*.085);
-   const neutral=(chromatic/Math.max(1,tail)<.065)&&(bright/Math.max(1,tail)<.035);
-   if(lastSection&&endsAfterRibbon&&detachedSmall&&neutral){
-    for(let i=0;i<tail;i++)rgba[queue[i]*4+3]=0;
-    changed=true;
-   }
-  }
-  // Some charcoal crack-pattern ribbons blend into the dark showroom near
-  // their tapered far-right end. Follow the LAST confirmed warm crack to
-  // soften only this specific kind of neutral tail — preserve the rest.
-  const bl=clamp(Math.round(band.left),0,view.width-2);
-  const br=clamp(Math.round(band.right),bl+1,view.width-1);
-  const bt=clamp(Math.round(band.top+bh*.16),0,view.height-2);
-  const bb=clamp(Math.round(band.bottom-bh*.16),bt+1,view.height-1);
-  const width=br-bl+1,height=bb-bt+1;
-  if(width>100&&height>6){
-   const original=ctx.getImageData(bl,bt,width,height).data;
-   let warm=0,dark=0,violet=0,totalSamples=0;
-   const xl=Math.round(width*.24),xr=Math.round(width*.85);
-   let lastWarm=-1;
-   for(let x=0;x<width;x++){
-    let colWarm=0,colN=0;
-    for(let y=0;y<height;y+=2){
-     const j=(y*width+x)*4,R=original[j],G=original[j+1],B=original[j+2];
-     const hi=Math.max(R,G,B),lo=Math.min(R,G,B);
-     const isWarm=R>G+22&&R>B+20&&R>100;
-     if(isWarm)colWarm++;
-     colN++;
-     if(x>=xl&&x<=xr){
-      totalSamples++;
-      if(isWarm)warm++;
-      if(hi<100&&hi-lo<40)dark++;
-      if(B>G+12&&R>G+12)violet++;
-     }
-    }
-    if(x>width*.38&&colWarm/Math.max(1,colN)>.12)lastWarm=bl+x;
-   }
-   const wr=warm/Math.max(1,totalSamples),dr=dark/Math.max(1,totalSamples),vr=violet/Math.max(1,totalSamples);
-   if(lastWarm>bl+width*.48&&wr>.055&&wr<.28&&dr>.55&&vr<.07){
-    const start=lastWarm+bh*1.05,end=lastWarm+bh*2.18;
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-     const X=r.sourceX+x;
-     if(X<=start)continue;
-     const i=(y*w+x)*4,old=rgba[i+3];if(!old)continue;
-     const f=Math.max(0,Math.min(1,(end-X)/Math.max(1,end-start)));
-     const a=Math.round(old*f*f*(3-2*f));
-     if(a!==old){rgba[i+3]=a;changed=true;}
+ const validEdge=bestStrength>=30 && bestY>=b.top+Math.max(15,U*.26);
+ const excessiveBottom=validEdge&&(b.bottom-bestY)>Math.max(15,U*.19);
+ const m=r.master,g=m.getContext('2d',{willReadFrequently:true});
+ const rgba=g.getImageData(0,0,m.width,m.height),p=rgba.data;
+ const bgX=clamp(Math.round(b.right+Math.max(85,Math.min(230,U*3.1))),0,W-1);
+ const bgTopY=clamp(Math.round(b.top-Math.max(65,U*1.45)),0,H-1);
+ const bgRef0=at(bgX,bgTopY);
+ let edited=false;
+ for(let y=0;y<m.height;y++){
+  const Y=y+r.sourceY;
+  const backdrop=at(bgX,Y);
+  const offR=backdrop[0]-bgRef0[0],offG=backdrop[1]-bgRef0[1],offB=backdrop[2]-bgRef0[2];
+  for(let x=0;x<m.width;x++){
+   const j=(y*m.width+x)*4,A=p[j+3];if(A<4)continue;
+   const X=x+r.sourceX;
+   // In the real screenshot the long lower edge is above the weapon below it.
+   // Keep a guarded strip of the left head ornament, not the second object.
+   if(excessiveBottom){
+    if(Y>bestY+17||(Y>bestY+8&&X>b.left+BW*.23)){
+     p[j+3]=0;edited=true;continue;
     }
    }
+   // Estimate the background from a clean row of the same source image and
+   // the vertical change in the clear right-hand sky. Apply only to boundary
+   // pixels, never to the core glyph/background of the notification itself.
+   const peripheral=X<b.left-U*.36 || X>b.right-U*.10 ||
+     Y<b.top-U*.23 || Y>b.bottom+U*.04 || (excessiveBottom&&Y>bestY+2);
+   const base=at(X,bgTopY);
+   const delta=Math.max(Math.abs(p[j]-(base[0]+offR)),
+     Math.abs(p[j+1]-(base[1]+offG)),Math.abs(p[j+2]-(base[2]+offB)));
+   // Blue-gray showroom scenery is not blue, purple, or fiery decoration.
+   // Its characteristic R < G < B signature is checked only at the visible
+   // edge of the banner, leaving the central notification untouched.
+   const isStudioSky=p[j+2]>p[j]+12 && p[j+2]>p[j+1]+7 &&
+    p[j+1]>p[j]+5 && p[j+2]-p[j]<96;
+   const skyEdge=X<b.left+U*1.05 || X>b.left+BW*.75 ||
+     Y>b.bottom-U*.08 || Y<b.top-U*.30;
+   if(isStudioSky&&skyEdge&&(delta<70 ||
+      (r.meta.detectedHue==='gray'&&X<b.left+U*.78))){
+     p[j+3]=0;edited=true;continue;
+   }
+   if(!peripheral)continue;
+   if(delta<12){p[j+3]=0;edited=true;}
+   else if(delta<24){const next=Math.round(A*(delta-12)/12);
+    if(next<A){p[j+3]=next;edited=true;}}
   }
-  if(changed)g.putImageData(img,0,0);
-  return changed;
  }
-
+ if(edited){g.putImageData(rgba,0,0);r.meta={...r.meta,backgroundPruned:true,measuredBottomEdge:bestY,edgeScore:bestStrength};}
+ return edited;
+}
 async function encodeResult(r){
-  // Existing detection and ornament restoration are untouched.
+  // Special blue banners are measured from the source; never apply broad cleanup.
   if(!r?.meta?.verifiedTextRibbon&&!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
    removeFlatDarkBlueOverhang(r);
    normalizeIcyBlueBannerBody(r);
   }
   if(!r?.meta?.verifiedTextRibbon)cleanupDarkSideMattes(r);
+  // Erase only verified scenery leakage below the extracted notification.
   if(!r?.meta?.manualRepair){
    cleanVerifiedKilllogArtifact(r);
-   suppressVerifiedBackdrop(r);
-   trimDetachedAlertBackdrop(r);
+   trimVerifiedBackground(r);
   }
   recalcInnerFromAlpha(r,2,2);
-  if(!r?.master||!r?.inner)return false;
-  const master=r.master,W=master.width,H=master.height;
-  const l=clamp(Math.round(r.inner.x),0,W-1),t=clamp(Math.round(r.inner.y),0,H-1);
-  const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,W-1);
-  const bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,H-1);
-  // Measure exactly which ORIGINAL foreground pixels are visible.
-  const rgba=master.getContext('2d',{willReadFrequently:true}).getImageData(l,t,rr-l+1,bb-t+1).data;
+  if(!r.master||!r.inner)return false;
+  const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
+  const rr=clamp(Math.round(r.inner.x+r.inner.w-1),l,r.master.width-1),bb=clamp(Math.round(r.inner.y+r.inner.h-1),t,r.master.height-1);
   const cropW=rr-l+1,cropH=bb-t+1;
-  let minX=cropW,minY=cropH,maxX=-1,maxY=-1;
-  for(let y=0;y<cropH;y++)for(let x=0;x<cropW;x++){
-   if(rgba[(y*cropW+x)*4+3]>=13){
-    if(x<minX)minX=x;if(x>maxX)maxX=x;
-    if(y<minY)minY=y;if(y>maxY)maxY=y;
+  const sourceCtx=r.master.getContext('2d',{willReadFrequently:true});
+  const sourceImage=sourceCtx.getImageData(0,0,r.master.width,r.master.height).data;
+  let alphaMinX=rr,alphaMaxX=l,alphaMinY=bb,alphaMaxY=t,alphaSeen=false;
+  for(let y=t;y<=bb;y++)for(let x=l;x<=rr;x++){
+   if(sourceImage[(y*r.master.width+x)*4+3]>=8){
+    alphaSeen=true;
+    if(x<alphaMinX)alphaMinX=x;if(x>alphaMaxX)alphaMaxX=x;
+    if(y<alphaMinY)alphaMinY=y;if(y>alphaMaxY)alphaMaxY=y;
    }
   }
-  if(maxX<minX||maxY<minY)return false;
-  // Leave a 2px source buffer to keep antialiased ornament contours.
-  const sx=l+Math.max(0,minX-2),sy=t+Math.max(0,minY-2);
-  const ex=l+Math.min(cropW-1,maxX+2),ey=t+Math.min(cropH-1,maxY+2);
-  const visibleW=ex-sx+1,visibleH=ey-sy+1;
-  const cw=OUTPUT_W,ch=MIN_OUTPUT_H,padX=12,padY=10;
-  // Both dimensions are fit: no visible pixel can be cropped by centering.
-  const scale=Math.min((cw-2*padX)/visibleW,(ch-2*padY)/visibleH);
-  const dstW=visibleW*scale,dstH=visibleH*scale;
-  const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
+  const visibleL=alphaSeen?alphaMinX:l,visibleR=alphaSeen?alphaMaxX:rr;
+  const visibleT=alphaSeen?alphaMinY:t,visibleB=alphaSeen?alphaMaxY:bb;
+  // Normalize the *visible, nontransparent* art to a consistent width.
+  // Transparent pixels in the original selection must not shrink the object.
+  const visibleW=Math.max(1,visibleR-visibleL+1);
+  const visibleH=Math.max(1,visibleB-visibleT+1);
+  const sidePadding=8;
+  const scale=(OUTPUT_W-sidePadding*2)/visibleW;
+  // Crop to the alpha-bearing rectangle, but include a small amount of source
+  // padding around it to protect antialiased decoration edges.
+  const guard=Math.max(2,Math.ceil(2/Math.max(.01,scale)));
+  const sx=Math.max(l,visibleL-guard),sy=Math.max(t,visibleT-guard);
+  const ex=Math.min(rr,visibleR+guard),ey=Math.min(bb,visibleB+guard);
+  const drawW=ex-sx+1,drawH=ey-sy+1;
+  const dw=Math.max(1,drawW*scale),dh=Math.max(1,drawH*scale);
+  const contentHeight=Math.ceil(visibleH*scale);
+  const outH=Math.max(MIN_OUTPUT_H,contentHeight+sidePadding*2);
+  const canvas=document.createElement('canvas');canvas.width=OUTPUT_W;canvas.height=outH;
   const g=canvas.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
-  g.clearRect(0,0,cw,ch);
-  // The alpha BOUNDING BOX, rather than the photo crop or brightness weight,
-  // is placed at the exact center of the exported transparent PNG.
-  g.drawImage(master,sx,sy,visibleW,visibleH,(cw-dstW)/2,(ch-dstH)/2,dstW,dstH);
-  // Browser resampling can move the barely visible taper by several pixels.
-  // Re-measure the ACTUAL saved frame and shift its entire transparent layer
-  // without scaling any ornament or changing the selection mask.
-  const frame=g.getImageData(0,0,cw,ch).data;
-  let outL=cw,outR=-1,outT=ch,outB=-1;
-  for(let Y=0;Y<ch;Y++)for(let X=0;X<cw;X++){
-   if(frame[(Y*cw+X)*4+3]<13)continue;
-   if(X<outL)outL=X;if(X>outR)outR=X;
-   if(Y<outT)outT=Y;if(Y>outB)outB=Y;
-  }
-  if(outR>=outL&&outB>=outT){
-   const dx=Math.round((cw-1-outL-outR)/2);
-   const dy=Math.round((ch-1-outT-outB)/2);
-   if(dx||dy){
-    const hold=document.createElement('canvas');hold.width=cw;hold.height=ch;
-    hold.getContext('2d').drawImage(canvas,0,0);
-    g.clearRect(0,0,cw,ch);g.drawImage(hold,dx,dy);
-   }
-  }
+  // Center the visible artwork, not its initial detection rectangle.
+  const visibleCx=(visibleL+visibleR+1)/2,visibleCy=(visibleT+visibleB+1)/2;
+  const destX=OUTPUT_W/2-(visibleCx-sx)*scale;
+  const destY=outH/2-(visibleCy-sy)*scale;
+  g.drawImage(r.master,sx,sy,drawW,drawH,destX,destY,dw,dh);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)return false;
   if(r.url)URL.revokeObjectURL(r.url);
-  r.blob=blob;r.url=URL.createObjectURL(blob);r.outputH=ch;r.contentWidth=dstW;
-  r.bounds={x:r.sourceX+sx,y:r.sourceY+sy,w:visibleW,h:visibleH};
+  r.blob=blob;r.url=URL.createObjectURL(blob);r.outputH=outH;r.contentWidth=Math.round(visibleW*scale);
+  r.bounds={x:r.sourceX+visibleL,y:r.sourceY+visibleT,w:visibleW,h:visibleH};
   return true;
  }
  function updatePhotoCounts(){photos.forEach((p,i)=>{const button=$('kl-photos').children[i];if(button)button.textContent=`사진 ${i+1} (${results.filter(r=>r.photo===i).length}개)`;});}
@@ -7294,15 +7170,15 @@ async function encodeResult(r){
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
   if(!results.length){const d=document.createElement('div');d.className='empty';d.textContent='아직 선택된 킬로그가 없습니다.';wrap.append(d);return;}
   results.forEach((r,i)=>{
-   const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');card.style.cssText='box-sizing:border-box;min-width:0;max-width:100%;overflow:hidden';
+   const card=document.createElement('div');card.className='card'+(i===editingIndex?' active':'');
    card.style.borderColor=i===editingIndex?'#ffb020':'';
    const img=document.createElement('img');img.src=r.url;img.alt='킬로그 추출 결과: 누르면 확대해서 볼 수 있습니다';img.style.cursor='zoom-in';img.onclick=()=>showPreview(r,i);
    img.style.cssText='display:block;width:100%;height:auto;max-height:none;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/16px 16px';
    const info=document.createElement('div');info.className='card-info';info.textContent=`킬로그 ${i+1} · 사진 ${r.photo+1} · ${r.mode==='special'?'고번':'일반'} · ${OUTPUT_W}×${r.outputH}`;
    card.append(img,info);
    const warn=resultWarning(r);if(warn){const note=document.createElement('div');note.style.cssText='font-size:12px;color:#ffcb7d;margin:4px 0 8px';note.textContent='주의: '+warn;card.append(note);}
-   const btnRow=document.createElement('div');btnRow.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;min-width:0;width:100%;max-width:100%;box-sizing:border-box';
-   const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.style.cssText='display:block;box-sizing:border-box;min-width:0;max-width:100%;width:100%;height:auto;white-space:normal;overflow-wrap:anywhere;word-break:keep-all;text-align:center;line-height:1.4;padding:10px 6px;font-size:13px';b.onclick=fn;return b;};
+   const btnRow=document.createElement('div');btnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
+   const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
     mk('원본·결과 비교',()=>compareResult(r,i)),
@@ -9647,14 +9523,6 @@ function detectVerifiedTextRibbon(tx,ty,mode){
  return found;
 }
 
-
- function touchNearVerifiedRibbon(r,tx,ty){
-  const band=r?.meta?.band;
-  if(!band)return false;
-  const h=Math.max(8,band.bottom-band.top+1);
-  return tx>=band.left-h*3.8&&tx<=band.right+h*1.6&&
-   ty>=band.top-h*1.65&&ty<=band.bottom+h*1.55;
- }
  async function extractKilllog(tx,ty,mode){
   const photo=photos[active];if(!photo)return null;
   const cacheKey=mode==='normal'?'_klReadyNormal':'_klReadySpecial';
@@ -9662,7 +9530,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   if(cached){
    // Never redirect the user to a gun-shaped detector on a showcase photo:
    // the saved verified alert is the only extraction candidate.
-   if(cached.meta?.verifiedTextRibbon)return touchNearVerifiedRibbon(cached,tx,ty)?cached:null;
+   if(cached.meta?.verifiedTextRibbon)return cached;
    if(!isTouchedMaskedKilllog(cached,tx,ty))return null;
    return cached;
   }
@@ -9674,7 +9542,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    const verifiedBand=textRibbon.meta?.band;
    const localH=verifiedBand?verifiedBand.bottom-verifiedBand.top:0;
    const belowTouch=verifiedBand&&verifiedBand.top>ty+Math.max(11,localH*1.25);
-   if(!belowTouch && touchNearVerifiedRibbon(textRibbon,tx,ty)&&await encodeResult(textRibbon)&&validKilllogResult(textRibbon)){
+   if(!belowTouch && await encodeResult(textRibbon)&&validKilllogResult(textRibbon)){
     photo[cacheKey]=textRibbon;return textRibbon;
    }
   }
