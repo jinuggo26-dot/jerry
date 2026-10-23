@@ -7463,6 +7463,8 @@ async function encodeResult(r){
   const destY=outH/2-(visibleCy-sy)*scale;
   g.drawImage(r.master,sx,sy,drawW,drawH,destX,destY,dw,dh);
   if(!r.meta?.manualRepair && !r.meta?.rockBodyRestored)cleanupFinalCanvas(canvas,r.meta||{});
+  // Exact alpha-bound centering after browser canvas rasterization, including antialiasing.
+  if(r.meta?.manualRepair)window.SnaCenterKillOutput(canvas);
   const finalData=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,canvas.width,canvas.height).data;
   let fx=canvas.width,fy=canvas.height,fr=-1,fb=-1;
   for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++)if(finalData[(y*canvas.width+x)*4+3]>=8){if(x<fx)fx=x;if(x>fr)fr=x;if(y<fy)fy=y;if(y>fb)fb=y;}
@@ -10002,7 +10004,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   dialog.style.cssText='box-sizing:border-box;width:100%;max-width:100vw;position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:12px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch';
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
   const h3=document.createElement('strong');h3.textContent='킬로그 정밀 보정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('p');hint.textContent='살리기는 장식·글자를 색상으로 구분해 복원하고, 지우기는 터치한 배경색과 연결된 부분만 제거합니다. 남길 장식과 배경을 표시한 뒤 정밀 재분리를 누르세요.';
+  const hint=document.createElement('p');hint.textContent='살리기는 장식·글자에 가까운 원본 픽셀을 복원합니다. 지우기는 어두운 배경을 터치하면 같은 색의 배경만 따라 지웁니다. 정밀 재분리 후에도 현재 킬로그 범위를 유지합니다.';
   hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:720px';
   const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 12px;min-height:40px;max-width:100%;white-space:normal;overflow-wrap:anywhere;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
   const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:minmax(66px,100px) minmax(0,1fr);gap:8px;width:100%;max-width:720px;min-width:0;align-items:center';
@@ -10221,9 +10223,14 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    try{
     const result=window.SnaGraphRefine.refine({source,baseAlpha,painted,width:w,height:h,
       bounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
-    baseAlpha.set(result.alpha);
+    // Stable result: graph segmentation may reclassify broad background as art.
+    // New foreground may only grow a narrow halo around already visible pixels
+    // or around explicitly painted keep strokes. Erasure and manual keep always win.
+    const stable=window.SnaLimitKillRefine({before:baseAlpha,after:result.alpha,
+       painted,width:w,height:h,initialBounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
+    baseAlpha.set(stable);
     updateAlpha();recordHistory();scheduleRender();
-    refineStatus.textContent='정밀 재분리 완료 · 결과를 확인하고 필요하면 다시 살리기/지우기 표시 후 반복하세요.';
+    refineStatus.textContent='정밀 재분리 완료 · 기존 범위 안에서 정리했습니다. 지우기로 칠한 배경은 제거 상태를 유지합니다.';
    }catch(error){console.error('정밀 재분리:',error);refineStatus.textContent='정밀 재분리: '+(error?.message||'처리 오류');}
    finally{refineButton.disabled=false;refineButton.textContent='정밀 재분리';}
   });
@@ -11046,6 +11053,151 @@ window.SnaSmartKillBrush = function({source,baseAlpha,painted,width,height,bound
  return {begin,paint(mode,x,y,radius,sensitivity=48){return mode==='restore'?restoring(x,y,radius):erasing(x,y,radius,sensitivity);},isBackgroundSeed:()=>seedSafe};
 };
 
+</script>
+<script>
+/* Stable precision corrections — only runs after user explicitly chooses fine refinement. */
+window.SnaLimitKillRefine=function({before,after,painted,width,height,initialBounds}){
+ const n=width*height,allowed=new Uint8Array(n),queue=new Int32Array(n);
+ let front=0,back=0;
+ // The reliable foreground is the last preview's actual pixels and the user-protected art.
+ for(let i=0;i<n;i++)if(before[i]>=16||painted[i]>=120){allowed[i]=1;queue[back++]=i;}
+ // Only a 7-source-pixel halo may be reclassified as additional art.
+ // Restrict halo to original banner and its nearby edge. Deliberate keep marks
+ // outside that region are still valid and can restore hanging jewels/sparks.
+ let layerEnd=back;
+ for(let layer=0;layer<7;layer++){
+  while(front<layerEnd){
+   const p=queue[front++],x=p%width,y=(p/width)|0;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const xx=x+dx,yy=y+dy;
+    if(xx<0||yy<0||xx>=width||yy>=height)continue;
+    const q=yy*width+xx;
+    if(!allowed[q]){allowed[q]=1;queue[back++]=q;}
+   }
+  }
+  layerEnd=back;
+ }
+ const out=new Uint8ClampedArray(n),b=initialBounds;
+ const margin=10;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const k=y*width+x,m=painted[k];
+  if(m===0){out[k]=0;continue;}
+  if(m>0){out[k]=Math.max(m,before[k]);continue;}
+  const old=before[k],fresh=after[k];
+  if(fresh<=old){out[k]=fresh;continue;}
+  const nearBounds=x>=b.x-margin&&x<=b.x+b.w+margin&&
+      y>=b.y-margin&&y<=b.y+b.h+margin;
+  // Preserve existing matte but never inflate a free-standing backdrop.
+  if(!allowed[k]||(!nearBounds && old<8)){out[k]=old;continue;}
+  out[k]=old<16?Math.min(fresh,220):fresh;
+ }
+ return out;
+};
+window.SnaCenterKillOutput=function(canvas){
+ const w=canvas.width,h=canvas.height,ctx=canvas.getContext('2d',{willReadFrequently:true});
+ const dat=ctx.getImageData(0,0,w,h).data;
+ let left=w,right=-1,top=h,bottom=-1;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  if(dat[(y*w+x)*4+3]<8)continue;
+  if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
+ }
+ if(right<left)return;
+ // Fix rounding errors at the very end, without changing size or cropping artwork.
+ const offsetX=Math.round((w-1-left-right)/2),offsetY=Math.round((h-1-top-bottom)/2);
+ if(!offsetX&&!offsetY)return;
+ const copy=document.createElement('canvas');copy.width=w;copy.height=h;
+ copy.getContext('2d').drawImage(canvas,offsetX,offsetY);
+ ctx.clearRect(0,0,w,h);ctx.drawImage(copy,0,0);
+};
+</script>
+<script>
+/* Color-aware brush v2: replace earlier brush's overly broad 'protected art' rule.
+   It must be possible to erase an initially opaque dark blue rectangle. */
+window.SnaSmartKillBrush=function({source,baseAlpha,painted,width,height,bounds}){
+ const W=width,H=height,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+ const ci=(x,y)=>(clamp(Math.round(y),0,H-1)*W+clamp(Math.round(x),0,W-1))*4;
+ const color=(x,y)=>{const k=ci(x,y);return [source[k],source[k+1],source[k+2]];};
+ const d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+ const topY=clamp(Math.round(bounds.y-Math.max(18,bounds.h*.50)),0,H-1);
+ const bottomY=clamp(Math.round(bounds.y+bounds.h+Math.max(14,bounds.h*.36)),0,H-1);
+ const top=new Array(W),bottom=new Array(W);
+ for(let x=0;x<W;x++){top[x]=color(x,topY);bottom[x]=color(x,bottomY);}
+ const shadeInfo=(x,y,c)=>{
+  const hi=Math.max(c[0],c[1],c[2]),lo=Math.min(c[0],c[1],c[2]),sat=hi-lo;
+  const sceneDist=Math.min(d(c,top[x]),d(c,bottom[x]));
+  const neutral=(hi<158&&sat<54)||(hi<110&&sat<78);
+  const darkBlue=c[2]>=c[0]+4&&c[2]>=c[1]-5&&hi<175&&sat<85;
+  const clearlyBackground=neutral||darkBlue||(sceneDist<38&&hi<188&&sat<90);
+  const brightInk=hi>190&&lo>145&&sceneDist>35;
+  const colorfulArt=sat>75&&hi>113&&sceneDist>32;
+  const art=brightInk||colorfulArt;
+  return {hi,sat,sceneDist,background:clearlyBackground,art};
+ };
+ const protection=(x,y,c)=>{
+  const k=y*W+x,info=shadeInfo(x,y,c);
+  if(painted[k]>100)return true;
+  return info.art && !(info.background&&info.sceneDist<19);
+ };
+ function restoring(x,y,radius){
+  let changed=0;
+  for(let yy=Math.max(0,Math.floor(y-radius));yy<=Math.min(H-1,Math.ceil(y+radius));yy++)for(let xx=Math.max(0,Math.floor(x-radius));xx<=Math.min(W-1,Math.ceil(x+radius));xx++){
+   if((xx-x)**2+(yy-y)**2>radius**2)continue;
+   const k=yy*W+xx,c=color(xx,yy),info=shadeInfo(xx,yy,c);
+   if(!protection(xx,yy,c)&&!(baseAlpha[k]>100&&info.sceneDist>40&&!info.background))continue;
+   const a=Math.max(baseAlpha[k],Math.round(clamp(190+info.sceneDist*.75,190,255)));
+   if(painted[k]!==a){painted[k]=a;changed++;}
+  }
+  return changed;
+ }
+ let seed=null;
+ function begin(mode,x,y){
+  seed=null;
+  if(mode!=='erase')return;
+  const xx=clamp(Math.round(x),0,W-1),yy=clamp(Math.round(y),0,H-1),c=color(xx,yy);
+  // On opaque dark/gray/blue background, allow erasing even if old mask included it.
+  if(!protection(xx,yy,c))seed=c;
+ }
+ function erasing(x,y,radius,sensitivity){
+  const cx=clamp(Math.round(x),0,W-1),cy=clamp(Math.round(y),0,H-1);
+  if(!seed){const c=color(cx,cy);if(protection(cx,cy,c))return 0;seed=c;}
+  // Update reference slowly across slightly graded backgrounds during a stroke.
+  const here=color(cx,cy),info=shadeInfo(cx,cy,here);
+  if(!protection(cx,cy,here)&&d(here,seed)<sensitivity*1.3)
+   seed=seed.map((v,i)=>v*.6+here[i]*.4);
+  const lx=Math.max(0,Math.floor(x-radius)),rx=Math.min(W-1,Math.ceil(x+radius));
+  const ly=Math.max(0,Math.floor(y-radius)),ry=Math.min(H-1,Math.ceil(y+radius));
+  const ww=rx-lx+1,hh=ry-ly+1;if(!ww||!hh)return 0;
+  const visited=new Uint8Array(ww*hh),queue=new Int32Array(ww*hh);
+  // First locate actual background within the brush circle, even if its
+  // center touches a thin metallic or typographic foreground stroke.
+  let sx=-1,sy=-1,best=1e20;
+  const search=Math.min(radius,7);
+  for(let yy=Math.max(ly,cy-search);yy<=Math.min(ry,cy+search);yy++)for(let xx=Math.max(lx,cx-search);xx<=Math.min(rx,cx+search);xx++){
+   const c=color(xx,yy);if(protection(xx,yy,c))continue;
+   const diff=d(c,seed);
+   if(diff<sensitivity&&diff<best){best=diff;sx=xx;sy=yy;}
+  }
+  if(sx<0)return 0;
+  let front=0,back=1;queue[0]=(sy-ly)*ww+(sx-lx);visited[queue[0]]=1;
+  let changed=0;
+  while(front<back){
+   const p=queue[front++],xx=lx+p%ww,yy=ly+((p/ww)|0);
+   if((xx-x)**2+(yy-y)**2>radius**2)continue;
+   const c=color(xx,yy),diff=d(c,seed),k=yy*W+xx;
+   if(diff>sensitivity||protection(xx,yy,c))continue;
+   if(painted[k]!==0){painted[k]=0;changed++;}
+   for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    if(!ox&&!oy)continue;const px=xx+ox,py=yy+oy;
+    if(px<lx||px>rx||py<ly||py>ry)continue;
+    const q=(py-ly)*ww+px-lx;
+    if(!visited[q]){visited[q]=1;queue[back++]=q;}
+   }
+  }
+  return changed;
+ }
+ return {begin,paint(mode,x,y,radius,sensitivity=48){return mode==='restore'?restoring(x,y,radius):erasing(x,y,radius,sensitivity);},isBackgroundSeed:()=>!!seed};
+};
 </script>
 </body>
 </html>
