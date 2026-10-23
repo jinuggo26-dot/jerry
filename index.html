@@ -914,6 +914,43 @@ body{background:radial-gradient(ellipse at 50% -15%,#20385c 0%,#0a101b 45%,#070b
 .sna-compare-grid img,.sna-compare-grid canvas{width:100%;height:auto;object-fit:contain;display:block}
 @media(max-width:600px){.sna-compare-grid{grid-template-columns:1fr}}
 </style>
+<style>
+/* Box-select killlog editor: styles deliberately scoped to #mb-workflow */
+#mb-workflow {width:100%;min-width:0;margin:12px 0 22px;color:#edf3ff;}
+#mb-workflow *{box-sizing:border-box}
+#mb-workflow .mb-card{border:1px solid #334660;background:#141e30;border-radius:15px;padding:15px;margin:12px 0;min-width:0}
+#mb-workflow .mb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#mb-workflow .mb-head h2{font-size:18px;margin:0;color:#f4f6ff}
+#mb-workflow .mb-muted{color:#b1c1da;font-size:13px;line-height:1.6;margin:8px 0}
+#mb-workflow .mb-buttons{display:flex;gap:7px;align-items:stretch;flex-wrap:wrap;margin:10px 0}
+#mb-workflow button,#mb-workflow .mb-filelabel{border:1px solid #486080;border-radius:10px;cursor:pointer;color:#f0f5ff;font-size:13px;font-weight:700;background:#283854;padding:10px 13px;min-width:0;max-width:100%;white-space:normal;line-height:1.35;overflow-wrap:anywhere;text-align:center;touch-action:manipulation}
+#mb-workflow button:disabled{opacity:.45;cursor:default}
+#mb-workflow button.mb-primary,#mb-workflow .mb-filelabel{background:#4675e6;border-color:#678ff1;color:white}
+#mb-workflow button.mb-active{background:#2b6496;border-color:#85baff;box-shadow:inset 0 0 0 1px #85baff}
+#mb-workflow .mb-filelabel{display:inline-flex;align-items:center;justify-content:center;min-height:44px}
+#mb-workflow .mb-viewer{position:relative;width:100%;max-height:min(65vh,690px);overflow:auto;border:1px solid #344862;border-radius:12px;background:repeating-conic-gradient(#29334a 0% 25%,#1b2539 0% 50%) 50%/20px 20px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#mb-workflow .mb-stage{position:relative;min-width:0;margin:auto;line-height:0}
+#mb-workflow canvas{display:block;max-width:none;image-rendering:auto}
+#mb-workflow #mb-source{width:100%;height:auto;touch-action:none;cursor:crosshair}
+#mb-workflow #mb-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#mb-workflow #mb-edit{width:100%;height:auto;touch-action:none;cursor:crosshair}
+#mb-workflow #mb-result{display:block;width:min(100%,760px);height:auto;margin:auto;background:repeating-conic-gradient(#e1e7f0 0% 25%,#b6c3d6 0% 50%) 50%/16px 16px;border-radius:7px}
+#mb-workflow .mb-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+#mb-workflow .mb-control{min-width:0}
+#mb-workflow .mb-control label{display:flex;justify-content:space-between;gap:8px;color:#d1dff2;font-size:12px}
+#mb-workflow input[type=range]{display:block;width:100%;margin:7px 0;accent-color:#80acff;min-width:0}
+#mb-workflow .mb-info{font-size:12px;color:#a9d2ff;min-height:20px;margin:8px 0}
+#mb-workflow .mb-output{margin-top:10px;border:1px solid #41536b;border-radius:10px;padding:8px;background:#182338}
+#mb-workflow #mb-editor-panel[hidden],#mb-workflow #mb-result-panel[hidden],#mb-workflow #mb-box-panel[hidden]{display:none!important}
+#mb-workflow .mb-steps{font-size:13px;color:#b9cce8}
+#mb-workflow .mb-legacy-button{margin:9px 0}
+#mb-workflow .mb-compact{flex:1 1 106px}
+#mb-workflow .mb-badge{font-size:11px;background:#263d60;color:#cadcfb;padding:5px 9px;border-radius:20px}
+#mb-workflow #mb-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+@media(max-width:480px){#mb-workflow .mb-card{padding:10px}#mb-workflow .mb-head h2{font-size:16px}#mb-workflow .mb-buttons{gap:5px}#mb-workflow button{font-size:12px;padding:10px 8px}#mb-workflow .mb-controls{gap:8px}#mb-workflow .mb-compact{flex:1 1 100px}}
+
+#mb-legacy[hidden]{display:none!important}
+</style>
 </head>
 
 <body>
@@ -2607,6 +2644,44 @@ window.closeAdmin=()=>{
 <div id="kill-tab" class="tab-pane">
  <div class="app" style="max-width:1050px">
   <header class="header"><div class="title-wrap"><h1>🎯 킬로그 커팅</h1><p>게임 스크린샷을 추가하고, 자를 킬로그를 눌러 선택하세요.</p></div></header>
+<section id="mb-workflow" aria-label="킬로그 네모 박스 배경 제거 편집기">
+ <div class="mb-card">
+  <div class="mb-head"><h2>박스 선택 · 배경 제거</h2><span class="mb-badge">새 방식</span></div>
+  <p class="mb-muted">1. 스크린샷 추가 → 2. 킬로그 전체를 네모 박스로 드래그 → 3. 배경 제거 → 4. 필요할 때 복원·지우기 → 5. PNG 저장</p>
+  <div class="mb-buttons"><label class="mb-filelabel" for="mb-file">사진 추가</label><input id="mb-file" type="file" accept="image/png,image/jpeg,image/webp"><button id="mb-reset" type="button">처음부터</button><button id="mb-toggle-old" type="button">기존 자동 추출 열기</button></div>
+  <div id="mb-box-panel" hidden>
+   <div class="mb-buttons"><button id="mb-zoom-out" type="button">사진 축소 −</button><span id="mb-zoom-text" style="align-self:center;font-size:12px">100%</span><button id="mb-zoom-in" type="button">사진 확대 +</button><button id="mb-pan" type="button">사진 이동</button><button id="mb-box-clear" type="button">박스 다시 그리기</button></div>
+   <div id="mb-viewer" class="mb-viewer"><div id="mb-stage" class="mb-stage"><canvas id="mb-source" aria-label="원본 사진에서 킬로그를 드래그해서 선택"></canvas><canvas id="mb-overlay"></canvas></div></div>
+   <p class="mb-info" id="mb-box-info" role="status">킬로그의 장식과 글자가 모두 들어가도록 박스를 그려 주세요. 바깥 배경에 여백을 조금 남기면 제거가 쉬워져요.</p>
+   <div class="mb-buttons"><button class="mb-primary mb-compact" id="mb-cut" type="button" disabled>선택 영역 배경 제거</button></div>
+  </div>
+ </div>
+ <section id="mb-editor-panel" class="mb-card" hidden>
+  <div class="mb-head"><h2>배경 정리 · 장식 복원</h2><span class="mb-badge">선택한 박스 안만 편집</span></div>
+  <p class="mb-muted">남은 배경을 터치하려면 <b>배경 터치 제거</b>를 선택해 주세요. 잘못 지워진 장식은 <b>복원 브러시</b>로 되살릴 수 있어요.</p>
+  <div class="mb-buttons">
+   <button id="mb-tool-pick" class="mb-compact mb-active" type="button">배경 터치 제거</button>
+   <button id="mb-tool-erase" class="mb-compact" type="button">지우기 브러시</button>
+   <button id="mb-tool-restore" class="mb-compact" type="button">복원 브러시</button>
+  </div>
+  <div class="mb-controls">
+   <div class="mb-control"><label for="mb-tolerance">배경 제거 강도 <output id="mb-tolerance-n">48</output></label><input id="mb-tolerance" type="range" min="15" max="115" value="48" step="1"></div>
+   <div class="mb-control"><label for="mb-brush">브러시 크기 <output id="mb-brush-n">16</output></label><input id="mb-brush" type="range" min="2" max="80" value="16" step="1"></div>
+  </div>
+  <div class="mb-buttons"><button id="mb-auto-again" type="button">자동 배경 제거 다시</button><button id="mb-original" type="button">선택 영역 원본</button><button id="mb-undo" type="button">되돌리기</button><button id="mb-redo" type="button">다시하기</button></div>
+  <div class="mb-viewer"><canvas id="mb-edit" aria-label="배경 제거 결과에 터치하여 편집"></canvas></div>
+  <p class="mb-info" id="mb-edit-info" role="status">배경 제거가 적용됐습니다. 남은 배경을 터치해서 정리해 주세요.</p>
+ </section>
+ <section id="mb-result-panel" class="mb-card" hidden>
+  <div class="mb-head"><h2>PNG 미리보기 · 중앙 정렬</h2><span id="mb-size" class="mb-badge">760 × 190</span></div>
+  <div class="mb-buttons"><label style="color:#d1dff2;font-size:13px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="mb-auto-height"> 내용에 맞춰 세로 길이 자동</label></div>
+  <div class="mb-output"><canvas id="mb-result" width="760" height="190"></canvas></div>
+  <div class="mb-buttons"><button class="mb-primary mb-compact" id="mb-save" type="button">투명 PNG 저장</button><button class="mb-compact" id="mb-share" type="button">공유·저장 창</button></div>
+  <p class="mb-info" id="mb-save-info" role="status">투명 PNG · 내용물 기준 가로·세로 중앙 배치</p>
+ </section>
+</section>
+
+  <div id="mb-legacy" hidden style="display:none">
   <div id="kl-upload-normal">
    <label class="upload" for="kl-files-normal"><div class="upload-left"><div class="upload-icon">＋</div><div class="upload-text"><strong>일반 킬로그 사진 추가하기</strong><span>PNG · JPG · WEBP / 여러 장 선택 가능 · 일반 사진함에만 추가</span></div></div></label>
    <input id="kl-files-normal" type="file" accept="image/png,image/jpeg,image/webp" multiple>
@@ -2645,6 +2720,7 @@ window.closeAdmin=()=>{
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button>
    <p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p></div>
+  </div><!-- mb-legacy -->
  </div>
 </div>
 
@@ -10657,6 +10733,278 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   panel.addEventListener('change',()=>queue('board'));
   panel.addEventListener('click',e=>{if(e.target.closest('button'))queue('board');});
  }
+})();
+
+</script>
+<script>
+/* Box selection + source-pixel background removal, independent of old killlog engine. */
+(()=>{
+ 'use strict';
+ const $=id=>document.getElementById(id);
+ if(!$('mb-workflow'))return;
+ const W=760,FIXED_H=190;
+ const source=$('mb-source'), overlay=$('mb-overlay'), edit=$('mb-edit'), result=$('mb-result');
+ const sc=source.getContext('2d',{willReadFrequently:true}),oc=overlay.getContext('2d'),ec=edit.getContext('2d',{willReadFrequently:true});
+ const rc=result.getContext('2d',{willReadFrequently:true});
+ let img=null,srcW=0,srcH=0,box=null,begin=null,dragging=false,zoom=1,panMode=false;
+ let raw=null,mask=null,cw=0,ch=0,tool='pick',painting=false,lastPoint=null,history=[],future=[],cachedBlob=null,revision=0,renderToken=0;
+ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+ const status=(id,msg)=>{$(id).textContent=msg;};
+ const updateZoom=()=>{
+   const stage=$('mb-stage');stage.style.width=(zoom*100)+'%';
+   $('mb-zoom-text').textContent=Math.round(zoom*100)+'%';
+ };
+ const xy=(ev,el)=>{
+   const rect=el.getBoundingClientRect();return {x:clamp((ev.clientX-rect.left)*el.width/rect.width,0,el.width),y:clamp((ev.clientY-rect.top)*el.height/rect.height,0,el.height)};
+ };
+ const rectangle=(a,b)=>{
+   let x0=clamp(Math.floor(Math.min(a.x,b.x)),0,srcW-1),y0=clamp(Math.floor(Math.min(a.y,b.y)),0,srcH-1);
+   let x1=clamp(Math.ceil(Math.max(a.x,b.x)),x0+1,srcW),y1=clamp(Math.ceil(Math.max(a.y,b.y)),y0+1,srcH);
+   return {x:x0,y:y0,w:x1-x0,h:y1-y0};
+ };
+ const drawBox=()=>{
+   oc.clearRect(0,0,overlay.width,overlay.height);
+   if(!box)return;
+   oc.save();oc.fillStyle='rgba(37,156,255,.10)';oc.fillRect(box.x,box.y,box.w,box.h);
+   oc.strokeStyle='#fff';oc.lineWidth=Math.max(2,srcW/950*3);oc.setLineDash([12,6]);
+   oc.strokeRect(box.x+.5,box.y+.5,box.w-1,box.h-1);
+   oc.setLineDash([]);oc.strokeStyle='#2dbaff';oc.lineWidth=Math.max(1,srcW/1100);
+   oc.strokeRect(box.x+3,box.y+3,Math.max(1,box.w-6),Math.max(1,box.h-6));oc.restore();
+ };
+ const updateButtons=()=>{
+   $('mb-cut').disabled=!box||box.w<16||box.h<9;
+   $('mb-undo').disabled=!history.length;$('mb-redo').disabled=!future.length;
+ };
+ const resetEditor=()=>{
+   box=null;begin=null;dragging=false;raw=null;mask=null;cw=ch=0;history=[];future=[];cachedBlob=null;
+   $('mb-editor-panel').hidden=true;$('mb-result-panel').hidden=true;
+   if(srcW)drawBox(); updateButtons();
+ };
+ const loadPhoto=async file=>{
+   if(!file)return;
+   if(!/^image\/(png|jpeg|webp)$/.test(file.type)){status('mb-box-info','PNG, JPG, WEBP 사진만 선택해 주세요.');return;}
+   const src=URL.createObjectURL(file),next=new Image();
+   try{
+     await new Promise((resolve,reject)=>{next.onload=resolve;next.onerror=reject;next.src=src;});
+     const ww=next.naturalWidth,hh=next.naturalHeight;
+     if(!ww||!hh||ww*hh>24000000)throw Error('사진이 너무 큽니다. 2,400만 픽셀 이하 이미지를 사용해 주세요.');
+     img=next;srcW=ww;srcH=hh;source.width=overlay.width=ww;source.height=overlay.height=hh;
+     sc.clearRect(0,0,ww,hh);sc.drawImage(next,0,0);
+     zoom=1;panMode=false;source.style.touchAction='none';$('mb-pan').classList.remove('mb-active');$('mb-pan').textContent='사진 이동';updateZoom();resetEditor();$('mb-box-panel').hidden=false;
+     status('mb-box-info',`사진 불러옴 (${ww} × ${hh}). 장식까지 포함하여 킬로그 주위를 드래그해 박스를 그려 주세요.`);
+   }catch(err){status('mb-box-info',err.message||'사진을 열 수 없습니다.');$('mb-box-panel').hidden=false;}
+   finally{URL.revokeObjectURL(src);}
+ };
+ $('mb-file').addEventListener('change',async e=>{await loadPhoto(e.target.files?.[0]);e.target.value='';});
+ $('mb-reset').onclick=()=>{resetEditor();img=null;srcW=srcH=0;$('mb-box-panel').hidden=true;sc.clearRect(0,0,source.width,source.height);};
+ $('mb-pan').onclick=()=>{panMode=!panMode;source.style.touchAction=panMode?'pan-x pan-y':'none';$('mb-pan').classList.toggle('mb-active',panMode);$('mb-pan').textContent=panMode?'박스 그리기로 전환':'사진 이동';status('mb-box-info',panMode?'사진을 손가락으로 이동하세요. 박스를 그릴 때는 「박스 그리기로 전환」을 눌러 주세요.':'킬로그를 드래그해서 네모 박스로 선택하세요.');};
+ $('mb-box-clear').onclick=()=>{resetEditor();status('mb-box-info','드래그해서 새 선택 박스를 그려 주세요.');};
+ $('mb-zoom-out').onclick=()=>{zoom=clamp(Math.round((zoom-.25)*100)/100,1,5);updateZoom();};
+ $('mb-zoom-in').onclick=()=>{zoom=clamp(Math.round((zoom+.25)*100)/100,1,5);updateZoom();};
+ $('mb-toggle-old').onclick=()=>{
+   const legacy=$('mb-legacy');const isHidden=legacy.hidden;
+   legacy.hidden=!isHidden;legacy.style.display=isHidden?'block':'none';$('mb-toggle-old').textContent=isHidden?'기존 자동 추출 닫기':'기존 자동 추출 열기';
+ };
+ source.addEventListener('pointerdown',ev=>{
+   if(!img||panMode)return;ev.preventDefault();source.setPointerCapture(ev.pointerId);begin=xy(ev,source);dragging=true;box=null;drawBox();
+ });
+ source.addEventListener('pointermove',ev=>{
+   if(!dragging||!begin)return;ev.preventDefault();box=rectangle(begin,xy(ev,source));drawBox();
+ });
+ const stopBox=ev=>{
+   if(!dragging||!begin)return;dragging=false;box=rectangle(begin,xy(ev,source));begin=null;drawBox();updateButtons();
+   status('mb-box-info',`선택된 크기 ${box.w} × ${box.h}px. 박스에 포함된 이미지에서만 배경을 제거해요.`);
+ };
+ source.addEventListener('pointerup',stopBox);source.addEventListener('pointercancel',()=>{dragging=false;begin=null;});
+ const rgbDistance=(d,i,j)=>{const dr=d[i]-d[j],dg=d[i+1]-d[j+1],db=d[i+2]-d[j+2];return 2*dr*dr+3*dg*dg+db*db;};
+ const colorful=(d,i)=>{
+   const r=d[i],g=d[i+1],b=d[i+2],lo=Math.min(r,g,b),hi=Math.max(r,g,b),ch=hi-lo;
+   return (r>105&&r>g*1.27&&r>b*1.25) || (b>115&&b>g*1.24&&b>r*1.1&&ch>48) || (r>160&&b>135&&r>g*1.28&&b>g*1.2) || (ch>100&&hi>160);
+ };
+ // Flood from the selected rectangle's border. Every pixel is compared to a fixed
+ // background-seed colour as well as its connected neighbour to limit colour drift.
+ const autoAlpha=(data,w,h,strength)=>{
+   const size=w*h,keep=new Uint8Array(size);keep.fill(255);
+   const queue=new Int32Array(size),anchors=new Int32Array(size),seen=new Uint8Array(size);
+   let head=0,tail=0;
+   const thresh=strength*strength*6.0,localThresh=(strength*1.45)**2*6;
+   const pushSeed=(x,y)=>{
+     const pos=y*w+x,di=pos*4;if(seen[pos]||data[di+3]<12)return;
+     if(colorful(data,di))return;
+     // A rough edge test stops isolated decorative bright pixels at the box edge.
+     const xx=x===0?Math.min(2,w-1):x===w-1?Math.max(0,w-3):x;
+     const yy=y===0?Math.min(2,h-1):y===h-1?Math.max(0,h-3):y;
+     const near=(yy*w+xx)*4;
+     if(rgbDistance(data,di,near)>Math.max(2400,strength*strength*2.3))return;
+     seen[pos]=1;keep[pos]=0;queue[tail]=pos;anchors[tail]=pos;tail++;
+   };
+   for(let x=0;x<w;x+=2){pushSeed(x,0);if(h>1)pushSeed(x,h-1);}
+   for(let y=0;y<h;y+=2){pushSeed(0,y);if(w>1)pushSeed(w-1,y);}
+   // short spans between sampled border pixels
+   while(head<tail){
+     const pos=queue[head],origin=anchors[head],x=pos%w,y=(pos/w)|0;head++;
+     const tryNeighbor=(next)=>{
+       if(seen[next])return;const i=next*4,j=pos*4,ref=origin*4;
+       if(data[i+3]<12){seen[next]=1;keep[next]=0;return;}
+       if(colorful(data,i))return;
+       if(rgbDistance(data,i,ref)>thresh*1.55)return;
+       if(rgbDistance(data,i,j)>localThresh)return;
+       seen[next]=1;keep[next]=0;queue[tail]=next;anchors[tail]=origin;tail++;
+     };
+     if(x>0)tryNeighbor(pos-1);if(x+1<w)tryNeighbor(pos+1);
+     if(y>0)tryNeighbor(pos-w);if(y+1<h)tryNeighbor(pos+w);
+   }
+   // Preserve dark texture within a genuinely flame-patterned horizontal ribbon.
+   // Detection is based on dense clusters of red/orange source pixels, rather than
+   // treating every dark pixel within the rectangle as foreground.
+   let warmTotal=0,xxMin=w,xxMax=0;
+   const warm=new Uint8Array(size);
+   for(let i=0;i<size;i++){
+     const j=i*4,r=data[j],g=data[j+1],b=data[j+2];
+     if(r>97&&r>g*1.32&&r>b*1.13&&r-g>21){warm[i]=1;warmTotal++;let x=i%w;if(x<xxMin)xxMin=x;if(x>xxMax)xxMax=x;}
+   }
+   if(warmTotal>size*.025 && xxMax-xxMin>w*.36){
+     const stride=w+1,integral=new Int32Array(stride*(h+1));
+     for(let y=1;y<=h;y++){
+       let row=0;
+       for(let x=1;x<=w;x++){row+=warm[(y-1)*w+x-1];integral[y*stride+x]=integral[(y-1)*stride+x]+row;}
+     }
+     const localCount=(x0,y0,x1,y1)=>integral[y1*stride+x1]-integral[y0*stride+x1]-integral[y1*stride+x0]+integral[y0*stride+x0];
+     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+       const i=y*w+x;if(keep[i])continue;
+       const x0=Math.max(0,x-14),y0=Math.max(0,y-7),x1=Math.min(w,x+15),y1=Math.min(h,y+8);
+       const near=localCount(x0,y0,x1,y1),j=i*4;
+       const r=data[j],g=data[j+1],b=data[j+2];
+       const reddish=r>=g-7&&r>=b-16;
+       if(near>=16&&reddish){keep[i]=1;}
+     }
+   }
+   // Edge softness on the foreground side of removed pixels, limited to 1 source pixel.
+   const maskOut=new Uint8Array(size);
+   for(let i=0;i<size;i++)if(keep[i])maskOut[i]=data[i*4+3];
+   for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+     const p=y*w+x;if(!keep[p])continue;
+     if(!keep[p-1]||!keep[p+1]||!keep[p-w]||!keep[p+w])maskOut[p]=Math.min(maskOut[p],200);
+   }
+   return maskOut;
+ };
+ const record=()=>{
+   if(!mask)return;
+   history.push(mask.slice());if(history.length>16)history.shift();future=[];updateButtons();
+ };
+ const refresh=()=>{
+   if(!raw||!mask)return;
+   const d=new ImageData(new Uint8ClampedArray(raw.data),cw,ch);
+   for(let k=0;k<mask.length;k++)d.data[k*4+3]=mask[k];
+   ec.putImageData(d,0,0);drawOutput();updateButtons();
+ };
+ const drawOutput=()=>{
+   if(!raw||!mask)return;
+   let minX=cw,minY=ch,maxX=-1,maxY=-1;
+   // Ignore almost-transparent edge noise when measuring crop.
+   for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)if(mask[y*cw+x]>=14){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}
+   const auto=$('mb-auto-height').checked;
+   let ww=0,hh=0;
+   if(maxX>=minX){ww=maxX-minX+1;hh=maxY-minY+1;}
+   const safeW=Math.max(ww,1),safeH=Math.max(hh,1);
+   const pad=9;
+   const scale=auto?(W-pad*2)/safeW:Math.min((W-pad*2)/safeW,(FIXED_H-pad*2)/safeH);
+   const outputH=auto?clamp(Math.ceil(safeH*scale)+pad*2,40,2400):FIXED_H;
+   result.width=W;result.height=outputH;
+   rc.clearRect(0,0,W,outputH);rc.imageSmoothingEnabled=true;rc.imageSmoothingQuality='high';
+   if(ww&&hh){
+     // Important: center the visible alpha bounding box, not the selection rectangle.
+     rc.drawImage(edit,minX,minY,ww,hh,(W-ww*scale)/2,(outputH-hh*scale)/2,ww*scale,hh*scale);
+   }
+   $('mb-size').textContent=`${W} × ${outputH}`;
+   cachedBlob=null;const token=++renderToken;
+   result.toBlob(blob=>{if(token===renderToken)cachedBlob=blob;},'image/png');
+   status('mb-save-info',`결과 ${W} × ${outputH}px · 실제 내용 ${ww} × ${hh}px · 중앙 정렬 · 투명 PNG`);
+ };
+ const startEditing=()=>{
+   if(!box||box.w<16||box.h<9){status('mb-box-info','킬로그가 포함된 박스를 먼저 그려 주세요.');return;}
+   cw=box.w;ch=box.h;raw=sc.getImageData(box.x,box.y,cw,ch);
+   mask=autoAlpha(raw.data,cw,ch,Number($('mb-tolerance').value));
+   edit.width=cw;edit.height=ch;history=[];future=[];
+   $('mb-editor-panel').hidden=false;$('mb-result-panel').hidden=false;
+   tool='pick';chooseTool('pick');refresh();
+   $('mb-editor-panel').scrollIntoView({block:'start',behavior:'smooth'});
+   status('mb-edit-info','박스 테두리와 연결된 배경을 제거했습니다. 남은 배경을 터치해서 지우거나 브러시로 보정하세요.');
+ };
+ $('mb-cut').onclick=startEditing;
+ function chooseTool(next){
+   tool=next;
+   for(const t of ['pick','erase','restore'])$('mb-tool-'+t).classList.toggle('mb-active',t===next);
+   status('mb-edit-info',next==='pick'?'지우고 싶은 배경을 한 번 터치하세요. 같은 색으로 연결된 부분이 지워집니다.':next==='restore'?'원본의 장식을 되살리고 싶은 곳을 문질러 주세요.':'지우고 싶은 곳을 문질러 주세요.');
+ }
+ for(const t of ['pick','erase','restore'])$('mb-tool-'+t).onclick=()=>chooseTool(t);
+ $('mb-tolerance').oninput=e=>{$('mb-tolerance-n').textContent=e.target.value;};
+ $('mb-brush').oninput=e=>{$('mb-brush-n').textContent=e.target.value;};
+ const removeAt=(x,y,strength)=>{
+   const sx=clamp(Math.floor(x),0,cw-1),sy=clamp(Math.floor(y),0,ch-1),sp=sy*cw+sx,si=sp*4;
+   const d=raw.data,startR=d[si],startG=d[si+1],startB=d[si+2];
+   const threshold=6*strength*strength;
+   const visited=new Uint8Array(cw*ch),q=new Int32Array(cw*ch);let h=0,t=1;q[0]=sp;visited[sp]=1;
+   while(h<t){
+     const p=q[h++],i=p*4;
+     if(!mask[p])continue;
+     const dr=d[i]-startR,dg=d[i+1]-startG,db=d[i+2]-startB;
+     if(2*dr*dr+3*dg*dg+db*db>threshold)continue;
+     mask[p]=0;const px=p%cw,py=(p/cw)|0;
+     const next=(np)=>{if(!visited[np]&&mask[np]>0){visited[np]=1;q[t++]=np;}};
+     if(px>0)next(p-1);if(px+1<cw)next(p+1);if(py>0)next(p-cw);if(py+1<ch)next(p+cw);
+   }
+ };
+ const brushStamp=(x,y,isRestore)=>{
+   const radius=Number($('mb-brush').value)/2;
+   const x0=Math.max(0,Math.floor(x-radius-1)),x1=Math.min(cw-1,Math.ceil(x+radius+1));
+   const y0=Math.max(0,Math.floor(y-radius-1)),y1=Math.min(ch-1,Math.ceil(y+radius+1));
+   for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++){
+     const dist=Math.hypot(xx-x,yy-y);if(dist>radius+1)continue;
+     else {const p=yy*cw+xx,base=raw.data[p*4+3],edge=clamp((radius+1-dist)/1.5,0,1);
+       if(isRestore)mask[p]=Math.max(mask[p],Math.round(base*edge));
+       else mask[p]=Math.round(mask[p]*(1-edge));
+     }
+   }
+ };
+ const line=(a,b,isRestore)=>{
+   const len=Math.hypot(b.x-a.x,b.y-a.y),step=Math.max(1,Number($('mb-brush').value)/5),n=Math.ceil(len/step);
+   for(let i=0;i<=n;i++)brushStamp(a.x+(b.x-a.x)*i/Math.max(1,n),a.y+(b.y-a.y)*i/Math.max(1,n),isRestore);
+ };
+ edit.addEventListener('pointerdown',ev=>{
+   if(!raw||!mask)return;ev.preventDefault();edit.setPointerCapture(ev.pointerId);
+   const p=xy(ev,edit);record();painting=tool!=='pick';lastPoint=p;
+   if(tool==='pick'){removeAt(p.x,p.y,Number($('mb-tolerance').value));refresh();}
+   else {brushStamp(p.x,p.y,tool==='restore');refresh();}
+ });
+ edit.addEventListener('pointermove',ev=>{
+   if(!painting||!mask)return;ev.preventDefault();const p=xy(ev,edit);
+   line(lastPoint,p,tool==='restore');lastPoint=p;refresh();
+ });
+ edit.addEventListener('pointerup',()=>{painting=false;lastPoint=null;});
+ edit.addEventListener('pointercancel',()=>{painting=false;lastPoint=null;});
+ $('mb-auto-again').onclick=()=>{if(!raw)return;record();mask=autoAlpha(raw.data,cw,ch,Number($('mb-tolerance').value));refresh();status('mb-edit-info','현재 강도로 다시 자동 제거했습니다.');};
+ $('mb-original').onclick=()=>{if(!raw)return;record();mask=new Uint8Array(cw*ch);for(let p=0;p<mask.length;p++)mask[p]=raw.data[p*4+3];refresh();status('mb-edit-info','원본 선택 영역으로 돌아왔습니다.');};
+ $('mb-undo').onclick=()=>{if(!history.length)return;future.push(mask.slice());mask=history.pop();refresh();};
+ $('mb-redo').onclick=()=>{if(!future.length)return;history.push(mask.slice());mask=future.pop();refresh();};
+ $('mb-auto-height').onchange=()=>drawOutput();
+ const download=(blob)=>{
+   if(!blob)return;
+   const href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download='킬로그_배경제거.png';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),8000);
+   status('mb-save-info','투명 PNG 저장을 요청했습니다. 다운로드 또는 사진 앱에서 확인해 주세요.');
+ };
+ $('mb-save').onclick=()=>{if(cachedBlob)download(cachedBlob);else result.toBlob(download,'image/png');};
+ $('mb-share').onclick=()=>{
+   if(!cachedBlob){status('mb-save-info','PNG를 생성 중입니다. 잠시 후 공유를 눌러 주세요.');return;}
+   const file=new File([cachedBlob],'킬로그_배경제거.png',{type:'image/png'});
+   if(navigator.canShare?.({files:[file]})&&navigator.share){
+     navigator.share({files:[file],title:'킬로그 배경 제거 PNG'}).catch(e=>{
+       if(e.name!=='AbortError')status('mb-save-info','공유 창을 열 수 없습니다. PNG 저장 버튼을 사용해 주세요.');
+     });
+   }else download(cachedBlob);
+ };
+ updateButtons();
+ window.KilllogBoxEditor={getState:()=>({box:box&&{...box},editWidth:cw,editHeight:ch,resultWidth:result.width,resultHeight:result.height,alphaPixels:mask?mask.reduce((n,a)=>n+(a>13),0):0}),loadPhoto};
 })();
 
 </script>
