@@ -6781,6 +6781,8 @@ saveBtn.addEventListener("click",async()=>{
   const changed=removeMatte(true)||removeMatte(false);
   if(!changed)return false;
   ctx2.putImageData(im,0,0);
+  pruneDetachedEdgeDebris(r);
+  repairTinyAlphaHoles(r);
   recalcInnerFromAlpha(r,2,2);
   r.meta={...r.meta,sideMatteCleaned:true};
   return true;
@@ -7061,6 +7063,116 @@ function trimVerifiedBackground(r){
  if(edited){g.putImageData(rgba,0,0);r.meta={...r.meta,backgroundPruned:true,measuredBottomEdge:bestY,edgeScore:bestStrength};}
  return edited;
 }
+
+function pruneDetachedEdgeDebris(r){
+ if(!r?.master)return false;
+ const canvas=r.master,ctx2=canvas.getContext('2d',{willReadFrequently:true});
+ const w=canvas.width,h=canvas.height;
+ const rgba=ctx2.getImageData(0,0,w,h),pix=rgba.data;
+ const alpha=new Uint8Array(w*h);
+ for(let i=0;i<alpha.length;i++)alpha[i]=pix[i*4+3];
+ const seen=new Uint8Array(w*h),queue=new Int32Array(w*h),comps=[];
+ for(let i=0;i<alpha.length;i++){
+  if(alpha[i]<16||seen[i])continue;
+  let head=0,tail=1;queue[0]=i;seen[i]=1;
+  let minX=w,maxX=0,minY=h,maxY=0,warm=0,purple=0,bright=0;
+  while(head<tail){
+   const p=queue[head++],x=p%w,y=(p/w)|0,src=p*4;
+   if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+   const R=pix[src],G=pix[src+1],B=pix[src+2],hi=Math.max(R,G,B);
+   if(R>105&&R>G*1.12&&G>B*.92)warm++;
+   if(B>92&&R>72&&B>G*1.02&&R>G*.95)purple++;
+   if(hi>170)bright++;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const xx=x+dx,yy=y+dy;
+    if(xx<0||yy<0||xx>=w||yy>=h)continue;
+    const q=yy*w+xx;
+    if(!seen[q]&&alpha[q]>=16){seen[q]=1;queue[tail++]=q;}
+   }
+  }
+  comps.push({seed:i,area:tail,minX,maxX,minY,maxY,w:maxX-minX+1,h:maxY-minY+1,warm,purple,bright});
+ }
+ if(comps.length<2)return false;
+ const score=c=>c.area + c.w*3 + c.h*2;
+ const main=comps.reduce((a,b)=>score(a)>=score(b)?a:b);
+ const bandH=Number(r?.meta?.band?.bottom)-Number(r?.meta?.band?.top);
+ const unit=Math.max(10,Math.round(Number.isFinite(bandH)&&bandH>6?bandH:main.h));
+ const mainCY=(main.minY+main.maxY)/2;
+ let edited=false;
+ for(const comp of comps){
+  if(comp===main)continue;
+  const gapLeft=main.minX-comp.maxX;
+  const gapRight=comp.minX-main.maxX;
+  const gapAbove=main.minY-comp.maxY;
+  const gapBelow=comp.minY-main.maxY;
+  const overlapY=Math.max(0,Math.min(main.maxY,comp.maxY)-Math.max(main.minY,comp.minY)+1);
+  const overlapX=Math.max(0,Math.min(main.maxX,comp.maxX)-Math.max(main.minX,comp.minX)+1);
+  const warmRatio=comp.warm/Math.max(1,comp.area),purpleRatio=comp.purple/Math.max(1,comp.area),brightRatio=comp.bright/Math.max(1,comp.area);
+  const nearLeftOrn=gapLeft>=0&&gapLeft<=unit*1.45&&comp.maxY>=main.minY-unit*.65&&comp.minY<=main.maxY+unit*.25;
+  const nearRightOrn=gapRight>=0&&gapRight<=unit*.9&&overlapY>=Math.min(comp.h,main.h)*.22;
+  const nearTopSpark=gapAbove>=0&&gapAbove<=unit*.95&&(overlapX>=Math.min(comp.w,main.w)*.08||comp.maxX<main.minX+unit*1.9);
+  const sideDecor=(nearLeftOrn||nearRightOrn||nearTopSpark)&&(warmRatio>.18||purpleRatio>.18||brightRatio>.22||comp.area>=main.area*.012);
+  const substantial=comp.area>=main.area*.028 || comp.w>=unit*1.2 || comp.h>=unit*.95;
+  const tiny=comp.area<Math.max(18,main.area*.012);
+  const clearlyDetached=(gapBelow>unit*.1 && tiny) || (gapRight>unit*.38 && comp.w<unit*.52) || (gapLeft>unit*1.6 && tiny) || (gapAbove>unit*1.05 && tiny);
+  if(sideDecor||substantial)continue;
+  if(clearlyDetached || (tiny && overlapY<unit*.12 && overlapX<unit*.18)){
+   let head=0,tail=1;queue[0]=comp.seed;const local=new Uint8Array(w*h);local[comp.seed]=1;
+   while(head<tail){
+    const p=queue[head++],x=p%w,y=(p/w)|0;
+    pix[p*4+3]=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     if(!dx&&!dy)continue;
+     const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;
+     const q=yy*w+xx;
+     if(!local[q]&&alpha[q]>=16){local[q]=1;queue[tail++]=q;}
+    }
+   }
+   edited=true;
+  }
+ }
+ if(edited)ctx2.putImageData(rgba,0,0);
+ return edited;
+}
+function repairTinyAlphaHoles(r){
+ if(!r?.master)return false;
+ const c=r.master,g=c.getContext('2d',{willReadFrequently:true});
+ const w=c.width,h=c.height,rgba=g.getImageData(0,0,w,h),pix=rgba.data;
+ let minX=w,minY=h,maxX=-1,maxY=-1;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(pix[(y*w+x)*4+3]>=16){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
+ if(maxX<minX||maxY<minY)return false;
+ const bandH=Number(r?.meta?.band?.bottom)-Number(r?.meta?.band?.top);
+ const unit=Math.max(10,Math.round(Number.isFinite(bandH)&&bandH>6?bandH:(maxY-minY+1)));
+ const maxArea=Math.max(8,Math.round(unit*unit*.035));
+ const maxDim=Math.max(4,Math.round(unit*.42));
+ const seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let edited=false;
+ for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
+  const idx=y*w+x;
+  if(seen[idx]||pix[idx*4+3]>=10)continue;
+  let head=0,tail=1;queue[0]=idx;seen[idx]=1;
+  let area=0,border=false,cminX=w,cmaxX=0,cminY=h,cmaxY=0,ring=0;
+  while(head<tail){
+   const p=queue[head++],px=p%w,py=(p/w)|0;area++;
+   if(px<=minX||px>=maxX||py<=minY||py>=maxY)border=true;
+   if(px<cminX)cminX=px;if(px>cmaxX)cmaxX=px;if(py<cminY)cminY=py;if(py>cmaxY)cmaxY=py;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const xx=px+dx,yy=py+dy;if(xx<minX||yy<minY||xx>maxX||yy>maxY)continue;
+    const q=yy*w+xx,qa=pix[q*4+3];
+    if(qa>=32){ring++;continue;}
+    if(!seen[q]){seen[q]=1;queue[tail++]=q;}
+   }
+  }
+  if(border||area>maxArea||(cmaxX-cminX+1)>maxDim||(cmaxY-cminY+1)>maxDim||ring<area*2)continue;
+  for(let i=0;i<tail;i++)pix[queue[i]*4+3]=220;
+  edited=true;
+ }
+ if(edited)g.putImageData(rgba,0,0);
+ return edited;
+}
+
 async function encodeResult(r){
   // Special blue banners are measured from the source; never apply broad cleanup.
   if(!r?.meta?.verifiedTextRibbon&&!r?.meta?.compactBlueSpecial&&!r?.meta?.icyBlueComplete&&!r?.meta?.manualRepair){
@@ -7073,6 +7185,8 @@ async function encodeResult(r){
    cleanVerifiedKilllogArtifact(r);
    trimVerifiedBackground(r);
   }
+  pruneDetachedEdgeDebris(r);
+  repairTinyAlphaHoles(r);
   recalcInnerFromAlpha(r,2,2);
   if(!r.master||!r.inner)return false;
   const l=clamp(Math.round(r.inner.x),0,r.master.width-1),t=clamp(Math.round(r.inner.y),0,r.master.height-1);
