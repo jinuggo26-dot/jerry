@@ -2625,6 +2625,8 @@ window.closeAdmin=()=>{
     <button type="button" id="kl-mode-normal" class="photo-button active">일반 킬로그</button>
     <button type="button" id="kl-mode-special" class="photo-button">고번 킬로그</button>
     <span id="kl-mode-label" style="font-size:11px;color:#9fb2cc">일반 킬로그: 기존 막대형 / 고번 킬로그: 다른 형태의 킬로그 전용</span>
+    <button type="button" id="kl-force-manual" class="photo-button" style="min-width:0;white-space:normal;min-height:42px;flex:1 1 170px">인식 실패 시 직접 보정</button>
+
    </div>
    <p style="font-size:12px;color:#9eb6d8;line-height:1.55;margin:3px 0 10px">킬 알림 글자와 가로 막대의 원본 픽셀 구조를 우선 검증합니다. 인식 후 장식이 누락되면 결과 카드의 장식 보정 버튼으로 원본에서 복원할 수 있습니다.</p>
    <div id="kl-zoom-controls" style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:5px 0 11px">
@@ -9979,11 +9981,11 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    }
   }
   const painted=new Int16Array(w*h);painted.fill(-1);
-  const smartBrush=window.SnaSmartKillBrush({source,baseAlpha,painted,width:w,height:h,bounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
+  const smartBrush=window.SnaExactKillBrush({source,baseAlpha,painted,width:w,height:h});
   const originalBaseAlpha=baseAlpha.slice();
   const alpha=new Uint8ClampedArray(w*h);
   let expandLeft=0,expandRight=0,expandTop=0,expandBottom=0;
-  let mode='restore',painting=false,last=null,hover=null,framePending=false,panStart=null;
+  let mode='restore',painting=false,last=null,hover=null,framePending=false,panStart=null,showOriginal=false;
   const history=[],future=[];
   const maxHistory=Math.max(3,Math.min(10,Math.floor(18000000/Math.max(1,painted.byteLength+baseAlpha.byteLength))));
   function historyState(){return {pixels:painted.slice(),base:baseAlpha.slice(),ranges:[expandLeft,expandRight,expandTop,expandBottom]};}
@@ -9994,7 +9996,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    if(!state)return;painted.set(state.pixels);baseAlpha.set(state.base);
    [expandLeft,expandRight,expandTop,expandBottom]=state.ranges;
    [leftInput,rightInput,topInput,bottomInput].forEach((el,i)=>{el.value=String(state.ranges[i]);el.nextElementSibling.textContent=state.ranges[i]+'px';});
-   updateAlpha();scheduleRender();refreshHistoryButtons();
+   updateAlpha();scheduleRender();refreshHistoryButtons();renderFinalPreview();
   }
   function undoEdit(){if(history.length<2)return;future.push(history.pop());restoreHistory(history[history.length-1]);}
   function redoEdit(){if(!future.length)return;const item=future.pop();history.push(item);restoreHistory(item);}
@@ -10004,7 +10006,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   dialog.style.cssText='box-sizing:border-box;width:100%;max-width:100vw;position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:12px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch';
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
   const h3=document.createElement('strong');h3.textContent='킬로그 정밀 보정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('p');hint.textContent='살리기는 장식·글자에 가까운 원본 픽셀을 복원합니다. 지우기는 어두운 배경을 터치하면 같은 색의 배경만 따라 지웁니다. 정밀 재분리 후에도 현재 킬로그 범위를 유지합니다.';
+  const hint=document.createElement('p');hint.textContent='살리기는 색상 구분 없이 칠한 원본 픽셀을 그대로 되살립니다. 지우기는 칠한 부분만 확실하게 투명하게 만듭니다. 배경색 자동 지우기는 별도 선택 도구입니다. 테두리 범위 슬라이더는 안내선만 움직이며 배경을 추가하지 않습니다.';
   hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:720px';
   const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 12px;min-height:40px;max-width:100%;white-space:normal;overflow-wrap:anywhere;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
   const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:minmax(66px,100px) minmax(0,1fr);gap:8px;width:100%;max-width:720px;min-width:0;align-items:center';
@@ -10025,20 +10027,22 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   const topInput=makeSliderRow('위 범위','kl-range-top',v=>{expandTop=v;updateAlpha();scheduleRender();});
   const bottomInput=makeSliderRow('아래 범위','kl-range-bottom',v=>{expandBottom=v;updateAlpha();scheduleRender();});
   const tools=document.createElement('div');tools.style.cssText='display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap';
-  const restore=mk('살리기',()=>{mode='restore';setModeStyle();drawCursor()});
-  const erase=mk('지우기',()=>{mode='erase';setModeStyle();drawCursor()});
+  const restore=mk('살리기 (정확)',()=>{mode='restore';setModeStyle();drawCursor()});
+  const erase=mk('지우기 (정확)',()=>{mode='erase';setModeStyle();drawCursor()});
+  const eraseColor=mk('배경색 지우기',()=>{mode='colorErase';setModeStyle();drawCursor()});
   const pan=mk('↔ 이동',()=>{mode='pan';hover=null;setModeStyle();drawCursor()});
-  function setModeStyle(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#b34357':'#1d2a42';pan.style.background=mode==='pan'?'#3966c2':'#1d2a42';}
+  const originalToggle=mk('원본 켜기',()=>{showOriginal=!showOriginal;originalToggle.textContent=showOriginal?'원본 끄기':'원본 켜기';scheduleRender();});
+  function setModeStyle(){restore.style.background=mode==='restore'?'#3966c2':'#1d2a42';erase.style.background=mode==='erase'?'#b34357':'#1d2a42';eraseColor.style.background=mode==='colorErase'?'#b34357':'#1d2a42';pan.style.background=mode==='pan'?'#3966c2':'#1d2a42';}
   setModeStyle();
   const brushLabel=document.createElement('label');brushLabel.textContent='브러쉬 ';brushLabel.style.cssText='font-size:12px;color:#c3d4f1';
   const brushSize=document.createElement('select');brushSize.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
-  for(const [v,label] of [['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='12')o.selected=true;brushSize.append(o);} 
+  for(const [v,label] of [['3','아주 작게'],['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='6')o.selected=true;brushSize.append(o);} 
   brushLabel.append(brushSize);brushSize.addEventListener('change',drawCursor);
   const eraseSensitivity=document.createElement('label');eraseSensitivity.textContent='배경 감지 ';eraseSensitivity.style.cssText='font-size:12px;color:#c3d4f1';
   const sensitivitySelect=document.createElement('select');sensitivitySelect.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
   for(const [v,label] of [['32','정밀'],['48','보통'],['68','넓게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='48')o.selected=true;sensitivitySelect.append(o);}
   eraseSensitivity.append(sensitivitySelect);
-  tools.append(restore,erase,pan,brushLabel,eraseSensitivity);
+  tools.append(restore,erase,eraseColor,pan,originalToggle,brushLabel,eraseSensitivity);
   // 보정용 픽셀 마스크는 원본 해상도를 유지하고, 화면에 보여주는 크기만 조절한다.
   // 휴대폰에서 최소 720px로 강제 확대하면 킬로그 끝이 잘려 보이던 문제를 방지한다.
   const zoomTools=document.createElement('div');
@@ -10128,37 +10132,10 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     for(const p of c.members)if(painted[p]===-1)alpha[p]=0;
    }
   }
+  // Pixel-exact editing: range sliders change only the dashed guide, never source alpha.
+  // This prevents a dark banner/background from suddenly expanding after editing.
   function updateAlpha(){
-   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    const k=y*w+x;
-    let a=baseAlpha[k];
-    if(withinExpandedRect(x+x0,y+y0)){
-     const X=x+x0,Y=y+y0;
-     const leftDecor=X<leftDecorEnd;
-     const upper=barTop-(leftDecor?barHeight*1.1:barHeight*.32);
-     const lower=barBottom+(leftDecor?barHeight*.40:Math.max(2,barHeight*.045));
-     if(candidates[k]&&Y>=upper&&Y<=lower&&
-        (expandLeft||expandRight||expandTop||expandBottom)&&
-        baseAlpha[k]<16)a=Math.max(a,candidates[k]);
-     // The user's direction sliders control ACTUAL inclusion, not just the
-     // search viewport. Preserve contiguous dark portions of the banner body.
-     const outsideOriginal=X<b.x||X>=b.x+b.w||Y<b.y||Y>=b.y+b.h;
-     if(outsideOriginal&&(expandLeft||expandRight||expandTop||expandBottom)&&
-        Y>=barTop&&Y<=barBottom&&X>=b.x-expandLeft&&X<b.x+b.w+expandRight){
-      const j=k*4,R=source[j],G=source[j+1],B=source[j+2];
-      const above=clamp(Math.round(barTop-y0-barHeight),0,h-1),below=clamp(Math.round(barBottom-y0+barHeight),0,h-1);
-      const ta=(above*w+x)*4,ba=(below*w+x)*4;
-      const d=Math.max(Math.abs(R-(source[ta]+source[ba])/2),Math.abs(G-(source[ta+1]+source[ba+1])/2),Math.abs(B-(source[ta+2]+source[ba+2])/2));
-      // Explicit slider expansion includes dark banner material as well as bright pixels.
-      // This is intentional manual inclusion; the erase brush can remove unwanted background.
-      a=Math.max(a,Math.max(195,Math.min(255,Math.round((d+12)*7))));
-     }
-    }
-    if(painted[k]!==-1)a=painted[k];
-    alpha[k]=a;
-   }
-   // Keep detached native ornament sparks: do not automatically erase source art.
-   // The erase brush remains available for unwanted background.
+   for(let k=0;k<alpha.length;k++)alpha[k]=painted[k]>=0?painted[k]:baseAlpha[k];
   }
   function render(){
    const dat=image.data;
@@ -10167,7 +10144,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     const a=alpha[k]/255;
     for(let c=0;c<3;c++){
      const src=source[j+c];
-     dat[j+c]=Math.round((shade*.75+src*.25)*(1-a)+src*a);
+     dat[j+c]=showOriginal?Math.round(src*.92+(a?0.08:0)*255):Math.round((shade*.75+src*.25)*(1-a)+src*a);
     }
     dat[j+3]=255;
    }
@@ -10181,7 +10158,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    cg.clearRect(0,0,w,h);if(mode==='pan'||!hover)return;
    const radius=Number(brushSize.value);
    cg.save();cg.beginPath();cg.arc(hover.x,hover.y,radius,0,Math.PI*2);
-   cg.strokeStyle=mode==='erase'?'#ff6d73':'#68c9ff';cg.lineWidth=2;cg.setLineDash([5,3]);cg.stroke();
+   cg.strokeStyle=mode==='erase'||mode==='colorErase'?'#ff6d73':'#68c9ff';cg.lineWidth=2;cg.setLineDash([5,3]);cg.stroke();
    cg.beginPath();cg.arc(hover.x,hover.y,1.5,0,Math.PI*2);cg.fillStyle='white';cg.fill();cg.restore();
   }
   function scheduleRender(){if(framePending)return;framePending=true;requestAnimationFrame(()=>{framePending=false;render()});}
@@ -10207,40 +10184,69 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    hover=point(e);drawCursor();if(!painting)return;stroke(last,hover);last=hover;e.preventDefault();
   });
   canvas.addEventListener('pointerleave',()=>{if(!painting&&!panStart){hover=null;drawCursor();}});
-  function stop(e){if(painting&&e?.type==='pointerup')recordHistory();painting=false;last=null;panStart=null;canvas.style.cursor=mode==='pan'?'grab':'crosshair';if(e&&e.pointerType!=='mouse'){hover=null;drawCursor();}}
+  function stop(e){if(painting&&e?.type==='pointerup'){recordHistory();renderFinalPreview();}painting=false;last=null;panStart=null;canvas.style.cursor=mode==='pan'?'grab':'crosshair';if(e&&e.pointerType!=='mouse'){hover=null;drawCursor();}}
   canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);
   const refineRow=document.createElement('div');
   refineRow.style.cssText='display:flex;flex-direction:column;gap:7px;align-items:center;width:100%;max-width:720px';
   const refineStatus=document.createElement('p');refineStatus.setAttribute('role','status');
   refineStatus.style.cssText='font-size:12px;line-height:1.5;color:#b6ccee;text-align:center;min-height:18px';
-  refineStatus.textContent='살리기는 원본에서 장식색만 복원하고, 지우기는 비슷한 배경색만 제거합니다.';
-  const refineButton=mk('정밀 재분리', async()=>{
+  refineStatus.textContent='정확한 살리기·지우기는 색상 판단 없이 칠한 부분만 바뀝니다.';
+  const refineButton=mk('경계 다듬기', async()=>{
    if(refineButton.disabled)return;
-   refineButton.disabled=true;refineButton.textContent='분리 계산 중…';
-   refineStatus.textContent='원본 이미지의 색상과 표시 영역을 기준으로 계산 중입니다.';
-   // Yield to paint the busy state before the synchronous segmentation pass.
-   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+   refineButton.disabled=true;
    try{
-    const result=window.SnaGraphRefine.refine({source,baseAlpha,painted,width:w,height:h,
-      bounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
-    // Stable result: graph segmentation may reclassify broad background as art.
-    // New foreground may only grow a narrow halo around already visible pixels
-    // or around explicitly painted keep strokes. Erasure and manual keep always win.
-    const stable=window.SnaLimitKillRefine({before:baseAlpha,after:result.alpha,
-       painted,width:w,height:h,initialBounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
-    baseAlpha.set(stable);
-    updateAlpha();recordHistory();scheduleRender();
-    refineStatus.textContent='정밀 재분리 완료 · 기존 범위 안에서 정리했습니다. 지우기로 칠한 배경은 제거 상태를 유지합니다.';
-   }catch(error){console.error('정밀 재분리:',error);refineStatus.textContent='정밀 재분리: '+(error?.message||'처리 오류');}
-   finally{refineButton.disabled=false;refineButton.textContent='정밀 재분리';}
+    // Small feathering pass ONLY on partially transparent original edges.
+    // Never invent a foreground pixel or override the user's exact keep/erase strokes.
+    const original=baseAlpha.slice(),next=original.slice();
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+     const k=y*w+x,v=original[k];
+     if(painted[k]!==-1||v<12||v>243)continue;
+     const a=original[k-1],bb=original[k+1],c=original[k-w],d=original[k+w];
+     const avg=(a+bb+c+d)/4;
+     if(Math.abs(avg-v)<58)next[k]=Math.max(1,Math.min(254,Math.round(.72*v+.28*avg)));
+    }
+    baseAlpha.set(next);updateAlpha();recordHistory();scheduleRender();renderFinalPreview();
+    refineStatus.textContent='장식과 지우기 표시를 유지한 채 기존 경계만 부드럽게 정리했어요.';
+   }catch(error){console.error('경계 다듬기',error);refineStatus.textContent='경계 다듬기 오류: '+error.message;}
+   finally{refineButton.disabled=false;refineButton.textContent='경계 다듬기';}
   });
   refineButton.style.cssText='width:min(100%,420px);max-width:100%;background:#87b3ff;color:#111d32;border-color:#b4ccff';
   refineRow.append(refineButton,refineStatus);
+  const previewArea=document.createElement('div');
+  previewArea.style.cssText='width:100%;max-width:760px;min-width:0;padding:8px;border:1px solid #455b7f;border-radius:12px;background:#121c30;text-align:center';
+  const previewTitle=document.createElement('div');previewTitle.textContent='저장 결과 미리보기 · 실제 보이는 픽셀 기준 중앙 정렬';
+  previewTitle.style.cssText='font-size:12px;color:#d6e5ff;line-height:1.5;margin-bottom:6px';
+  const resultPreview=document.createElement('canvas');
+  resultPreview.id='kl-precise-save-preview';
+  resultPreview.style.cssText='display:block;width:100%;height:auto;max-height:240px;object-fit:contain;background:repeating-conic-gradient(#4a4a4a 0% 25%,#242424 0% 50%) 50% / 16px 16px;border-radius:6px';
+  previewArea.append(previewTitle,resultPreview);
+  function renderFinalPreview(){
+   let minX=w,minY=h,maxX=-1,maxY=-1;
+   for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(alpha[y*w+x]>=8){
+    if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+   }
+   resultPreview.width=760;
+   if(maxX<minX||maxY<minY){resultPreview.height=190;return;}
+   const bw=maxX-minX+1,bh=maxY-minY+1;
+   const scale=744/bw;
+   resultPreview.height=Math.max(190,Math.ceil(bh*scale)+16);
+   const gc=resultPreview.getContext('2d');
+   const crop=document.createElement('canvas');crop.width=bw;crop.height=bh;
+   const cc=crop.getContext('2d');const pixels=cc.createImageData(bw,bh);
+   for(let y=0;y<bh;y++)for(let x=0;x<bw;x++){
+    const k=(y+minY)*w+(x+minX),j=k*4,t=(y*bw+x)*4;
+    pixels.data[t]=source[j];pixels.data[t+1]=source[j+1];pixels.data[t+2]=source[j+2];pixels.data[t+3]=alpha[k];
+   }
+   cc.putImageData(pixels,0,0);
+   gc.imageSmoothingEnabled=true;gc.imageSmoothingQuality='high';
+   gc.drawImage(crop,8,(resultPreview.height-bh*scale)/2,bw*scale,bh*scale);
+   window.SnaCenterKillOutput(resultPreview);
+  }
   const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;width:100%;max-width:720px';
   undoButton=mk('↶ 실행 취소',undoEdit);redoButton=mk('↷ 다시 실행',redoEdit);
   actions.append(
    undoButton,redoButton,
-   mk('원본 마스크로 초기화',()=>{expandLeft=expandRight=expandTop=expandBottom=0;leftInput.value=rightInput.value=topInput.value=bottomInput.value='0';for(const span of controls.querySelectorAll('span'))span.textContent='0px';baseAlpha.set(originalBaseAlpha);painted.fill(-1);updateAlpha();recordHistory();scheduleRender();refineStatus.textContent='자동 추출 직후의 마스크로 돌아왔습니다.';}),
+   mk('원본 마스크로 초기화',()=>{expandLeft=expandRight=expandTop=expandBottom=0;leftInput.value=rightInput.value=topInput.value=bottomInput.value='0';for(const span of controls.querySelectorAll('span'))span.textContent='0px';baseAlpha.set(originalBaseAlpha);painted.fill(-1);updateAlpha();recordHistory();scheduleRender();renderFinalPreview();refineStatus.textContent='자동 추출 직후의 마스크로 돌아왔습니다.';}),
    mk('닫기',()=>dialog.remove()),
    mk('보정 적용',async()=>{
     let left=w,top=h,right=-1,bottom=-1;
@@ -10259,12 +10265,12 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     r.meta={...r.meta,manualRepair:true,recognitionExpand:{left:expandLeft,right:expandRight,top:expandTop,bottom:expandBottom}};
     if(await encodeResult(r)){
      dialog.remove();resultView();drawSelections();window.SnaDraft?.queue('kill');
-     editStatus('인식 범위를 좌우상하로 반영했고, 결과를 자동 중앙 정렬했습니다.');
+     editStatus('원본에서 직접 복원·삭제한 픽셀을 보존해 중앙 정렬했습니다.');
     }
    })
   );
   updateAlpha();recordHistory();render();
-  dialog.append(h3,hint,controls,tools,zoomTools,wrap,refineRow,actions);document.body.append(dialog);maskEditor=dialog;
+  dialog.append(h3,hint,controls,tools,zoomTools,wrap,previewArea,refineRow,actions);document.body.append(dialog);maskEditor=dialog;renderFinalPreview();
   fitView();
   // 회전이나 분할 화면으로 창 크기가 바뀌어도 전체 보기에서 보이는 범위를 다시 맞춤.
   const onResize=()=>{if(!dialog.isConnected){window.removeEventListener('resize',onResize);return;}if(zoom===1)fitView();};
@@ -10328,6 +10334,40 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   if(Date.now()-lastHandledTouch<850||Date.now()<suppressClickUntil)return;
   void chooseKilllog(e.clientX,e.clientY);
  });
+ let forceManualPick=false;
+ $('kl-force-manual').addEventListener('click',()=>{
+  forceManualPick=!forceManualPick;
+  $('kl-force-manual').classList.toggle('active',forceManualPick);
+  status(forceManualPick?'원본 사진에서 킬로그 중앙을 한 번 눌러 주세요. 선택한 주변 영역으로 정밀 보정을 엽니다.':'직접 보정 선택을 취소했습니다.');
+ });
+ function createManualEditableCandidate(tx,ty){
+  const W=view.width,H=view.height;
+  // A small, editable source zone around the user-selected notification, not the entire screen.
+  const L=Math.max(0,Math.floor(tx-290)),T=Math.max(0,Math.floor(ty-90));
+  const R=Math.min(W,Math.ceil(tx+310)),B=Math.min(H,Math.ceil(ty+90));
+  const w=R-L,h=B-T;if(w<10||h<12)return null;
+  const rgba=ctx.getImageData(L,T,w,h).data;
+  const alpha=new Uint8Array(w*h);
+  const bgTop=Math.max(0,Math.round(ty-55-T)),bgBot=Math.min(h-1,Math.round(ty+63-T));
+  for(let x=0;x<w;x++){
+   const top=(bgTop*w+x)*4,bot=(bgBot*w+x)*4;
+   for(let y=0;y<h;y++){
+    const Y=T+y,k=y*w+x,j=k*4;
+    if(Math.abs(Y-ty)>43)continue;
+    const distTop=Math.max(Math.abs(rgba[j]-rgba[top]),Math.abs(rgba[j+1]-rgba[top+1]),Math.abs(rgba[j+2]-rgba[top+2]));
+    const distBot=Math.max(Math.abs(rgba[j]-rgba[bot]),Math.abs(rgba[j+1]-rgba[bot+1]),Math.abs(rgba[j+2]-rgba[bot+2]));
+    const d=Math.min(distTop,distBot);
+    alpha[k]=Math.max(0,Math.min(255,Math.round((d-10)*11)));
+   }
+  }
+  // Ensure the manual editor can always start, even on a nearly monochrome banner.
+  if(!alpha.some(v=>v>=8)){
+   const cx=Math.round(tx-L),cy=Math.round(ty-T);
+   alpha[Math.max(0,Math.min(h-1,cy))*w+Math.max(0,Math.min(w-1,cx))]=255;
+  }
+  const r=createMaskedResult(L,T,w,h,new Uint8Array(rgba),alpha,killlogMode,{manualRepair:true,manualStart:true});
+  return r;
+ }
  async function chooseKilllog(clientX,clientY){
   if(Date.now()<suppressClickUntil)return;
   if(active<0||busy)return;
@@ -10335,6 +10375,18 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   if(clientX<rect.left||clientX>rect.right||clientY<rect.top||clientY>rect.bottom)return;
   const tx=clamp(Math.round((clientX-rect.left)*W/rect.width),0,W-1);
   const ty=clamp(Math.round((clientY-rect.top)*H/rect.height),0,H-1);
+  if(forceManualPick){
+   forceManualPick=false;$('kl-force-manual').classList.remove('active');
+   busy=true;status('원본에서 직접 보정용 마스크를 만드는 중…');
+   try{
+    const draft=createManualEditableCandidate(tx,ty);
+    if(!draft||!(await encodeResult(draft))){status('이 위치에서 편집을 시작할 수 없습니다. 다른 위치를 눌러 주세요.');return;}
+    draft.photo=active;results.push(draft);updatePhotoCounts();resultView();drawSelections();
+    openMaskEditor(results.length-1);status('직접 보정 편집창을 열었습니다. 원본 켜기로 오른쪽 끝을 확인해 주세요.');
+   }catch(err){console.error(err);status('직접 편집 시작 오류');}
+   finally{busy=false;}
+   return;
+  }
   const already=results.findIndex(r=>r.photo===active&&r.bounds&&tx>=r.bounds.x&&tx<r.bounds.x+r.bounds.w&&ty>=r.bounds.y&&ty<r.bounds.y+r.bounds.h);
   if(already>=0){status('이미 추출한 킬로그입니다. 아래 결과 목록에서 확인하거나 삭제할 수 있어요.');return;}
   busy=true;status('킬로그를 자르는 중…');
@@ -11197,6 +11249,33 @@ window.SnaSmartKillBrush=function({source,baseAlpha,painted,width,height,bounds}
   return changed;
  }
  return {begin,paint(mode,x,y,radius,sensitivity=48){return mode==='restore'?restoring(x,y,radius):erasing(x,y,radius,sensitivity);},isBackgroundSeed:()=>!!seed};
+};
+</script>
+
+<script>
+/* Pixel-exact user editing. Keeps and erases NEVER classify by game color. */
+window.SnaExactKillBrush=function({source,baseAlpha,painted,width,height}){
+ const W=width,H=height;
+ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+ let seed=null;
+ const rgb=(x,y)=>{const k=(clamp(Math.round(y),0,H-1)*W+clamp(Math.round(x),0,W-1))*4;return [source[k],source[k+1],source[k+2]];};
+ const difference=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+ function begin(mode,x,y){seed=mode==='colorErase'?rgb(x,y):null;}
+ function paint(mode,x,y,radius,tolerance=48){
+  if(mode==='pan')return 0;
+  const lx=Math.max(0,Math.floor(x-radius)),rx=Math.min(W-1,Math.ceil(x+radius));
+  const ty=Math.max(0,Math.floor(y-radius)),by=Math.min(H-1,Math.ceil(y+radius));
+  let changed=0;
+  for(let yy=ty;yy<=by;yy++)for(let xx=lx;xx<=rx;xx++){
+   if((xx-x)*(xx-x)+(yy-y)*(yy-y)>radius*radius)continue;
+   const k=yy*W+xx;
+   if(mode==='colorErase'&&difference(rgb(xx,yy),seed||rgb(x,y))>tolerance)continue;
+   const value=mode==='restore'?255:0;
+   if(painted[k]!==value){painted[k]=value;changed++;}
+  }
+  return changed;
+ }
+ return {begin,paint};
 };
 </script>
 </body>
