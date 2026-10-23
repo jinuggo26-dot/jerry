@@ -9977,6 +9977,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
    }
   }
   const painted=new Int16Array(w*h);painted.fill(-1);
+  const smartBrush=window.SnaSmartKillBrush({source,baseAlpha,painted,width:w,height:h,bounds:{x:b.x-x0,y:b.y-y0,w:b.w,h:b.h}});
   const originalBaseAlpha=baseAlpha.slice();
   const alpha=new Uint8ClampedArray(w*h);
   let expandLeft=0,expandRight=0,expandTop=0,expandBottom=0;
@@ -10001,7 +10002,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   dialog.style.cssText='box-sizing:border-box;width:100%;max-width:100vw;position:fixed;inset:0;z-index:10000002;background:#060b16f7;color:#f6f8ff;display:flex;flex-direction:column;gap:10px;align-items:center;padding:12px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch';
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','킬로그 인식 범위 보정');
   const h3=document.createElement('strong');h3.textContent='킬로그 정밀 보정';h3.style.cssText='font-size:17px';
-  const hint=document.createElement('p');hint.textContent='원본 사진에서 살릴 장식은 ‘살리기’, 없앨 배경은 ‘지우기’로 각각 표시한 다음 ‘정밀 재분리’를 누르세요. 결과를 보고 추가로 표시해 반복할 수 있습니다. 최종 저장은 ‘보정 적용’으로 반영합니다.';
+  const hint=document.createElement('p');hint.textContent='살리기는 장식·글자를 색상으로 구분해 복원하고, 지우기는 터치한 배경색과 연결된 부분만 제거합니다. 남길 장식과 배경을 표시한 뒤 정밀 재분리를 누르세요.';
   hint.style.cssText='margin:0;color:#adbfdf;font-size:12px;text-align:center;line-height:1.55;max-width:720px';
   const mk=(label,fn)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='padding:10px 12px;min-height:40px;max-width:100%;white-space:normal;overflow-wrap:anywhere;border:1px solid #526787;border-radius:9px;background:#1d2a42;color:#fff;font-weight:700;cursor:pointer';button.onclick=fn;return button;};
   const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:minmax(66px,100px) minmax(0,1fr);gap:8px;width:100%;max-width:720px;min-width:0;align-items:center';
@@ -10031,7 +10032,11 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   const brushSize=document.createElement('select');brushSize.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
   for(const [v,label] of [['6','작게'],['12','보통'],['24','크게'],['40','아주 크게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='12')o.selected=true;brushSize.append(o);} 
   brushLabel.append(brushSize);brushSize.addEventListener('change',drawCursor);
-  tools.append(restore,erase,pan,brushLabel);
+  const eraseSensitivity=document.createElement('label');eraseSensitivity.textContent='배경 감지 ';eraseSensitivity.style.cssText='font-size:12px;color:#c3d4f1';
+  const sensitivitySelect=document.createElement('select');sensitivitySelect.style.cssText='padding:9px 8px;border:1px solid #526787;border-radius:8px;background:#1d2a42;color:white';
+  for(const [v,label] of [['32','정밀'],['48','보통'],['68','넓게']]){const o=document.createElement('option');o.value=v;o.textContent=label;if(v==='48')o.selected=true;sensitivitySelect.append(o);}
+  eraseSensitivity.append(sensitivitySelect);
+  tools.append(restore,erase,pan,brushLabel,eraseSensitivity);
   // 보정용 픽셀 마스크는 원본 해상도를 유지하고, 화면에 보여주는 크기만 조절한다.
   // 휴대폰에서 최소 720px로 강제 확대하면 킬로그 끝이 잘려 보이던 문제를 방지한다.
   const zoomTools=document.createElement('div');
@@ -10180,12 +10185,9 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   function scheduleRender(){if(framePending)return;framePending=true;requestAnimationFrame(()=>{framePending=false;render()});}
   function point(e){const rect=canvas.getBoundingClientRect();return {x:clamp((e.clientX-rect.left)*w/rect.width,0,w-1),y:clamp((e.clientY-rect.top)*h/rect.height,0,h-1)};}
   function dot(x,y){
-   const radius=Number(brushSize.value),lx=Math.max(0,Math.floor(x-radius)),rx=Math.min(w-1,Math.ceil(x+radius));
-   const ly=Math.max(0,Math.floor(y-radius)),ry=Math.min(h-1,Math.ceil(y+radius));
-   for(let yy=ly;yy<=ry;yy++)for(let xx=lx;xx<=rx;xx++){
-    if((xx-x)**2+(yy-y)**2>radius*radius)continue;
-    const k=yy*w+xx;painted[k]=mode==='restore'?255:0;alpha[k]=painted[k];
-   }
+   const changed=smartBrush.paint(mode,x,y,Number(brushSize.value),Number(sensitivitySelect.value));
+   if(changed)updateAlpha();
+   return changed;
   }
   function stroke(a,b){
    const steps=Math.max(1,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,Number(brushSize.value)/3)));
@@ -10196,7 +10198,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     panStart={x:e.clientX,y:e.clientY,left:wrap.scrollLeft,top:wrap.scrollTop,id:e.pointerId};
     canvas.style.cursor='grabbing';canvas.setPointerCapture(e.pointerId);e.preventDefault();return;
    }
-   painting=true;last=point(e);hover=last;canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
+   painting=true;last=point(e);hover=last;smartBrush.begin(mode,last.x,last.y);canvas.setPointerCapture(e.pointerId);stroke(last,last);drawCursor();e.preventDefault();});
   canvas.addEventListener('pointermove',e=>{
    if(panStart){if(e.pointerId===panStart.id){wrap.scrollLeft=panStart.left+panStart.x-e.clientX;wrap.scrollTop=panStart.top+panStart.y-e.clientY;}e.preventDefault();return;}
    if(mode==='pan')return;
@@ -10209,7 +10211,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
   refineRow.style.cssText='display:flex;flex-direction:column;gap:7px;align-items:center;width:100%;max-width:720px';
   const refineStatus=document.createElement('p');refineStatus.setAttribute('role','status');
   refineStatus.style.cssText='font-size:12px;line-height:1.5;color:#b6ccee;text-align:center;min-height:18px';
-  refineStatus.textContent='먼저 살릴 장식과 지울 배경을 브러시로 표시해 주세요.';
+  refineStatus.textContent='살리기는 원본에서 장식색만 복원하고, 지우기는 비슷한 배경색만 제거합니다.';
   const refineButton=mk('정밀 재분리', async()=>{
    if(refineButton.disabled)return;
    refineButton.disabled=true;refineButton.textContent='분리 계산 중…';
@@ -10931,6 +10933,118 @@ window.SnaGraphRefine = (()=>{
   }
   return {refine};
 })();
+
+</script>
+<script>
+/* Color-aware restoration / background-only brush for original killlog source pixels. */
+window.SnaSmartKillBrush = function({source,baseAlpha,painted,width,height,bounds}){
+ const W=width,H=height;
+ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+ const rgb=(x,y)=>{let j=(clamp(Math.round(y),0,H-1)*W+clamp(Math.round(x),0,W-1))*4;return [source[j],source[j+1],source[j+2]]};
+ const distance=(c,d)=>Math.hypot(c[0]-d[0],c[1]-d[1],c[2]-d[2]);
+ const xL=bounds.x,xR=bounds.x+bounds.w,yT=bounds.y,yB=bounds.y+bounds.h;
+ const bandH=Math.max(12,bounds.h);
+ const topAnchor=clamp(yT-Math.max(14,bandH*.45),0,H-1);
+ const bottomAnchor=clamp(yB+Math.max(14,bandH*.40),0,H-1);
+ const topBgs=[],bottomBgs=[];
+ for(let x=0;x<W;x++){
+  const a=rgb(x,topAnchor),b=rgb(x,bottomAnchor);
+  topBgs.push(a);bottomBgs.push(b);
+ }
+ const color=(x,y)=>{let p=(y*W+x)*4;return [source[p],source[p+1],source[p+2]]};
+ function contrast(x,y,c){return Math.min(distance(c,topBgs[x]),distance(c,bottomBgs[x]));}
+ function protection(x,y,c){
+   const hi=Math.max(...c),lo=Math.min(...c),sat=hi-lo;
+   const d=contrast(x,y,c);
+   // Bright type and metallic glints, saturated purple/gold/red ornaments.
+   const whiteType=hi>177&&lo>137&&d>28;
+   const ornamentColor=sat>54&&hi>98&&d>20;
+   const distinct=d>75&&hi>75&&(sat>33||hi>155);
+   const originalArt=baseAlpha[y*W+x]>185&&d>42&&hi>94&&(sat>32||hi>165);
+   // Dark contours belong to the art when surrounded by protected decorative color.
+   let darkOutline=false;
+   if(hi<119&&baseAlpha[y*W+x]>185&&x>=xL&&x<=xR&&y>=yT&&y<=yB){
+    for(let oy=-2;oy<=2&&!darkOutline;oy+=2)for(let ox=-2;ox<=2;ox+=2){
+     if(!ox&&!oy)continue;
+     const nx=x+ox,ny=y+oy;if(nx<0||ny<0||nx>=W||ny>=H)continue;
+     const n=color(nx,ny),ns=Math.max(...n)-Math.min(...n);
+     if(ns>69&&Math.max(...n)>134&&baseAlpha[ny*W+nx]>=130)darkOutline=true;
+    }
+   }
+   return whiteType||ornamentColor||distinct||originalArt||darkOutline;
+ }
+ function restoring(x,y,radius){
+  const lx=Math.max(0,Math.floor(x-radius)),rx=Math.min(W-1,Math.ceil(x+radius));
+  const ly=Math.max(0,Math.floor(y-radius)),ry=Math.min(H-1,Math.ceil(y+radius));
+  let selected=0;
+  // Brush is a foreground hint: admit only source pixels visually distinct from the scene.
+  for(let yy=ly;yy<=ry;yy++)for(let xx=lx;xx<=rx;xx++){
+   const dx=xx-x,dy=yy-y;if(dx*dx+dy*dy>radius*radius)continue;
+   const k=yy*W+xx,c=color(xx,yy),hi=Math.max(...c),lo=Math.min(...c),sat=hi-lo;
+   const contrastValue=contrast(xx,yy,c),preserve=protection(xx,yy,c);
+   const nearArt=baseAlpha[k]>70 && (contrastValue>30||sat>40);
+   if(!preserve&&!nearArt)continue;
+   // Soft restore for antialiasing, solid foreground hint for real object pixels.
+   const strength=clamp(Math.round(185+Math.max(0,contrastValue-28)*1.65),188,255);
+   const a=Math.max(baseAlpha[k],strength);
+   if(painted[k]!==a){painted[k]=a;selected++;}
+  }
+  return selected;
+ }
+ let eraserSeed=null,seedSafe=false;
+ function begin(mode,x,y){
+   eraserSeed=null;seedSafe=false;
+   if(mode!=='erase')return;
+   const xx=clamp(Math.round(x),0,W-1),yy=clamp(Math.round(y),0,H-1);
+   const c=rgb(xx,yy);
+   // If user starts on clearly decorated art, do not turn it into an erase seed.
+   if(protection(xx,yy,c))return;
+   eraserSeed=c;seedSafe=true;
+ }
+ function erasing(x,y,radius,threshold=48){
+   if(!seedSafe||!eraserSeed)return 0;
+   const cx=clamp(Math.round(x),0,W-1),cy=clamp(Math.round(y),0,H-1);
+   // Restrict each dab to its actual brush radius, and use region connectivity
+   // plus color similarity so touching an ornate shape preserves its outline.
+   const minX=Math.max(0,cx-radius|0),maxX=Math.min(W-1,Math.ceil(cx+radius));
+   const minY=Math.max(0,cy-radius|0),maxY=Math.min(H-1,Math.ceil(cy+radius));
+   const ww=maxX-minX+1,hh=maxY-minY+1;
+   if(ww<=0||hh<=0)return 0;
+   const visited=new Uint8Array(ww*hh),queue=new Int32Array(ww*hh);
+   // If the current pointer moved into an ornament, retain the original BG seed.
+   const current=rgb(cx,cy);
+   let sx=cx,sy=cy;
+   if(distance(current,eraserSeed)>threshold){
+    let best=Infinity;
+    for(let yy=Math.max(minY,cy-5);yy<=Math.min(maxY,cy+5);yy++)
+     for(let xx=Math.max(minX,cx-5);xx<=Math.min(maxX,cx+5);xx++){
+      const c=rgb(xx,yy),dist=distance(c,eraserSeed);
+      if(dist<best&&!protection(xx,yy,c)){best=dist;sx=xx;sy=yy;}
+     }
+    if(best>threshold)return 0;
+   }
+   const seed= (sy-minY)*ww+(sx-minX);queue[0]=seed;visited[seed]=1;
+   let head=0,tail=1,changed=0;
+   const rr=radius*radius;
+   while(head<tail){
+    const q=queue[head++],xx=(q%ww)+minX,yy=((q/ww)|0)+minY;
+    const dx=xx-x,dy=yy-y;if(dx*dx+dy*dy>rr)continue;
+    const c=color(xx,yy),d=distance(c,eraserSeed);
+    if(d>threshold||protection(xx,yy,c))continue;
+    const k=yy*W+xx;
+    if(painted[k]!==0){painted[k]=0;changed++;}
+    // 8-connected flood bounded to the brush circle; only same background color.
+    for(let ky=-1;ky<=1;ky++)for(let kx=-1;kx<=1;kx++){
+      if(!kx&&!ky)continue;const ax=xx+kx,ay=yy+ky;
+      if(ax<minX||ax>maxX||ay<minY||ay>maxY)continue;
+      const loc=(ay-minY)*ww+ax-minX;
+      if(!visited[loc]){visited[loc]=1;queue[tail++]=loc;}
+    }
+   }
+   return changed;
+ }
+ return {begin,paint(mode,x,y,radius,sensitivity=48){return mode==='restore'?restoring(x,y,radius):erasing(x,y,radius,sensitivity);},isBackgroundSeed:()=>seedSafe};
+};
 
 </script>
 </body>
