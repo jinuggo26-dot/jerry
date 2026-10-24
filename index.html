@@ -2516,7 +2516,7 @@ window.closeAdmin=()=>{
 
 <div style="padding:11px 13px;margin:10px 0 14px;border-radius:12px;background:#17253a;border:1px solid #354965;color:#bdd0ed;font-size:12px;line-height:1.65">
  <strong style="color:#e2ecff">카카오톡에 사진 보내기</strong><br>
- 「공유 / 저장」을 눌렀는데 카카오톡이 목록에 없다면 결과 카드의 <b>「JPG 직접 저장」</b>을 누르고, 삼성 <b>내 파일 → 다운로드 → 사진 선택 → 공유 → 카카오톡</b> 순서로 보내세요. 여러 장 공유는 앱에 따라 지원되지 않을 수 있습니다.
+ 카드마다 <b>「JPG 저장」</b> 버튼 하나만 표시됩니다. 모바일에서는 공유·저장 창을 열고, 지원하지 않는 브라우저에서는 직접 다운로드합니다. 80장 이상을 카카오톡이 하나의 메시지로 묶도록 강제할 수는 없습니다. 그럴 때는 아래 <b>「전체 합본 JPG」</b>를 선택하면 한 장의 사진으로 보낼 수 있습니다.
 </div>
 
 <div class="status-row">
@@ -2543,7 +2543,10 @@ window.closeAdmin=()=>{
  <div style="font-size:20px;font-weight:850">
   추출 결과 <span id="c_resultCountTitle" style="color:#629aff">0</span>
  </div>
- <button id="c_saveAllTop" type="button" class="photo-button" onclick="window.c_saveAllCards()" disabled style="min-height:44px;background:#869fea;color:#0a1632;font-weight:800;white-space:nowrap">📥 모두 저장</button>
+ <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+  <button id="c_saveAllTop" type="button" class="photo-button" onclick="window.c_saveAllCards()" disabled style="min-height:44px;background:#869fea;color:#0a1632;font-weight:800;white-space:nowrap">📥 모두 저장</button>
+  <button id="c_collageTop" type="button" class="photo-button" onclick="window.c_shareCollage()" disabled style="min-height:44px;background:#304365;color:#e6f1ff;font-weight:800;white-space:nowrap">🖼 전체 합본 JPG</button>
+ </div>
 </div>
 
 <div id="c_results" class="results">
@@ -2556,7 +2559,10 @@ window.closeAdmin=()=>{
 <button id="c_saveAllButton" class="all-save" onclick="window.c_saveAllCards()" disabled>
  📥 선택한 옷 모두 저장
 </button>
-<p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p>
+<button id="c_collageButton" class="all-save" onclick="window.c_shareCollage()" disabled style="margin-top:8px;background:#2d446a;color:#e8f2ff">
+ 🖼 전체 합본 JPG · 한 장으로 공유
+</button>
+<p style="margin:9px 0 0;color:#b3c9e6;font-size:12px;line-height:1.6;text-align:center">「모두 저장」은 선택한 JPG를 <b>한 번의 공유 요청</b>으로 전달합니다. 카카오톡에서 여러 메시지로 나뉘는 경우 「전체 합본 JPG」로 사진들을 한 장에 배치해 전송하세요.</p>
 
 </div>
 </div>
@@ -3403,6 +3409,9 @@ fileInput.addEventListener("change",event=>{
  resultCountText.textContent="0";
  resultCountTitle.textContent="0";
  saveAllButton.disabled=true;
+ for(const id of ['c_saveAllTop','c_collageTop','c_collageButton']){
+  const control=document.getElementById(id);if(control)control.disabled=true;
+ }
 
  let loaded=0;
 
@@ -3506,7 +3515,7 @@ function showPhoto(index){
  const partialHint=document.getElementById('c_partialWarning');
  if(partialHint){
    partialHint.style.display=partialCount?'block':'none';
-   partialHint.textContent=partialCount?`⚠ 원본 사진의 아래쪽에서 ${partialCount}칸이 일부 잘려 있습니다. 위치는 표시하지만 사진에 없는 부분은 복원할 수 없어 일괄 추출에서 제외합니다.`:'';
+   partialHint.textContent=partialCount?`⚠ 사진 가장자리에서 ${partialCount}칸이 일부만 보입니다. 위치는 표시하지만 사진 밖 내용은 복원할 수 없어 일괄 추출에서 제외합니다.`:'';
  }
 
  resizeSelectionCanvas();
@@ -3912,30 +3921,50 @@ function detectRegularItemGrid(){
   if(colStep<commonW*.96||colStep>commonW*1.80)return null;
   if(cols.slice(1).some((c,i)=>Math.abs((c.center-cols[i].center)-colStep)>colStep*.19))return null;
 
-  // 카드 열 범위 안에서만 행을 평가해 오른쪽 UI 및 상단 수치를 배제한다.
-  const x0=Math.max(0,Math.floor(cols[0].start));
-  const x1=Math.min(w,Math.ceil(cols[cols.length-1].end));
-  const yCounts=new Int32Array(h);
-  for(let y=0;y<h;y++){
-    let n=0,idx=y*w+x0;
-    for(let x=x0;x<x1;x++,idx++)n+=allColor[idx];
-    yCounts[y]=n;
+  // 옷의 모양 또는 스크린샷 크기가 아닌, 이미 찾은 각 카드의 세로 테두리에서 행을 찾는다.
+  // 컬러 카드의 좌·우 경계는 안쪽 아이템 형태와 관계없이 세로로 이어진다.
+  // 이 방법은 스크롤로 맨 위/아래 카드가 반쯤 보이는 화면에도 적용된다.
+  const edges=[];
+  for(const col of cols){
+    const left=col.start,right=col.end;
+    for(const xp of [left+2,left+4,right-5,right-3]){
+      if(xp>=0&&xp<w)edges.push(xp);
+    }
   }
-  const rawRows=axisRuns(yCounts,x1-x0,.23,Math.max(10,Math.round(commonW*.50)),4);
-  if(rawRows.length<2||rawRows.length>22)return null;
-  const typicalVisible=median(rawRows.map(r=>r.width));
-  const rows=rawRows.filter(r=>r.width>=typicalVisible*.47 && r.width<=typicalVisible*1.50);
+  if(edges.length<8)return null;
+  const edgeCounts=new Int32Array(h);
+  for(let y=0;y<h;y++){
+    let count=0;
+    for(const xp of edges)count+=allColor[y*w+xp];
+    edgeCounts[y]=count;
+  }
+  const rows=axisRuns(edgeCounts,edges.length,.36,Math.max(8,Math.round(commonW*.21)),3);
   if(rows.length<2||rows.length>20)return null;
-  const rowStep=median(rows.slice(1).map((r,i)=>r.start-rows[i].start));
-  if(rowStep<commonW*.73||rowStep>commonW*2.15)return null;
-  if(rows.slice(1).some((r,i)=>Math.abs((r.start-rows[i].start)-rowStep)>rowStep*.20))return null;
+  const tall=rows.map(r=>r.width).filter(len=>len>=commonW*.82);
+  if(tall.length<2)return null;
+  const typicalH=median(tall);
+  const normalRows=rows.map((r,i)=>({r,i})).filter(x=>x.r.width>=typicalH*.83);
+  if(normalRows.length<2)return null;
+  // 인접한 완전한 줄의 시작 좌표만 비교한다. 상하 부분 줄은 행간 산정에서 제외.
+  const regularSteps=[];
+  for(let i=1;i<normalRows.length;i++){
+    const prev=normalRows[i-1],curr=normalRows[i];
+    if(curr.i-prev.i===1)regularSteps.push(curr.r.start-prev.r.start);
+  }
+  if(!regularSteps.length)return null;
+  const rowStep=median(regularSteps);
+  if(rowStep<typicalH*.95||rowStep>typicalH*1.50)return null;
+  for(let i=1;i<normalRows.length;i++){
+    if(normalRows[i].i-normalRows[i-1].i!==1)continue;
+    const d=normalRows[i].r.start-normalRows[i-1].r.start;
+    if(Math.abs(d-rowStep)>rowStep*.16)return null;
+  }
 
   // 옷 · 머리 · 모자 모두 화면의 '실제 색상 카드 영역'을 기준으로 크롭한다.
   // 이전 버전은 firstRow에서 위쪽으로 임의 확장해 회색 화면이 들어왔고,
   // width/height를 95%로 줄여 아이템 아래 마름모가 잘리는 문제가 있었다.
   // 이 투영 검출의 rows / cols는 이미 실제 카드 배경 경계이므로 추가 보정하지 않는다.
-  const fullRowLengths=rows.map(r=>r.width).filter(v=>v>=rowStep*.77);
-  const typicalH=median(fullRowLengths.length?fullRowLengths:rows.map(r=>r.width));
+  // typicalH는 실제 카드 테두리 행 길이 중에서 구했다. 창/사진 크기는 사용하지 않는다.
   const cardW=Math.round(commonW/ratio);
   const cardH=Math.round(typicalH/ratio);
   if(cardW<22||cardH<25)return null;
@@ -3943,12 +3972,13 @@ function detectRegularItemGrid(){
   for(let ri=0;ri<rows.length;ri++){
     const rr=rows[ri];
     // 스크린샷 하단에서 화면에 일부만 들어온 카드는 위치는 표시하지만 자동 저장하지 않는다.
-    const partial=rr.width<typicalH*.77;
+    const partial=rr.width<typicalH*.83;
     for(let ci=0;ci<cols.length;ci++){
       const cc=cols[ci];
       const x=Math.round(cc.start/ratio);
       const y=Math.round(rr.start/ratio);
-      const width=cardW, height=cardH;
+      // 부분 카드에 다음 줄까지 겹치는 파란 박스를 그리지 않는다.
+      const width=cardW, height=partial?Math.max(1,Math.round(rr.width/ratio)):cardH;
       if(x<0||y<0||x+width>iw+1||y>=ih)continue;
       out.push({x,y,width,height,partial:partial||(y+height>ih),gridColumn:ci,gridRow:ri});
     }
@@ -4245,11 +4275,7 @@ window.c_extractSelected=()=>{
    </div>
    <button class="save"
     onclick="shareFile('${dataURL}','clothes_${index+1}.jpg')">
-    ↗ 공유 / 저장
-   </button>
-   <button class="save" style="margin-top:6px;background:#253b59;color:#dbe9ff"
-    onclick="saveJpgForKakao('${dataURL}','clothes_${index+1}.jpg')">
-    📥 JPG 직접 저장
+    📥 JPG 저장
    </button>
   `;
 
@@ -4260,20 +4286,61 @@ window.c_extractSelected=()=>{
  resultCountText.textContent=croppedCards.length;
  resultCountTitle.textContent=croppedCards.length;
  saveAllButton.disabled=false;
+ const saveTop=document.getElementById('c_saveAllTop');if(saveTop)saveTop.disabled=false;
+ const collage=document.getElementById('c_collageButton');if(collage)collage.disabled=false;
+ const collageTop=document.getElementById('c_collageTop');if(collageTop)collageTop.disabled=false;
 };
 
+// 옷 사진은 중간에 1장씩 공유/다운로드하는 반복 실행을 하지 않는다.
+// 단일 share() 호출로 여러 이미지 파일을 OS에 넘기고, 수신 앱의 묶음 표시 방식은 존중한다.
 window.c_saveAllCards=async()=>{
-
- if(croppedCards.length){
-  // 삼성에서 11장 이상이면 경고만 표시하고 공유/다운로드는 실행하지 않습니다.
-  if(snaSamsungSaveLimit.shouldBlock(croppedCards.length)) return;
-
-  await shareMultipleFiles(
-   croppedCards,
-   "clothes_item"
-  );
-
+ if(!croppedCards.length)return;
+ try{
+  const files=croppedCards.map((dataURL,i)=>{
+   const raw=atob(dataURL.split(',')[1]);
+   const bytes=new Uint8Array(raw.length);
+   for(let k=0;k<raw.length;k++)bytes[k]=raw.charCodeAt(k);
+   return new File([bytes],`clothes_${String(i+1).padStart(3,'0')}.jpg`,{type:'image/jpeg'});
+  });
+  if(typeof navigator.share==='function'&&navigator.canShare?.({files})){
+   await navigator.share({files});
+   return;
+  }
+  window.uiAlert?.('이 브라우저에서는 JPG '+files.length+'장을 한 번에 공유할 수 없습니다. 「전체 합본 JPG」를 사용하면 한 장으로 공유할 수 있습니다.');
+ }catch(error){
+  if(error?.name==='AbortError')return;
+  console.warn('일괄 공유 실패:',error);
+  window.uiAlert?.('다중 사진 공유가 지원되지 않거나 공유 대상 앱에서 거절했습니다. 「전체 합본 JPG」를 사용해 주세요.');
  }
+};
+
+// 카카오톡이 N개 사진을 N개 메시지로 보내는 환경에 대한 확실한 단일 이미지 대안.
+// 이 모드는 N개의 원본 JPG를 그대로 보내는 것이 아니라 한 장의 모아보기 JPG로 결합한다.
+window.c_shareCollage=async()=>{
+ if(!croppedCards.length)return;
+ try{
+  const images=await Promise.all(croppedCards.map(src=>new Promise((resolve,reject)=>{
+   const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src;
+  })));
+  const columns=Math.min(8,images.length);
+  const rows=Math.ceil(images.length/columns);
+  const cellW=Math.max(1,Math.max(...images.map(im=>im.naturalWidth||im.width)));
+  const cellH=Math.max(1,Math.max(...images.map(im=>im.naturalHeight||im.height)));
+  const pad=3;
+  const canvas=document.createElement('canvas');
+  canvas.width=columns*(cellW+pad)+pad;
+  canvas.height=rows*(cellH+pad)+pad;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#192036';ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let i=0;i<images.length;i++){
+   const im=images[i];
+   const x=pad+(i%columns)*(cellW+pad);
+   const y=pad+Math.floor(i/columns)*(cellH+pad);
+   ctx.drawImage(im,x,y,cellW,cellH);
+  }
+  // canvas.toDataURL로 만든 단일 JPG도 기존 JPG 저장(공유 시트) 흐름을 이용한다.
+  await shareFile(canvas.toDataURL('image/jpeg',.94),'clothes_all_in_one.jpg');
+ }catch(e){console.error(e);window.uiAlert?.('전체 합본 JPG를 만드는 중 문제가 발생했습니다. 사진 수를 줄여 다시 시도하세요.');}
 };
 
 function resizeSelectionCanvas(){
