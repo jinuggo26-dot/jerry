@@ -3267,6 +3267,38 @@ function clothRightFringePx(card,img){
  while(correction<3 && xEnd-correction>xStart+16 && isGrayOutside(xEnd-correction))correction++;
  return correction;
 }
+// 화면 캡처에서 카드 상단에 들어온 밝은 테두리/강조선은
+// 카드별로 개별 검사한다. 물체 색이나 스크린샷 전체 해상도에 맞춰 이동하지 않는다.
+// 가로로 연속된 밝은 띠만 테두리로 판정하므로 카드의 장식은 그대로 보존한다.
+function clothTopFringePx(card,img, y0, x0, x1, y1){
+ if(!Number.isInteger(card.gridColumn)||!Number.isInteger(card.gridRow))return 0;
+ const {data,w,h}=getClothImagePixels(img);
+ const height=Math.round(y1-y0),width=Math.round(x1-x0);
+ if(height<36||width<30||y0<0||y0+18>=h)return 0;
+ const sampleFractions=[.08,.12,.16,.20,.25,.30,.35,.40,.46,.54,.60,.65,.70,.75,.80,.85,.90];
+ const xs=sampleFractions.map(t=>Math.max(0,Math.min(w-1,Math.round(x0+width*t))));
+ const lum=(y,x)=>{
+  const off=(y*w+x)*4;
+  return data[off]*.54+data[off+1]*.25+data[off+2]*.21;
+ };
+ const reference=xs.map(x=>{
+  const a=[];
+  for(const dy of [9,11,13,15])a.push(lum(y0+dy,x));
+  a.sort((a,b)=>a-b);
+  return (a[1]+a[2])/2;
+ });
+ // 밝은 띠는 카드 가로 대부분에서 나타나고, 배경보다 충분히 밝다.
+ // 중간 그림/문구 때문에 국소적으로 밝은 부분은 테두리로 판정하지 않는다.
+ let fringe=0;
+ for(let dy=0;dy<Math.min(7,height-17);dy++){
+  const delta=xs.map((x,k)=>lum(y0+dy,x)-reference[k]).sort((a,b)=>a-b);
+  const median=delta[(delta.length-1)>>1];
+  const strong=delta.filter(d=>d>11).length;
+  if(median>12&&strong>=Math.ceil(xs.length*.66))fringe=dy+1;
+  else break;
+ }
+ return fringe;
+}
 function clothCropRect(card,img){
  const left=clothTrimNumber('Left');
  const right=clothTrimNumber('Right');
@@ -3280,11 +3312,13 @@ function clothCropRect(card,img){
  const y1=Math.max(y0+1,Math.min(imgH,Math.round(card.y+card.height-bottom)));
  const edgeFix=clothRightFringePx(card,img);
  const x1=Math.max(x0+1,Math.min(imgW,normalX1-edgeFix));
- // 오른쪽 외곽만 보정하고 결과 이미지는 모든 카드의 같은 폭으로 저장.
- // 원본에서 최대 3px 차이만 보정하므로 장식 형태의 시각적 변형은 최소화.
+ const topEdgeFix=clothTopFringePx(card,img,y0,x0,x1,y1);
+ const sourceY=Math.min(y1-1,y0+topEdgeFix);
+ // 밝은 상단 테두리만 안쪽으로 걷어내고 아래쪽 마름모는 건드리지 않는다.
+ // 출력 크기를 일정하게 유지하므로 카드별로 저장 이미지 높이는 달라지지 않는다.
  const outputWidth=Math.max(1,Math.min(imgW,normalX1)-x0);
  const outputHeight=y1-y0;
- return {x:x0,y:y0,width:x1-x0,height:y1-y0,outputWidth,outputHeight,edgeFix};
+ return {x:x0,y:sourceY,width:x1-x0,height:y1-sourceY,outputWidth,outputHeight,edgeFix,topEdgeFix};
 }
 function drawClothTrimPreview(){
  const canvas=document.getElementById('c_trimPreview');
@@ -3299,7 +3333,7 @@ function drawClothTrimPreview(){
  context.imageSmoothingEnabled=true;
  context.imageSmoothingQuality='high';
  context.drawImage(photo.image,rect.x,rect.y,rect.width,rect.height,0,0,rect.outputWidth,rect.outputHeight);
- label.textContent=rect.outputWidth+'×'+rect.outputHeight+'px'+(rect.edgeFix?' · 테두리 '+rect.edgeFix+'px 보정':'');
+ label.textContent=rect.outputWidth+'×'+rect.outputHeight+'px'+(rect.edgeFix?' · 오른쪽 '+rect.edgeFix+'px 보정':'')+(rect.topEdgeFix?' · 위쪽 '+rect.topEdgeFix+'px 보정':'');
 }
 function clampClothTrim(key,value){
  const el=clothTrimControl[key];
