@@ -2456,6 +2456,8 @@ window.closeAdmin=()=>{
  모든 인식 박스가 <b style="color:#629aff">동일한 크기</b>로 맞춰집니다.
 </div>
 
+<div id="c_partialWarning" style="display:none;margin:10px 2px;color:#f5ce7d;font-size:12px;line-height:1.5"></div>
+
 <div class="status-row">
 
  <div class="status">
@@ -3243,6 +3245,12 @@ function showPhoto(index){
  );
 
  detectCards();
+ const partialCount=cards.filter(c=>c.partial).length;
+ const partialHint=document.getElementById('c_partialWarning');
+ if(partialHint){
+   partialHint.style.display=partialCount?'block':'none';
+   partialHint.textContent=partialCount?`⚠ 원본 사진의 아래쪽에서 ${partialCount}칸이 일부 잘려 있습니다. 위치는 표시하지만 사진에 없는 부분은 복원할 수 없어 일괄 추출에서 제외합니다.`:'';
+ }
 
  resizeSelectionCanvas();
  updateCount();
@@ -3587,7 +3595,115 @@ function cardOverlap(a,b){
   const minArea=Math.min(a.width*a.height,b.width*b.height);
   return minArea>0 ? x*y/minArea:0;
 }
+// 가로·세로로 반복되는 실제 컬러 카드의 위치를 1차원 투영으로 검출한다.
+// 카드 안의 인체, 머리카락, 모자 등 물체 모양은 감지 기준으로 사용하지 않는다.
+// 특별히 이 규칙을 만족하지 않는 화면은 기존 인식기로 되돌린다.
+function detectRegularItemGrid(){
+  const iw=imageCanvas.width,ih=imageCanvas.height;
+  if(iw<160||ih<120)return null;
+  const ratio=Math.min(1,1400/Math.max(iw,ih));
+  const w=Math.max(1,Math.round(iw*ratio));
+  const h=Math.max(1,Math.round(ih*ratio));
+  const scratch=document.createElement('canvas');
+  scratch.width=w;scratch.height=h;
+  const ctx=scratch.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(image,0,0,w,h);
+  const data=ctx.getImageData(0,0,w,h).data;
+  const xCounts=new Int32Array(w);
+  const allColor=new Uint8Array(w*h);
+  // 어두운 와인색, 자주색, 보라색, 금색 등 카드의 채워진 배경만 찾는다.
+  // 사진 배경의 회백색과 관계없이 옷·머리·모자도 같은 조건을 쓴다.
+  for(let y=0,p=0,k=0;y<h;y++){
+    for(let x=0;x<w;x++,k++,p+=4){
+      const r=data[p],g=data[p+1],b=data[p+2];
+      const colored=(g<155&&(
+        (r>65&&r>g*1.23&&(b>g*1.02||r>b*1.20))||
+        (b>65&&b>g*1.27&&r>g*1.16)
+      ))||(r>130&&g>70&&b<g*.8&&r>g*1.07);
+      if(colored){allColor[k]=1;xCounts[x]++;}
+    }
+  }
+  function axisRuns(counts,denom,threshold,minlen,holes){
+    const on=Array.from(counts,v=>v/Math.max(1,denom)>=threshold);
+    // JPEG 블록 및 카드 안 장식으로 생긴 1~2픽셀의 작은 구멍만 봉합한다.
+    for(let i=0;i<on.length;){
+      if(on[i]){i++;continue;}
+      let j=i+1;while(j<on.length&&!on[j])j++;
+      if(i>0&&j<on.length&&j-i<=holes)for(let k=i;k<j;k++)on[k]=true;
+      i=j;
+    }
+    const out=[];
+    for(let i=0;i<on.length;){
+      if(!on[i]){i++;continue;}
+      let j=i+1;while(j<on.length&&on[j])j++;
+      if(j-i>=minlen)out.push({start:i,end:j,width:j-i,center:(i+j)*.5});
+      i=j;
+    }
+    return out;
+  }
+  function median(vals){
+    const a=vals.slice().sort((x,y)=>x-y);
+    return a.length?a[Math.floor(a.length/2)]:0;
+  }
+  const rawCols=axisRuns(xCounts,h,.17,Math.max(9,Math.round(w*.024)),2);
+  if(rawCols.length<3)return null;
+  const commonW=median(rawCols.map(c=>c.width));
+  const cols=rawCols.filter(c=>c.width>=commonW*.68&&c.width<=commonW*1.34);
+  if(cols.length<3||cols.length>22)return null;
+  const colStep=median(cols.slice(1).map((c,i)=>c.center-cols[i].center));
+  if(colStep<commonW*.96||colStep>commonW*1.80)return null;
+  if(cols.slice(1).some((c,i)=>Math.abs((c.center-cols[i].center)-colStep)>colStep*.19))return null;
+
+  // 카드 열 범위 안에서만 행을 평가해 오른쪽 UI 및 상단 수치를 배제한다.
+  const x0=Math.max(0,Math.floor(cols[0].start));
+  const x1=Math.min(w,Math.ceil(cols[cols.length-1].end));
+  const yCounts=new Int32Array(h);
+  for(let y=0;y<h;y++){
+    let n=0,idx=y*w+x0;
+    for(let x=x0;x<x1;x++,idx++)n+=allColor[idx];
+    yCounts[y]=n;
+  }
+  const rawRows=axisRuns(yCounts,x1-x0,.23,Math.max(10,Math.round(commonW*.50)),4);
+  if(rawRows.length<2||rawRows.length>22)return null;
+  const typicalVisible=median(rawRows.map(r=>r.width));
+  const rows=rawRows.filter(r=>r.width>=typicalVisible*.47 && r.width<=typicalVisible*1.50);
+  if(rows.length<2||rows.length>20)return null;
+  const rowStep=median(rows.slice(1).map((r,i)=>r.start-rows[i].start));
+  if(rowStep<commonW*.73||rowStep>commonW*2.15)return null;
+  if(rows.slice(1).some((r,i)=>Math.abs((r.start-rows[i].start)-rowStep)>rowStep*.20))return null;
+
+  const cw=commonW/ratio;
+  // 행의 반복 간격과 색이 채워진 길이를 이용해 상하 동일한 높이를 복원한다.
+  // 마지막 행이 스크린샷에서 잘렸다면 온전한 앞 행들로 높이를 추정한다.
+  const fullRowLengths=rows.map(r=>r.width).filter(v=>v>=rowStep*.77);
+  const typicalH=median(fullRowLengths.length?fullRowLengths:rows.map(r=>r.width));
+  const ch=Math.max(10,rowStep-Math.max(4,Math.round(rowStep*.055)))/ratio;
+  if(cw<22||ch<25)return null;
+  const trimX=cw*.025,trimY=ch*.02;
+  const out=[];
+  const firstRow=median(rows.map((r,i)=>r.start-i*rowStep)) - (ch*ratio*.047);
+  // 이미지가 스크롤 중간에서 찍혔거나 하단이 끊겼을 때는 동일 규격을 유지하되
+  // 완전히 안 보이는 부분을 실제 아이템인 것처럼 자동 추출하지 않는다.
+  for(let ri=0;ri<rows.length;ri++){
+    const visible=rows[ri].width;
+    const partial=visible<typicalH*.77 || (firstRow+ri*rowStep+ch*ratio)>h+2;
+    for(let ci=0;ci<cols.length;ci++){
+      const c=cols[ci];
+      const fullX=c.center/ratio-cw*.5;
+      const fullY=(firstRow+ri*rowStep)/ratio;
+      const width=Math.round(cw*.95),height=Math.round(ch*.95);
+      const x=Math.round(fullX+trimX),y=Math.round(fullY+trimY);
+      if(x<0||y<0||x+width>iw+2)continue;
+      if(y>=ih)continue;
+      out.push({x,y,width,height,partial:partial||(y+height>ih),gridColumn:ci,gridRow:ri});
+    }
+  }
+  return out.length>=6?out:null;
+}
+
 function detectCards(){
+  const regularGrid=detectRegularItemGrid();
+  if(regularGrid){cards=regularGrid;return;}
   // 구형 인식 결과도 취득해 푸른 테두리 등 이전 사진과 호환한다.
   legacyDetectCards();
   const older=cards.slice();
@@ -3784,7 +3900,7 @@ window.c_autoExtractAll=async()=>{
   if(!photos[i])continue;
   showPhoto(i);
   if(!photos[i].selected?.length){
-   const found=cards.filter(c=>c&&c.width>12&&c.height>12&&c.x>=0&&c.y>=0&&c.x+c.width<=imageCanvas.width+2&&c.y+c.height<=imageCanvas.height+2).slice(0,60);
+   const found=cards.filter(c=>c&&!c.partial&&c.width>12&&c.height>12&&c.x>=0&&c.y>=0&&c.x+c.width<=imageCanvas.width+2&&c.y+c.height<=imageCanvas.height+2).slice(0,60);
    photos[i].selected=found;
   }
   selected+=photos[i].selected.length;
@@ -7524,6 +7640,116 @@ async function encodeResult(r){
   left.append(ltitle,original);right.append(rtitle,final);grid.append(left,right);shade.append(title,close,grid);document.body.append(shade);
   shade.addEventListener('click',e=>{if(e.target===shade)shade.remove();});
  }
+ // Photopea 정밀 보정: 원본 이미지에서 수정 후 해당 결과로 PNG 복귀
+ const PP_ORIGIN='https://www.photopea.com';
+ let ppLayer=null,ppFrame=null,ppMessage=null,ppResult=null,ppCrop=null,ppReady=false,ppPhase='idle',ppPending=null,ppBusy=false;
+ function ppSetStatus(text){if(ppMessage)ppMessage.textContent=text;}
+ function ppInit(){
+  if(ppLayer)return;
+  ppLayer=document.createElement('div');ppLayer.id='kl-photopea-layer';
+  ppLayer.style.cssText='display:none;position:fixed;inset:0;z-index:2147483000;background:#070b15;flex-direction:column;color:white;font-family:system-ui,-apple-system,sans-serif';
+  ppLayer.innerHTML=`<div style="padding:9px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:#122039;border-bottom:1px solid #456080">
+  <button id="pp-kl-return" type="button" style="padding:12px 9px;flex:1 1 138px;background:#88b9ff;color:#101729;border-radius:9px;font-weight:800">보정 완료 → 가져오기</button>
+  <button id="pp-kl-magic" type="button" style="padding:12px 9px;flex:1 1 100px;background:#304d70;color:white;border-radius:9px">Magic Cut 열기</button>
+  <button id="pp-kl-whole" type="button" style="padding:12px 9px;flex:1 1 126px;background:#304d70;color:white;border-radius:9px">원본 전체 열기</button>
+  <button id="pp-kl-close" type="button" style="padding:12px 9px;flex:1 1 58px;background:#613346;color:white;border-radius:9px">닫기</button>
+  <span id="pp-kl-status" style="width:100%;font-size:12px;line-height:1.5;color:#cfe1f5">Photopea 준비 중…</span></div>
+  <iframe id="pp-kl-frame" title="Photopea 정밀 배경 제거" style="flex:1;min-height:0;width:100%;border:0;background:#151a25" allow="clipboard-read; clipboard-write"></iframe>`;
+  document.body.appendChild(ppLayer);
+  ppFrame=ppLayer.querySelector('#pp-kl-frame');ppMessage=ppLayer.querySelector('#pp-kl-status');
+  ppLayer.querySelector('#pp-kl-close').addEventListener('click',ppClose);
+  ppLayer.querySelector('#pp-kl-magic').addEventListener('click',()=>{
+   if(!ppReady||ppPhase==='loading'||ppPhase==='sending'){ppSetStatus('이미지를 불러오는 중입니다.');return;}
+   ppFrame.contentWindow.postMessage('app.showWindow("magiccut");',PP_ORIGIN);
+   ppSetStatus('Magic Cut에서 초록색=살리기, 빨간색=지우기. 완료한 후 적용(OK)을 누르세요.');
+  });
+  ppLayer.querySelector('#pp-kl-whole').addEventListener('click',()=>ppLoadOriginal(true));
+  ppLayer.querySelector('#pp-kl-return').addEventListener('click',()=>{
+   if(!ppReady||ppPhase==='loading'||ppPhase==='sending'||ppBusy){ppSetStatus('이미지 전송이 완료된 후 눌러 주세요.');return;}
+   ppPhase='exporting';ppBusy=true;ppSetStatus('Photopea에서 투명 PNG를 가져오는 중입니다…');
+   ppFrame.contentWindow.postMessage('app.activeDocument.saveToOE("png");',PP_ORIGIN);
+  });
+ }
+ function ppClose(){
+  if(ppLayer)ppLayer.style.display='none';
+  if(ppFrame){ppFrame.src='about:blank';}
+  ppReady=false;ppPhase='idle';ppPending=null;ppBusy=false;ppResult=null;
+ }
+ async function ppLoadOriginal(whole){
+  if(!ppResult)return;
+  const photo=photos[ppResult.photo];if(!photo?.image){ppSetStatus('원본 사진을 불러오지 못했습니다.');return;}
+  const im=photo.image,W=im.naturalWidth,H=im.naturalHeight,b=ppResult.bounds||{x:ppResult.sourceX,y:ppResult.sourceY,w:ppResult.master.width,h:ppResult.master.height};
+  let x=0,y=0,w=W,h=H;
+  if(!whole){
+   const padx=Math.max(130,Math.round(b.w*.5)),pady=Math.max(80,Math.round(b.h*1.65));
+   x=clamp(Math.floor(b.x-padx),0,W-1);y=clamp(Math.floor(b.y-pady),0,H-1);
+   const x2=clamp(Math.ceil(b.x+b.w+padx),x+1,W),y2=clamp(Math.ceil(b.y+b.h+pady),y+1,H);
+   w=x2-x;h=y2-y;
+  }
+  const cropCanvas=document.createElement('canvas');cropCanvas.width=w;cropCanvas.height=h;
+  cropCanvas.getContext('2d').drawImage(im,x,y,w,h,0,0,w,h);
+  const blob=await new Promise(res=>cropCanvas.toBlob(res,'image/png'));
+  if(!blob){ppSetStatus('원본 사진 변환에 실패했습니다.');return;}
+  ppCrop={x,y,w,h};ppPending=await blob.arrayBuffer();
+  ppReady=false;ppBusy=false;ppPhase='loading';ppSetStatus('Photopea를 불러오는 중입니다…');
+  ppFrame.src=PP_ORIGIN;
+ }
+ async function ppOpenResult(r){
+  ppInit();ppResult=r;ppLayer.style.display='flex';
+  try{await ppLoadOriginal(false);}catch(err){console.error(err);ppSetStatus('원본 이미지를 준비하지 못했습니다.');}
+ }
+ async function ppAccept(buffer){
+  if(!ppResult||!ppCrop)throw Error('원본 결과가 없습니다.');
+  const imgBlob=new Blob([buffer],{type:'image/png'});
+  const bmp=await createImageBitmap(imgBlob);
+  const master=document.createElement('canvas');master.width=bmp.width;master.height=bmp.height;
+  const context=master.getContext('2d',{willReadFrequently:true});context.drawImage(bmp,0,0);bmp.close?.();
+  const data=context.getImageData(0,0,master.width,master.height).data;
+  let l=master.width,t=master.height,rr=-1,bb=-1,transparent=0;
+  for(let yy=0;yy<master.height;yy++)for(let xx=0;xx<master.width;xx++){
+   const a=data[(yy*master.width+xx)*4+3];
+   if(a<8){transparent++;continue;}
+   if(xx<l)l=xx;if(xx>rr)rr=xx;if(yy<t)t=yy;if(yy>bb)bb=yy;
+  }
+  if(rr<l||bb<t)throw Error('분리된 킬로그가 없습니다. Magic Cut에서 초록색으로 살릴 부분을 지정하세요.');
+  if(transparent<master.width*master.height*.005)throw Error('배경이 투명하지 않습니다. Magic Cut 작업 후 꼭 OK를 눌러 적용하세요.');
+  const contentW=rr-l+1,contentH=bb-t+1;
+  const s=Math.min(744/contentW,174/contentH),dw=Math.max(1,Math.round(contentW*s)),dh=Math.max(1,Math.round(contentH*s));
+  const out=document.createElement('canvas');out.width=760;out.height=190;
+  const og=out.getContext('2d');og.imageSmoothingEnabled=true;og.imageSmoothingQuality='high';
+  og.drawImage(master,l,t,contentW,contentH,Math.round((760-dw)/2),Math.round((190-dh)/2),dw,dh);
+  const png=await new Promise(res=>out.toBlob(res,'image/png'));
+  if(!png)throw Error('저장용 PNG 생성에 실패했습니다.');
+  // 모든 검증이 끝난 뒤에만 기존 결과를 교체. 다른 기능은 그대로 보존.
+  const r=ppResult;
+  if(r.url)URL.revokeObjectURL(r.url);
+  r.master=master;r.sourceX=ppCrop.x;r.sourceY=ppCrop.y;
+  r.inner={x:l,y:t,w:contentW,h:contentH};r.baseInner={...r.inner};
+  r.meta={...(r.meta||{}),manualRepair:true,photopea:true};
+  r.blob=png;r.url=URL.createObjectURL(png);r.outputH=190;r.contentWidth=dw;
+  r.bounds={x:ppCrop.x+l,y:ppCrop.y+t,w:contentW,h:contentH};
+  ppClose();updatePhotoCounts();resultView();drawSelections();
+  window.SnaDraft?.queue('kill');status('Photopea 정밀 보정 결과를 가져왔습니다. 기존 결과 목록에서 미리보기·저장이 가능합니다.');
+ }
+ window.addEventListener('message',async e=>{
+  if(!ppFrame||e.origin!==PP_ORIGIN||e.source!==ppFrame.contentWindow)return;
+  if(e.data==='done'){
+   if(ppPhase==='loading'){
+    ppReady=true;ppPhase='sending';ppSetStatus('원본 영역 전달 중…');
+    ppFrame.contentWindow.postMessage(ppPending,PP_ORIGIN);ppPending=null;
+   }else if(ppPhase==='sending'){
+    ppPhase='editing';ppSetStatus('Magic Cut이 열립니다. 초록색으로 킬로그 전체, 빨간색으로 배경을 표시하세요.');
+    ppFrame.contentWindow.postMessage('app.showWindow("magiccut");',PP_ORIGIN);
+   }else if(ppPhase==='exporting' && ppBusy){
+    ppBusy=false;ppPhase='editing';ppSetStatus('PNG를 받지 못했습니다. Magic Cut의 OK를 누르고 다시 시도하세요.');
+   }
+   return;
+  }
+  if(ppPhase==='exporting'&&e.data instanceof ArrayBuffer){
+   ppPhase='receiving';
+   try{await ppAccept(e.data);}catch(err){console.error(err);ppBusy=false;ppPhase='editing';ppSetStatus(err.message||'PNG를 가져오지 못했습니다.');}
+  }
+ });
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
@@ -7541,6 +7767,7 @@ async function encodeResult(r){
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
     mk('정밀 보정',()=>openMaskEditor(i)),
+    mk('Photopea 보정',()=>ppOpenResult(r)),
     mk('개별 저장',()=>saveFiles([r],i)),
     mk('삭제',()=>deleteResult(i))
    );
