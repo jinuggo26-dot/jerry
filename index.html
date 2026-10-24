@@ -3672,29 +3672,26 @@ function detectRegularItemGrid(){
   if(rowStep<commonW*.73||rowStep>commonW*2.15)return null;
   if(rows.slice(1).some((r,i)=>Math.abs((r.start-rows[i].start)-rowStep)>rowStep*.20))return null;
 
-  const cw=commonW/ratio;
-  // 행의 반복 간격과 색이 채워진 길이를 이용해 상하 동일한 높이를 복원한다.
-  // 마지막 행이 스크린샷에서 잘렸다면 온전한 앞 행들로 높이를 추정한다.
+  // 옷 · 머리 · 모자 모두 화면의 '실제 색상 카드 영역'을 기준으로 크롭한다.
+  // 이전 버전은 firstRow에서 위쪽으로 임의 확장해 회색 화면이 들어왔고,
+  // width/height를 95%로 줄여 아이템 아래 마름모가 잘리는 문제가 있었다.
+  // 이 투영 검출의 rows / cols는 이미 실제 카드 배경 경계이므로 추가 보정하지 않는다.
   const fullRowLengths=rows.map(r=>r.width).filter(v=>v>=rowStep*.77);
   const typicalH=median(fullRowLengths.length?fullRowLengths:rows.map(r=>r.width));
-  const ch=Math.max(10,rowStep-Math.max(4,Math.round(rowStep*.055)))/ratio;
-  if(cw<22||ch<25)return null;
-  const trimX=cw*.025,trimY=ch*.02;
+  const cardW=Math.round(commonW/ratio);
+  const cardH=Math.round(typicalH/ratio);
+  if(cardW<22||cardH<25)return null;
   const out=[];
-  const firstRow=median(rows.map((r,i)=>r.start-i*rowStep)) - (ch*ratio*.047);
-  // 이미지가 스크롤 중간에서 찍혔거나 하단이 끊겼을 때는 동일 규격을 유지하되
-  // 완전히 안 보이는 부분을 실제 아이템인 것처럼 자동 추출하지 않는다.
   for(let ri=0;ri<rows.length;ri++){
-    const visible=rows[ri].width;
-    const partial=visible<typicalH*.77 || (firstRow+ri*rowStep+ch*ratio)>h+2;
+    const rr=rows[ri];
+    // 스크린샷 하단에서 화면에 일부만 들어온 카드는 위치는 표시하지만 자동 저장하지 않는다.
+    const partial=rr.width<typicalH*.77;
     for(let ci=0;ci<cols.length;ci++){
-      const c=cols[ci];
-      const fullX=c.center/ratio-cw*.5;
-      const fullY=(firstRow+ri*rowStep)/ratio;
-      const width=Math.round(cw*.95),height=Math.round(ch*.95);
-      const x=Math.round(fullX+trimX),y=Math.round(fullY+trimY);
-      if(x<0||y<0||x+width>iw+2)continue;
-      if(y>=ih)continue;
+      const cc=cols[ci];
+      const x=Math.round(cc.start/ratio);
+      const y=Math.round(rr.start/ratio);
+      const width=cardW, height=cardH;
+      if(x<0||y<0||x+width>iw+1||y>=ih)continue;
       out.push({x,y,width,height,partial:partial||(y+height>ih),gridColumn:ci,gridRow:ri});
     }
   }
