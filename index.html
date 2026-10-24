@@ -2458,6 +2458,37 @@ window.closeAdmin=()=>{
 
 <div id="c_partialWarning" style="display:none;margin:10px 2px;color:#f5ce7d;font-size:12px;line-height:1.5"></div>
 
+<!-- 옷·머리·모자 카드 공통 컷팅 여백 조절: 감지 영역 자체는 건드리지 않습니다. -->
+<section id="c_trimPanel" style="margin:12px 0;padding:14px;border-radius:15px;border:1px solid #354563;background:#151e31;color:#e5eeff">
+ <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+  <strong style="font-size:15px">✂ 테두리 잘리는 정도</strong>
+  <button id="c_trimReset" type="button" style="background:#263a58;color:#e5eeff;border:1px solid #5873a0;border-radius:8px;padding:8px 12px;min-height:36px;font-size:12px">초기화</button>
+ </div>
+ <div style="display:flex;gap:15px;align-items:center;flex-wrap:wrap;margin-top:12px">
+  <div style="flex:1;min-width:170px">
+   <label for="c_trimAll" style="font-size:13px;display:flex;justify-content:space-between;margin-bottom:9px"><span>네 방향 동일하게 자르기</span><output id="c_trimAllValue">0px</output></label>
+   <input id="c_trimAll" type="range" min="0" max="12" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y">
+   <div style="display:flex;justify-content:space-between;font-size:11px;color:#9daecb;margin-top:5px"><span>0 = 카드 전체 유지</span><span>12 = 많이 자르기</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+   <canvas id="c_trimPreview" width="105" height="120" style="width:91px;max-height:116px;object-fit:contain;background:#101722;border:1px solid #52698c;border-radius:5px"></canvas>
+   <span style="max-width:92px;font-size:11px;color:#afbed8;line-height:1.55">실제 저장 범위 미리보기<br><span id="c_trimSize">사진 선택 전</span></span>
+  </div>
+ </div>
+ <details id="c_trimDetails" style="margin-top:12px;border-top:1px solid #354563;padding-top:10px">
+  <summary style="cursor:pointer;font-size:13px;color:#c5d8fc">방향별 미세 조절 (위·아래·좌·우)</summary>
+  <p style="font-size:12px;color:#a3b7d6;margin:8px 0">+ 값은 해당 쪽을 더 자르고, − 값은 카드 바깥쪽으로 넓힙니다. 회색 배경이 나타나면 해당 방향을 +로 조절하세요.</p>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 2px">
+   <label style="display:block;font-size:12px">위쪽 <output id="c_trimTopValue">0px</output><input id="c_trimTop" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
+   <label style="display:block;font-size:12px">아래쪽 <output id="c_trimBottomValue">0px</output><input id="c_trimBottom" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
+   <label style="display:block;font-size:12px">왼쪽 <output id="c_trimLeftValue">0px</output><input id="c_trimLeft" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
+   <label style="display:block;font-size:12px">오른쪽 <output id="c_trimRightValue">0px</output><input id="c_trimRight" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
+  </div>
+ </details>
+ <p style="color:#a8c9ff;font-size:11px;line-height:1.5;margin:10px 0 0">카드마다 다르게 포함된 오른쪽 회색·흰색 외곽을 최대 3px 자동 정리하고, 저장되는 사진 크기는 똑같이 맞춥니다.</p>
+ <p style="color:#9aafd2;font-size:11px;line-height:1.5;margin:10px 0 0">이 설정은 현재 사진뿐 아니라 사진함 전체에 적용됩니다. 조절 후 「선택한 옷 자르기」를 다시 누르면 저장 파일에도 반영됩니다.</p>
+</section>
+
 <div class="status-row">
 
  <div class="status">
@@ -3126,6 +3157,102 @@ let cards=[];
 let selectedCards=[];
 let croppedCards=[];
 
+// 자르기 설정은 사진 전체에 동일하게 적용한다. 원본 감지 좌표는 유지한다.
+const clothTrimIds=['All','Top','Bottom','Left','Right'];
+const clothTrimControl={};
+for(const key of clothTrimIds){clothTrimControl[key]=document.getElementById('c_trim'+key);}
+function clothTrimNumber(key){return Number(clothTrimControl[key]?.value)||0;}
+// 카드 격자는 스크린샷 축소/압축 과정에서 열마다 경계가 1~3px 어긋날 수 있다.
+// 원래 카드 배경과 화면의 밝은 회색 여백을 따로 검사해 오른쪽 바깥 픽셀만 교정한다.
+// 모든 저장 결과 크기는 카드의 공통 격자 크기로 유지한다.
+const clothImagePixelCache=new WeakMap();
+function getClothImagePixels(img){
+ let cached=clothImagePixelCache.get(img);
+ if(cached)return cached;
+ const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+ const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+ const ctx=canvas.getContext('2d',{willReadFrequently:true});
+ ctx.drawImage(img,0,0);
+ cached={data:ctx.getImageData(0,0,w,h).data,w,h};
+ clothImagePixelCache.set(img,cached);
+ return cached;
+}
+function clothRightFringePx(card,img){
+ // 다른 형태의 카드/구형 감지 영역에는 카드 격자 보정을 적용하지 않는다.
+ if(!Number.isInteger(card.gridColumn)||!Number.isInteger(card.gridRow))return 0;
+ const {data,w,h}=getClothImagePixels(img);
+ const xStart=Math.round(card.x),yStart=Math.round(card.y);
+ const xEnd=Math.round(card.x+card.width)-1;
+ const cardH=Math.round(card.height);
+ if(xEnd>=w||xEnd<1||yStart<0||yStart+cardH>h)return 0;
+ const isGrayOutside=(x)=>{
+  let checked=0,gray=0;
+  // 아이템/번호 장식 대신 카드의 중간 영역을 여러 행에서 검사.
+  for(let k=0;k<17;k++){
+   const y=Math.round(yStart+cardH*(.20+.60*k/16));
+   if(y<0||y>=h)continue;
+   const off=(y*w+x)*4,r=data[off],g=data[off+1],b=data[off+2];
+   if(r>168&&g>145&&b>158&&Math.abs(r-g)<48&&Math.abs(b-g)<48){gray++;}
+   checked++;
+  }
+  return checked>0&&gray/checked>=.70;
+ };
+ let correction=0;
+ // 물체가 아닌 회백색 스크린샷 배경으로 넘어간 픽셀만 제외.
+ // 3px를 넘겨 정상 카드 테두리나 아이템을 없애지 않음.
+ while(correction<3 && xEnd-correction>xStart+16 && isGrayOutside(xEnd-correction))correction++;
+ return correction;
+}
+function clothCropRect(card,img){
+ const common=clothTrimNumber('All');
+ const left=common+clothTrimNumber('Left');
+ const right=common+clothTrimNumber('Right');
+ const top=common+clothTrimNumber('Top');
+ const bottom=common+clothTrimNumber('Bottom');
+ const imgW=img.naturalWidth||img.width||imageCanvas.width;
+ const imgH=img.naturalHeight||img.height||imageCanvas.height;
+ const x0=Math.max(0,Math.min(imgW-1,Math.round(card.x+left)));
+ const y0=Math.max(0,Math.min(imgH-1,Math.round(card.y+top)));
+ const normalX1=Math.round(card.x+card.width-right);
+ const y1=Math.max(y0+1,Math.min(imgH,Math.round(card.y+card.height-bottom)));
+ const edgeFix=clothRightFringePx(card,img);
+ const x1=Math.max(x0+1,Math.min(imgW,normalX1-edgeFix));
+ // 오른쪽 외곽만 보정하고 결과 이미지는 모든 카드의 같은 폭으로 저장.
+ // 원본에서 최대 3px 차이만 보정하므로 장식 형태의 시각적 변형은 최소화.
+ const outputWidth=Math.max(1,Math.min(imgW,normalX1)-x0);
+ const outputHeight=y1-y0;
+ return {x:x0,y:y0,width:x1-x0,height:y1-y0,outputWidth,outputHeight,edgeFix};
+}
+function drawClothTrimPreview(){
+ const canvas=document.getElementById('c_trimPreview');
+ const label=document.getElementById('c_trimSize');
+ if(!canvas||!label)return;
+ const context=canvas.getContext('2d');
+ const photo=photos[currentIndex];
+ const card=selectedCards[0]||cards.find(c=>!c.partial)||cards[0];
+ if(!photo||!card){context.clearRect(0,0,canvas.width,canvas.height);label.textContent='사진 선택 전';return;}
+ const rect=clothCropRect(card,photo.image);
+ canvas.width=rect.outputWidth;canvas.height=rect.outputHeight;
+ context.imageSmoothingEnabled=true;
+ context.imageSmoothingQuality='high';
+ context.drawImage(photo.image,rect.x,rect.y,rect.width,rect.height,0,0,rect.outputWidth,rect.outputHeight);
+ label.textContent=rect.outputWidth+'×'+rect.outputHeight+'px'+(rect.edgeFix?' · 테두리 '+rect.edgeFix+'px 보정':'');
+}
+function updateClothTrim(){
+ for(const key of clothTrimIds){
+  const el=clothTrimControl[key];
+  const value=document.getElementById('c_trim'+key+'Value');
+  if(el&&value)value.textContent=(Number(el.value)>0&&key!=='All'?'+':'')+el.value+'px';
+ }
+ drawSelections();
+ drawClothTrimPreview();
+}
+for(const key of clothTrimIds){clothTrimControl[key].addEventListener('input',updateClothTrim);}
+document.getElementById('c_trimReset').addEventListener('click',()=>{
+ for(const key of clothTrimIds)clothTrimControl[key].value='0';
+ updateClothTrim();
+});
+
 document.getElementById("c_uploadLabel")
 .addEventListener("click",()=>fileInput.click());
 
@@ -3255,6 +3382,7 @@ function showPhoto(index){
  resizeSelectionCanvas();
  updateCount();
  drawSelections();
+ drawClothTrimPreview();
  updatePhotoButtons();
 
  currentPhoto.textContent=
@@ -3815,7 +3943,7 @@ function chooseClothesAt(clientX,clientY){
  if(existing>=0)selectedCards.splice(existing,1);
  else selectedCards.push(found);
  photos[currentIndex].selected=selectedCards;
- updateCount();updatePhotoButtons();drawSelections();
+ updateCount();updatePhotoButtons();drawSelections();drawClothTrimPreview();
 }
 if(window.PointerEvent){
  imageCanvas.addEventListener('pointerdown',e=>{
@@ -3845,14 +3973,15 @@ function drawSelections(){
  );
 
  selectedCards.forEach(card=>{
+  const rect=clothCropRect(card,image);
 
   selectionCtx.fillStyle="rgba(77,141,255,.24)";
 
   selectionCtx.fillRect(
-   card.x,
-   card.y,
-   card.width,
-   card.height
+   rect.x,
+   rect.y,
+   rect.width,
+   rect.height
   );
 
   selectionCtx.strokeStyle="#5c98ff";
@@ -3865,10 +3994,10 @@ function drawSelections(){
   );
 
   selectionCtx.strokeRect(
-   card.x,
-   card.y,
-   card.width,
-   card.height
+   rect.x,
+   rect.y,
+   rect.width,
+   rect.height
   );
  });
 }
@@ -3887,6 +4016,7 @@ window.c_clearCurrentSelection=()=>{
  updateCount();
  updatePhotoButtons();
  drawSelections();
+ drawClothTrimPreview();
 };
 
 window.c_autoExtractAll=async()=>{
@@ -3946,19 +4076,21 @@ window.c_extractSelected=()=>{
   const img=item.photo.image;
 
   const cropCanvas=document.createElement("canvas");
+  const region=clothCropRect(card,img);
+  const cropW=region.outputWidth;
+  const cropH=region.outputHeight;
 
-  const cropW=Math.round(card.width);
-  const cropH=Math.round(card.height);
-
-  cropCanvas.width=Math.max(1,cropW);
-  cropCanvas.height=Math.max(1,cropH);
-
-  cropCanvas.getContext("2d").drawImage(
+  cropCanvas.width=cropW;
+  cropCanvas.height=cropH;
+  const cropCtx=cropCanvas.getContext("2d");
+  cropCtx.imageSmoothingEnabled=true;
+  cropCtx.imageSmoothingQuality='high';
+  cropCtx.drawImage(
    img,
-   Math.round(card.x),
-   Math.round(card.y),
-   cropW,
-   cropH,
+   region.x,
+   region.y,
+   region.width,
+   region.height,
    0,
    0,
    cropW,
