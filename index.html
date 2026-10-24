@@ -2458,36 +2458,66 @@ window.closeAdmin=()=>{
 
 <div id="c_partialWarning" style="display:none;margin:10px 2px;color:#f5ce7d;font-size:12px;line-height:1.5"></div>
 
-<!-- 옷·머리·모자 카드 공통 컷팅 여백 조절: 감지 영역 자체는 건드리지 않습니다. -->
+<!-- 옷·머리·모자: 위/아래/왼쪽/오른쪽 각각 독립 조절 -->
 <section id="c_trimPanel" style="margin:12px 0;padding:14px;border-radius:15px;border:1px solid #354563;background:#151e31;color:#e5eeff">
  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-  <strong style="font-size:15px">✂ 테두리 잘리는 정도</strong>
-  <button id="c_trimReset" type="button" style="background:#263a58;color:#e5eeff;border:1px solid #5873a0;border-radius:8px;padding:8px 12px;min-height:36px;font-size:12px">초기화</button>
- </div>
- <div style="display:flex;gap:15px;align-items:center;flex-wrap:wrap;margin-top:12px">
-  <div style="flex:1;min-width:170px">
-   <label for="c_trimAll" style="font-size:13px;display:flex;justify-content:space-between;margin-bottom:9px"><span>네 방향 동일하게 자르기</span><output id="c_trimAllValue">0px</output></label>
-   <input id="c_trimAll" type="range" min="0" max="12" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y">
-   <div style="display:flex;justify-content:space-between;font-size:11px;color:#9daecb;margin-top:5px"><span>0 = 카드 전체 유지</span><span>12 = 많이 자르기</span></div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-   <canvas id="c_trimPreview" width="105" height="120" style="width:91px;max-height:116px;object-fit:contain;background:#101722;border:1px solid #52698c;border-radius:5px"></canvas>
-   <span style="max-width:92px;font-size:11px;color:#afbed8;line-height:1.55">실제 저장 범위 미리보기<br><span id="c_trimSize">사진 선택 전</span></span>
+  <strong style="font-size:15px">✂ 테두리 자르기 · 방향별 독립 조절</strong>
+  <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+   <button id="c_trimSave" type="button" style="background:#315f9b;color:#f2f7ff;border:1px solid #72a6ed;border-radius:8px;padding:8px 12px;min-height:36px;font-size:12px;font-weight:750">설정 저장</button>
+   <button id="c_trimReset" type="button" style="background:#263a58;color:#e5eeff;border:1px solid #5873a0;border-radius:8px;padding:8px 12px;min-height:36px;font-size:12px">4방향 초기화</button>
   </div>
  </div>
- <details id="c_trimDetails" style="margin-top:12px;border-top:1px solid #354563;padding-top:10px">
-  <summary style="cursor:pointer;font-size:13px;color:#c5d8fc">방향별 미세 조절 (위·아래·좌·우)</summary>
-  <p style="font-size:12px;color:#a3b7d6;margin:8px 0">+ 값은 해당 쪽을 더 자르고, − 값은 카드 바깥쪽으로 넓힙니다. 회색 배경이 나타나면 해당 방향을 +로 조절하세요.</p>
-  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 2px">
-   <label style="display:block;font-size:12px">위쪽 <output id="c_trimTopValue">0px</output><input id="c_trimTop" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
-   <label style="display:block;font-size:12px">아래쪽 <output id="c_trimBottomValue">0px</output><input id="c_trimBottom" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
-   <label style="display:block;font-size:12px">왼쪽 <output id="c_trimLeftValue">0px</output><input id="c_trimLeft" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
-   <label style="display:block;font-size:12px">오른쪽 <output id="c_trimRightValue">0px</output><input id="c_trimRight" type="range" min="-8" max="12" step="1" value="0" style="display:block;width:100%;accent-color:#86b3ff"></label>
+ <p style="font-size:12px;color:#b8cae9;line-height:1.55;margin:10px 0 12px">위·아래·왼쪽·오른쪽은 서로 영향을 주지 않습니다. <b style="color:#e7f1ff">+는 더 자르기</b>, <b style="color:#e7f1ff">−는 덜 자르기</b>입니다. 숫자는 원본 픽셀(px) 기준입니다.</p>
+ <div id="c_trimGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+  <div style="min-width:0;border:1px solid #354866;background:#1a2740;padding:10px;border-radius:10px">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:10px"><label for="c_trimTop" style="font-weight:750;font-size:13px">위쪽</label><output id="c_trimTopValue" style="font-size:13px;color:#a4c7ff;font-weight:800">0px</output></div>
+   <input id="c_trimTop" type="range" min="-12" max="20" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y" aria-label="위쪽 테두리 자르기">
+   <div style="display:flex;gap:6px;align-items:center;margin-top:9px">
+    <button type="button" data-trim-side="Top" data-delta="-1" aria-label="위쪽 1픽셀 덜 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">−</button>
+    <input id="c_trimTopNumber" type="number" inputmode="numeric" min="-12" max="20" step="1" value="0" aria-label="위쪽 픽셀 입력" style="min-width:0;width:100%;height:37px;text-align:center;background:#111b30;color:#e8f2ff;border:1px solid #637ba4;border-radius:8px;font-size:15px">
+    <button type="button" data-trim-side="Top" data-delta="1" aria-label="위쪽 1픽셀 더 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">+</button>
+   </div>
   </div>
- </details>
- <p style="color:#a8c9ff;font-size:11px;line-height:1.5;margin:10px 0 0">카드마다 다르게 포함된 오른쪽 회색·흰색 외곽을 최대 3px 자동 정리하고, 저장되는 사진 크기는 똑같이 맞춥니다.</p>
- <p style="color:#9aafd2;font-size:11px;line-height:1.5;margin:10px 0 0">이 설정은 현재 사진뿐 아니라 사진함 전체에 적용됩니다. 조절 후 「선택한 옷 자르기」를 다시 누르면 저장 파일에도 반영됩니다.</p>
+  <div style="min-width:0;border:1px solid #354866;background:#1a2740;padding:10px;border-radius:10px">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:10px"><label for="c_trimBottom" style="font-weight:750;font-size:13px">아래쪽</label><output id="c_trimBottomValue" style="font-size:13px;color:#a4c7ff;font-weight:800">0px</output></div>
+   <input id="c_trimBottom" type="range" min="-12" max="20" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y" aria-label="아래쪽 테두리 자르기">
+   <div style="display:flex;gap:6px;align-items:center;margin-top:9px">
+    <button type="button" data-trim-side="Bottom" data-delta="-1" aria-label="아래쪽 1픽셀 덜 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">−</button>
+    <input id="c_trimBottomNumber" type="number" inputmode="numeric" min="-12" max="20" step="1" value="0" aria-label="아래쪽 픽셀 입력" style="min-width:0;width:100%;height:37px;text-align:center;background:#111b30;color:#e8f2ff;border:1px solid #637ba4;border-radius:8px;font-size:15px">
+    <button type="button" data-trim-side="Bottom" data-delta="1" aria-label="아래쪽 1픽셀 더 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">+</button>
+   </div>
+  </div>
+  <div style="min-width:0;border:1px solid #354866;background:#1a2740;padding:10px;border-radius:10px">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:10px"><label for="c_trimLeft" style="font-weight:750;font-size:13px">왼쪽</label><output id="c_trimLeftValue" style="font-size:13px;color:#a4c7ff;font-weight:800">0px</output></div>
+   <input id="c_trimLeft" type="range" min="-12" max="20" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y" aria-label="왼쪽 테두리 자르기">
+   <div style="display:flex;gap:6px;align-items:center;margin-top:9px">
+    <button type="button" data-trim-side="Left" data-delta="-1" aria-label="왼쪽 1픽셀 덜 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">−</button>
+    <input id="c_trimLeftNumber" type="number" inputmode="numeric" min="-12" max="20" step="1" value="0" aria-label="왼쪽 픽셀 입력" style="min-width:0;width:100%;height:37px;text-align:center;background:#111b30;color:#e8f2ff;border:1px solid #637ba4;border-radius:8px;font-size:15px">
+    <button type="button" data-trim-side="Left" data-delta="1" aria-label="왼쪽 1픽셀 더 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">+</button>
+   </div>
+  </div>
+  <div style="min-width:0;border:1px solid #354866;background:#1a2740;padding:10px;border-radius:10px">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:10px"><label for="c_trimRight" style="font-weight:750;font-size:13px">오른쪽</label><output id="c_trimRightValue" style="font-size:13px;color:#a4c7ff;font-weight:800">0px</output></div>
+   <input id="c_trimRight" type="range" min="-12" max="20" step="1" value="0" style="width:100%;accent-color:#86b3ff;touch-action:pan-y" aria-label="오른쪽 테두리 자르기">
+   <div style="display:flex;gap:6px;align-items:center;margin-top:9px">
+    <button type="button" data-trim-side="Right" data-delta="-1" aria-label="오른쪽 1픽셀 덜 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">−</button>
+    <input id="c_trimRightNumber" type="number" inputmode="numeric" min="-12" max="20" step="1" value="0" aria-label="오른쪽 픽셀 입력" style="min-width:0;width:100%;height:37px;text-align:center;background:#111b30;color:#e8f2ff;border:1px solid #637ba4;border-radius:8px;font-size:15px">
+    <button type="button" data-trim-side="Right" data-delta="1" aria-label="오른쪽 1픽셀 더 자르기" style="min-width:39px;min-height:37px;font-size:20px;color:white;background:#344766;border:1px solid #5e769e;border-radius:8px">+</button>
+   </div>
+  </div>
+ </div>
+ <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px">
+  <canvas id="c_trimPreview" width="105" height="120" style="width:98px;max-height:128px;object-fit:contain;background:#101722;border:1px solid #52698c;border-radius:5px"></canvas>
+  <div style="flex:1;min-width:135px;font-size:12px;line-height:1.55;color:#bfd0ec">실제 저장 범위 미리보기<br><strong id="c_trimSize" style="color:#b1d1ff">사진 선택 전</strong><br><span style="font-size:11px;color:#9caccc">설정 변경 후 「선택한 옷 자르기」를 다시 누르면 결과에 반영됩니다.</span></div>
+ </div>
+ <div id="c_trimSaveStatus" role="status" aria-live="polite" style="font-size:12px;color:#9ec9ac;margin-top:12px;line-height:1.5">설정 확인 중…</div>
+ <p style="font-size:11px;line-height:1.5;color:#9faeca;margin:7px 0 0">위 설정은 모든 사진에 적용되고, 조절 즉시 이 브라우저에 자동 저장됩니다. 다음 접속 시 자동으로 복원됩니다. 다른 기기나 브라우저로는 동기화되지 않습니다. 카드별 오른쪽 바깥 픽셀 자동 보정은 유지됩니다.</p>
 </section>
+
+<div style="padding:11px 13px;margin:10px 0 14px;border-radius:12px;background:#17253a;border:1px solid #354965;color:#bdd0ed;font-size:12px;line-height:1.65">
+ <strong style="color:#e2ecff">카카오톡에 사진 보내기</strong><br>
+ 「공유 / 저장」을 눌렀는데 카카오톡이 목록에 없다면 결과 카드의 <b>「JPG 직접 저장」</b>을 누르고, 삼성 <b>내 파일 → 다운로드 → 사진 선택 → 공유 → 카카오톡</b> 순서로 보내세요. 여러 장 공유는 앱에 따라 지원되지 않을 수 있습니다.
+</div>
 
 <div class="status-row">
 
@@ -2616,6 +2646,7 @@ window.closeAdmin=()=>{
  <button id="g_saveAllTop" type="button" class="photo-button" onclick="window.g_saveAllCards()" disabled style="min-height:44px;background:#869fea;color:#0a1632;font-weight:800;white-space:nowrap">📥 모두 저장</button>
 </div>
 
+<div style="font-size:11px;color:#b3c9e6;padding:8px 6px 12px;line-height:1.6">카카오톡이 공유창에 없으면 각 결과의 「JPG 직접 저장」을 누른 뒤 삼성 「내 파일 → 다운로드 → 공유 → 카카오톡」으로 전송하세요.</div>
 <div id="g_results" class="results">
  <div class="empty">
   <div>◇</div>
@@ -3084,6 +3115,28 @@ async function downloadMultipleFiles(dataURLs, prefix) {
 }
 
 
+// 카카오톡이 공유 대상에 없더라도 JPG를 단말에 직접 저장해
+// 삼성 「내 파일 > 다운로드」 또는 갤러리에서 카카오톡으로 전송할 수 있습니다.
+// 공유 대상 앱 목록 자체는 OS가 정하므로 웹사이트에서 강제로 카카오톡을 추가할 수 없습니다.
+function saveJpgForKakao(dataURL, filename){
+  const mimeMatch=/^data:(image\/(?:jpeg|png|webp));base64,/i.exec(dataURL);
+  const mime=mimeMatch?mimeMatch[1].toLowerCase():'image/jpeg';
+  const ext=mime==='image/png'?'.png':mime==='image/webp'?'.webp':'.jpg';
+  const clean=String(filename||'item').replace(/\.(?:jpg|jpeg|png|webp)$/i,'');
+  const arr=dataURL.split(',');
+  const binary=atob(arr[1]);
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  const url=URL.createObjectURL(new Blob([bytes],{type:mime}));
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=clean+ext;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},12000);
+}
+
 async function shareFile(dataURL, filename) {
   await downloadFile(dataURL, filename);
 }
@@ -3158,10 +3211,41 @@ let selectedCards=[];
 let croppedCards=[];
 
 // 자르기 설정은 사진 전체에 동일하게 적용한다. 원본 감지 좌표는 유지한다.
-const clothTrimIds=['All','Top','Bottom','Left','Right'];
+const clothTrimIds=['Top','Bottom','Left','Right'];
 const clothTrimControl={};
 for(const key of clothTrimIds){clothTrimControl[key]=document.getElementById('c_trim'+key);}
 function clothTrimNumber(key){return Number(clothTrimControl[key]?.value)||0;}
+// 서버나 계정 동기화가 아닌, 이 사이트/브라우저의 localStorage 영구 설정.
+const clothTrimSettingsKey='sna-clothes-trim-independent-v1';
+const clothTrimStatus=document.getElementById('c_trimSaveStatus');
+function saveClothTrimSettings(){
+ try{
+  const data={version:1};
+  for(const side of clothTrimIds)data[side]=clampClothTrim(side,clothTrimControl[side].value);
+  localStorage.setItem(clothTrimSettingsKey,JSON.stringify(data));
+  if(clothTrimStatus){clothTrimStatus.textContent='✓ 자동 저장됨 · 이 기기에서 다음 접속 시 복원';clothTrimStatus.style.color='#9ed9b0';}
+  return true;
+ }catch(err){
+  if(clothTrimStatus){clothTrimStatus.textContent='설정을 저장하지 못했습니다. 브라우저 저장 권한/시크릿 모드를 확인하세요.';clothTrimStatus.style.color='#ffba87';}
+  return false;
+ }
+}
+function restoreClothTrimSettings(){
+ try{
+  const raw=localStorage.getItem(clothTrimSettingsKey);
+  if(!raw)return false;
+  const data=JSON.parse(raw);
+  if(!data||data.version!==1)return false;
+  for(const side of clothTrimIds){
+   if(typeof data[side]==='number'&&Number.isFinite(data[side]))clothTrimControl[side].value=String(clampClothTrim(side,data[side]));
+  }
+  if(clothTrimStatus){clothTrimStatus.textContent='✓ 저장된 설정 불러옴';clothTrimStatus.style.color='#9ed9b0';}
+  return true;
+ }catch(err){
+  if(clothTrimStatus){clothTrimStatus.textContent='저장된 설정을 불러올 수 없습니다. 조절하면 다시 저장됩니다.';clothTrimStatus.style.color='#ffba87';}
+  return false;
+ }
+}
 // 카드 격자는 스크린샷 축소/압축 과정에서 열마다 경계가 1~3px 어긋날 수 있다.
 // 원래 카드 배경과 화면의 밝은 회색 여백을 따로 검사해 오른쪽 바깥 픽셀만 교정한다.
 // 모든 저장 결과 크기는 카드의 공통 격자 크기로 유지한다.
@@ -3204,11 +3288,10 @@ function clothRightFringePx(card,img){
  return correction;
 }
 function clothCropRect(card,img){
- const common=clothTrimNumber('All');
- const left=common+clothTrimNumber('Left');
- const right=common+clothTrimNumber('Right');
- const top=common+clothTrimNumber('Top');
- const bottom=common+clothTrimNumber('Bottom');
+ const left=clothTrimNumber('Left');
+ const right=clothTrimNumber('Right');
+ const top=clothTrimNumber('Top');
+ const bottom=clothTrimNumber('Bottom');
  const imgW=img.naturalWidth||img.width||imageCanvas.width;
  const imgH=img.naturalHeight||img.height||imageCanvas.height;
  const x0=Math.max(0,Math.min(imgW-1,Math.round(card.x+left)));
@@ -3238,20 +3321,67 @@ function drawClothTrimPreview(){
  context.drawImage(photo.image,rect.x,rect.y,rect.width,rect.height,0,0,rect.outputWidth,rect.outputHeight);
  label.textContent=rect.outputWidth+'×'+rect.outputHeight+'px'+(rect.edgeFix?' · 테두리 '+rect.edgeFix+'px 보정':'');
 }
+function clampClothTrim(key,value){
+ const el=clothTrimControl[key];
+ if(!el)return 0;
+ return Math.max(Number(el.min),Math.min(Number(el.max),Math.round(Number(value)||0)));
+}
+function setClothTrim(key,next){
+ if(!clothTrimControl[key])return;
+ clothTrimControl[key].value=String(clampClothTrim(key,next));
+ updateClothTrim();
+}
 function updateClothTrim(){
  for(const key of clothTrimIds){
   const el=clothTrimControl[key];
   const value=document.getElementById('c_trim'+key+'Value');
-  if(el&&value)value.textContent=(Number(el.value)>0&&key!=='All'?'+':'')+el.value+'px';
+  const number=document.getElementById('c_trim'+key+'Number');
+  if(!el)continue;
+  const n=Number(el.value)||0;
+  if(value)value.textContent=(n>0?'+':'')+n+'px';
+  if(number&&document.activeElement!==number)number.value=String(n);
  }
  drawSelections();
  drawClothTrimPreview();
+ saveClothTrimSettings();
 }
-for(const key of clothTrimIds){clothTrimControl[key].addEventListener('input',updateClothTrim);}
+for(const key of clothTrimIds){
+ clothTrimControl[key].addEventListener('input',updateClothTrim);
+ const num=document.getElementById('c_trim'+key+'Number');
+ if(num){
+  num.addEventListener('input',()=>{if(num.value!=='')setClothTrim(key,num.value);});
+  num.addEventListener('change',()=>{setClothTrim(key,num.value);num.value=clothTrimControl[key].value;});
+ }
+}
+for(const button of document.querySelectorAll('[data-trim-side][data-delta]')){
+ button.addEventListener('click',()=>{
+  const key=button.getAttribute('data-trim-side');
+  setClothTrim(key,clothTrimNumber(key)+Number(button.getAttribute('data-delta')));
+  const num=document.getElementById('c_trim'+key+'Number');
+  if(num)num.value=clothTrimControl[key].value;
+ });
+}
 document.getElementById('c_trimReset').addEventListener('click',()=>{
- for(const key of clothTrimIds)clothTrimControl[key].value='0';
+ for(const key of clothTrimIds){
+  clothTrimControl[key].value='0';
+  const num=document.getElementById('c_trim'+key+'Number');
+  if(num)num.value='0';
+ }
  updateClothTrim();
 });
+document.getElementById('c_trimSave').addEventListener('click',()=>{
+ if(saveClothTrimSettings()){
+  clothTrimStatus.textContent='✓ 현재 상·하·좌·우 설정 저장 완료';
+ }
+});
+// 로딩 초기에 저장 값을 복원한다. 사진을 추가하지 않아도 컨트롤은 복원된다.
+restoreClothTrimSettings();
+for(const side of clothTrimIds){
+ const val=clothTrimNumber(side),readout=document.getElementById('c_trim'+side+'Value');
+ const num=document.getElementById('c_trim'+side+'Number');
+ if(readout)readout.textContent=(val>0?'+':'')+val+'px';
+ if(num)num.value=String(val);
+}
 
 document.getElementById("c_uploadLabel")
 .addEventListener("click",()=>fileInput.click());
@@ -4115,7 +4245,11 @@ window.c_extractSelected=()=>{
    </div>
    <button class="save"
     onclick="shareFile('${dataURL}','clothes_${index+1}.jpg')">
-    📥 JPG 저장
+    ↗ 공유 / 저장
+   </button>
+   <button class="save" style="margin-top:6px;background:#253b59;color:#dbe9ff"
+    onclick="saveJpgForKakao('${dataURL}','clothes_${index+1}.jpg')">
+    📥 JPG 직접 저장
    </button>
   `;
 
@@ -4945,7 +5079,11 @@ window.g_extractSelected=()=>{
    </div>
    <button class="save"
     onclick="shareFile('${dataURL}','gun_${index+1}.jpg')">
-    📥 JPG 저장
+    ↗ 공유 / 저장
+   </button>
+   <button class="save" style="margin-top:6px;background:#253b59;color:#dbe9ff"
+    onclick="saveJpgForKakao('${dataURL}','gun_${index+1}.jpg')">
+    📥 JPG 직접 저장
    </button>
   `;
 
