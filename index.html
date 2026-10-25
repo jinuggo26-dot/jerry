@@ -2690,7 +2690,7 @@ window.closeAdmin=()=>{
    <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 추출 결과에서 원본과 비교한 뒤 저장하세요. 정밀 보정에서 살릴 부분과 지울 배경을 칠한 뒤 정밀 재분리를 누를 수 있습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
-   <button type="button" id="kl-external-manual" class="photo-button" style="margin:11px 0;width:100%;background:#304c75;color:white;padding:13px">외부 GrabCut · 원본에서 직접 보정</button>
+   <button type="button" id="kl-external-manual" class="photo-button" style="margin:11px 0;width:100%;background:#304c75;color:white;padding:13px">원본에서 자동 배경 제거</button>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button>
    <p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p></div>
  </div>
@@ -8001,44 +8001,31 @@ async function encodeResult(r){
  }
  // Render Python + OpenCV GrabCut. The source screenshot is sent to a hosted editor,
  // the resulting transparent PNG returns directly to the current result card.
- const SNA_KILL_SERVER_URL=''; // Optional: set to https://YOUR-SERVER.onrender.com for all users.
+ const SNA_KILL_SERVER_URL='https://jerry-wbjm.onrender.com'; // 모든 사용자 자동 연결. 서버 주소 입력 불필요.
  let exLayer=null,exFrame=null,exOrigin='',exPending=null,exTarget=null,exCrop=null,exWorking=false;
  function exStatus(message){const node=exLayer?.querySelector('#kl-cloud-state');if(node)node.textContent=message;}
  function exGetServer(){
-  let address=SNA_KILL_SERVER_URL||localStorage.getItem('sna-cloud-grabcut-url')||'';
-  if(!address){address=prompt('외부 킬로그 서버 주소 입력 (Render에서 만든 https://...onrender.com)', '')||'';}
-  if(!address.trim())return '';
-  try{
-   const u=new URL(address.trim());
-   if(u.protocol!=='https:' && !(u.hostname==='127.0.0.1'||u.hostname==='localhost'))throw Error('HTTPS 서버 주소를 입력해 주세요.');
-   address=u.origin;
-   localStorage.setItem('sna-cloud-grabcut-url',address);
-   return address;
-  }catch(e){alert('서버 주소가 올바르지 않아. https://...onrender.com 형태로 입력해.');return '';}
+  // 주소는 Render 서버로 고정. 브라우저에 저장된 구형 주소도 사용하지 않음.
+  try {return new URL(SNA_KILL_SERVER_URL).origin;}
+  catch(e){alert('외부 배경 제거 서버 설정을 확인해 주세요.');return '';}
  }
  function exModal(){
   if(exLayer)return;
   exLayer=document.createElement('div');exLayer.id='sna-kill-cloud-modal';
   exLayer.style.cssText='display:none;position:fixed;inset:0;z-index:2147483600;background:#070d19;color:#eef6ff;flex-direction:column;font-family:system-ui,-apple-system,sans-serif';
   exLayer.innerHTML=`<div style="padding:9px;background:#12213b;display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-bottom:1px solid #476080">
-  <strong style="flex:1 1 120px">외부 GrabCut 보정</strong>
-  <button id="kl-cloud-url" type="button" style="padding:10px;background:#304c75;border-radius:8px;color:white">서버 변경</button>
+  <strong style="flex:1 1 120px">킬로그 자동 배경 제거</strong>
   <button id="kl-cloud-close" type="button" style="padding:10px;background:#724054;border-radius:8px;color:white">닫기</button>
   <span id="kl-cloud-state" style="flex:1 1 100%;font-size:12px;color:#adcef3">서버를 여는 중…</span></div>
   <iframe id="kl-cloud-frame" title="외부 킬로그 GrabCut 편집기" style="width:100%;flex:1;min-height:0;border:0;background:#070d19" allow="clipboard-write"></iframe>`;
   document.body.append(exLayer);exFrame=exLayer.querySelector('iframe');
   exLayer.querySelector('#kl-cloud-close').onclick=()=>{exLayer.style.display='none';exFrame.src='about:blank';exOrigin='';exPending=null;exTarget=null;exWorking=false;};
-  exLayer.querySelector('#kl-cloud-url').onclick=()=>{
-   const next=prompt('Render 서버 주소 변경',localStorage.getItem('sna-cloud-grabcut-url')||'');
-   if(next!==null){localStorage.removeItem('sna-cloud-grabcut-url');if(next.trim())localStorage.setItem('sna-cloud-grabcut-url',next.trim());
-    exLayer.querySelector('#kl-cloud-close').click();exOpen(null);}
-  };
  }
  async function exOpen(r){
   const origin=exGetServer();if(!origin)return;
   const index=r?.photo??active;
   const photo=photos[index];if(!photo?.image){alert('먼저 원본 사진을 추가해 주세요.');return;}
-  exModal();exTarget=r||null;exOrigin=origin;exWorking=true;exLayer.style.display='flex';exStatus('원본 킬로그 이미지 준비 중…');
+  exModal();exTarget=r||null;exOrigin=origin;exWorking=true;exLayer.style.display='flex';exStatus('원본 이미지 준비 중…');
   try{
    const image=photo.image,W=image.naturalWidth,H=image.naturalHeight;
    const b=r?.meta?.cloudOrigBounds||r?.bounds;
@@ -8089,130 +8076,20 @@ async function encodeResult(r){
   if(newResult)results.push(r);
   exLayer.querySelector('#kl-cloud-close').click();
   updatePhotoCounts();resultView();drawSelections();window.SnaDraft?.queue('kill');
-  status('외부 GrabCut 보정 결과가 적용됐어. 추출 결과에서 미리보기·저장이 가능해.');
+  status('자동 배경 제거 결과가 적용됐어. 미리보기에서 확인한 뒤 저장하면 돼.');
  }
  window.addEventListener('message',e=>{
   if(!exFrame||!exOrigin||e.origin!==exOrigin||e.source!==exFrame.contentWindow)return;
   if(e.data?.type==='sna-kill:ready' && exPending){
    const payload=exPending;exPending=null;
    exFrame.contentWindow.postMessage(payload,exOrigin,[payload.data]);
-   exStatus('킬로그 원본을 전달했어. 파란 영역과 살리기·지우기를 확인해.');
+   exStatus('자동 배경 제거 중… 완료되면 결과를 확인하고 적용해 주세요.');
   }else if(e.data?.type==='sna-kill:result' && e.data.data instanceof ArrayBuffer && exWorking){
    exWorking=false;exStatus('보정 결과 가져오는 중…');
    exAccept(e.data.data).catch(err=>{exStatus('오류: '+err.message);exWorking=true;});
   }
  });
  $('kl-external-manual').onclick=()=>exOpen(null);
- // Photopea 정밀 보정: 원본 이미지에서 수정 후 해당 결과로 PNG 복귀
- const PP_ORIGIN='https://www.photopea.com';
- let ppLayer=null,ppFrame=null,ppMessage=null,ppResult=null,ppCrop=null,ppReady=false,ppPhase='idle',ppPending=null,ppBusy=false;
- function ppSetStatus(text){if(ppMessage)ppMessage.textContent=text;}
- function ppInit(){
-  if(ppLayer)return;
-  ppLayer=document.createElement('div');ppLayer.id='kl-photopea-layer';
-  ppLayer.style.cssText='display:none;position:fixed;inset:0;z-index:2147483000;background:#070b15;flex-direction:column;color:white;font-family:system-ui,-apple-system,sans-serif';
-  ppLayer.innerHTML=`<div style="padding:9px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:#122039;border-bottom:1px solid #456080">
-  <button id="pp-kl-return" type="button" style="padding:12px 9px;flex:1 1 138px;background:#88b9ff;color:#101729;border-radius:9px;font-weight:800">보정 완료 → 가져오기</button>
-  <button id="pp-kl-magic" type="button" style="padding:12px 9px;flex:1 1 100px;background:#304d70;color:white;border-radius:9px">Magic Cut 열기</button>
-  <button id="pp-kl-whole" type="button" style="padding:12px 9px;flex:1 1 126px;background:#304d70;color:white;border-radius:9px">원본 전체 열기</button>
-  <button id="pp-kl-close" type="button" style="padding:12px 9px;flex:1 1 58px;background:#613346;color:white;border-radius:9px">닫기</button>
-  <span id="pp-kl-status" style="width:100%;font-size:12px;line-height:1.5;color:#cfe1f5">Photopea 준비 중…</span></div>
-  <iframe id="pp-kl-frame" title="Photopea 정밀 배경 제거" style="flex:1;min-height:0;width:100%;border:0;background:#151a25" allow="clipboard-read; clipboard-write"></iframe>`;
-  document.body.appendChild(ppLayer);
-  ppFrame=ppLayer.querySelector('#pp-kl-frame');ppMessage=ppLayer.querySelector('#pp-kl-status');
-  ppLayer.querySelector('#pp-kl-close').addEventListener('click',ppClose);
-  ppLayer.querySelector('#pp-kl-magic').addEventListener('click',()=>{
-   if(!ppReady||ppPhase==='loading'||ppPhase==='sending'){ppSetStatus('이미지를 불러오는 중입니다.');return;}
-   ppFrame.contentWindow.postMessage('app.showWindow("magiccut");',PP_ORIGIN);
-   ppSetStatus('Magic Cut에서 초록색=살리기, 빨간색=지우기. 완료한 후 적용(OK)을 누르세요.');
-  });
-  ppLayer.querySelector('#pp-kl-whole').addEventListener('click',()=>ppLoadOriginal(true));
-  ppLayer.querySelector('#pp-kl-return').addEventListener('click',()=>{
-   if(!ppReady||ppPhase==='loading'||ppPhase==='sending'||ppBusy){ppSetStatus('이미지 전송이 완료된 후 눌러 주세요.');return;}
-   ppPhase='exporting';ppBusy=true;ppSetStatus('Photopea에서 투명 PNG를 가져오는 중입니다…');
-   ppFrame.contentWindow.postMessage('app.activeDocument.saveToOE("png");',PP_ORIGIN);
-  });
- }
- function ppClose(){
-  if(ppLayer)ppLayer.style.display='none';
-  if(ppFrame){ppFrame.src='about:blank';}
-  ppReady=false;ppPhase='idle';ppPending=null;ppBusy=false;ppResult=null;
- }
- async function ppLoadOriginal(whole){
-  if(!ppResult)return;
-  const photo=photos[ppResult.photo];if(!photo?.image){ppSetStatus('원본 사진을 불러오지 못했습니다.');return;}
-  const im=photo.image,W=im.naturalWidth,H=im.naturalHeight,b=ppResult.bounds||{x:ppResult.sourceX,y:ppResult.sourceY,w:ppResult.master.width,h:ppResult.master.height};
-  let x=0,y=0,w=W,h=H;
-  if(!whole){
-   const padx=Math.max(130,Math.round(b.w*.5)),pady=Math.max(80,Math.round(b.h*1.65));
-   x=clamp(Math.floor(b.x-padx),0,W-1);y=clamp(Math.floor(b.y-pady),0,H-1);
-   const x2=clamp(Math.ceil(b.x+b.w+padx),x+1,W),y2=clamp(Math.ceil(b.y+b.h+pady),y+1,H);
-   w=x2-x;h=y2-y;
-  }
-  const cropCanvas=document.createElement('canvas');cropCanvas.width=w;cropCanvas.height=h;
-  cropCanvas.getContext('2d').drawImage(im,x,y,w,h,0,0,w,h);
-  const blob=await new Promise(res=>cropCanvas.toBlob(res,'image/png'));
-  if(!blob){ppSetStatus('원본 사진 변환에 실패했습니다.');return;}
-  ppCrop={x,y,w,h};ppPending=await blob.arrayBuffer();
-  ppReady=false;ppBusy=false;ppPhase='loading';ppSetStatus('Photopea를 불러오는 중입니다…');
-  ppFrame.src=PP_ORIGIN;
- }
- async function ppOpenResult(r){
-  ppInit();ppResult=r;ppLayer.style.display='flex';
-  try{await ppLoadOriginal(false);}catch(err){console.error(err);ppSetStatus('원본 이미지를 준비하지 못했습니다.');}
- }
- async function ppAccept(buffer){
-  if(!ppResult||!ppCrop)throw Error('원본 결과가 없습니다.');
-  const imgBlob=new Blob([buffer],{type:'image/png'});
-  const bmp=await createImageBitmap(imgBlob);
-  const master=document.createElement('canvas');master.width=bmp.width;master.height=bmp.height;
-  const context=master.getContext('2d',{willReadFrequently:true});context.drawImage(bmp,0,0);bmp.close?.();
-  const data=context.getImageData(0,0,master.width,master.height).data;
-  let l=master.width,t=master.height,rr=-1,bb=-1,transparent=0;
-  for(let yy=0;yy<master.height;yy++)for(let xx=0;xx<master.width;xx++){
-   const a=data[(yy*master.width+xx)*4+3];
-   if(a<8){transparent++;continue;}
-   if(xx<l)l=xx;if(xx>rr)rr=xx;if(yy<t)t=yy;if(yy>bb)bb=yy;
-  }
-  if(rr<l||bb<t)throw Error('분리된 킬로그가 없습니다. Magic Cut에서 초록색으로 살릴 부분을 지정하세요.');
-  if(transparent<master.width*master.height*.005)throw Error('배경이 투명하지 않습니다. Magic Cut 작업 후 꼭 OK를 눌러 적용하세요.');
-  const contentW=rr-l+1,contentH=bb-t+1;
-  const s=Math.min(744/contentW,174/contentH),dw=Math.max(1,Math.round(contentW*s)),dh=Math.max(1,Math.round(contentH*s));
-  const out=document.createElement('canvas');out.width=760;out.height=190;
-  const og=out.getContext('2d');og.imageSmoothingEnabled=true;og.imageSmoothingQuality='high';
-  og.drawImage(master,l,t,contentW,contentH,Math.round((760-dw)/2),Math.round((190-dh)/2),dw,dh);
-  const png=await new Promise(res=>out.toBlob(res,'image/png'));
-  if(!png)throw Error('저장용 PNG 생성에 실패했습니다.');
-  // 모든 검증이 끝난 뒤에만 기존 결과를 교체. 다른 기능은 그대로 보존.
-  const r=ppResult;
-  if(r.url)URL.revokeObjectURL(r.url);
-  r.master=master;r.sourceX=ppCrop.x;r.sourceY=ppCrop.y;
-  r.inner={x:l,y:t,w:contentW,h:contentH};r.baseInner={...r.inner};
-  r.meta={...(r.meta||{}),manualRepair:true,photopea:true};
-  r.blob=png;r.url=URL.createObjectURL(png);r.outputH=190;r.contentWidth=dw;
-  r.bounds={x:ppCrop.x+l,y:ppCrop.y+t,w:contentW,h:contentH};
-  ppClose();updatePhotoCounts();resultView();drawSelections();
-  window.SnaDraft?.queue('kill');status('Photopea 정밀 보정 결과를 가져왔습니다. 기존 결과 목록에서 미리보기·저장이 가능합니다.');
- }
- window.addEventListener('message',async e=>{
-  if(!ppFrame||e.origin!==PP_ORIGIN||e.source!==ppFrame.contentWindow)return;
-  if(e.data==='done'){
-   if(ppPhase==='loading'){
-    ppReady=true;ppPhase='sending';ppSetStatus('원본 영역 전달 중…');
-    ppFrame.contentWindow.postMessage(ppPending,PP_ORIGIN);ppPending=null;
-   }else if(ppPhase==='sending'){
-    ppPhase='editing';ppSetStatus('Magic Cut이 열립니다. 초록색으로 킬로그 전체, 빨간색으로 배경을 표시하세요.');
-    ppFrame.contentWindow.postMessage('app.showWindow("magiccut");',PP_ORIGIN);
-   }else if(ppPhase==='exporting' && ppBusy){
-    ppBusy=false;ppPhase='editing';ppSetStatus('PNG를 받지 못했습니다. Magic Cut의 OK를 누르고 다시 시도하세요.');
-   }
-   return;
-  }
-  if(ppPhase==='exporting'&&e.data instanceof ArrayBuffer){
-   ppPhase='receiving';
-   try{await ppAccept(e.data);}catch(err){console.error(err);ppBusy=false;ppPhase='editing';ppSetStatus(err.message||'PNG를 가져오지 못했습니다.');}
-  }
- });
  function resultView(){
   const wrap=$('kl-results');wrap.replaceChildren();
   $('kl-count').textContent=results.length+'개';$('kl-save-all').disabled=!results.length;
@@ -8230,8 +8107,7 @@ async function encodeResult(r){
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
     ...(r.meta?.externalGrabCut?[]:[mk('정밀 보정',()=>openMaskEditor(i))]),
-    mk('외부 GrabCut 보정',()=>exOpen(r)),
-    mk('Photopea 보정',()=>ppOpenResult(r)),
+    mk('자동 배경 제거',()=>exOpen(r)),
     mk('개별 저장',()=>saveFiles([r],i)),
     mk('삭제',()=>deleteResult(i))
    );
