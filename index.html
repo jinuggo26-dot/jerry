@@ -2497,6 +2497,7 @@ window.closeAdmin=()=>{
    </div>
   </div>
  </div>
+ <button id="c_trimApply" type="button" style="width:100%;min-height:48px;margin-top:13px;border:1px solid #96bbff;border-radius:11px;background:#4779c9;color:#fff;font-size:15px;font-weight:850;cursor:pointer;box-shadow:0 2px 9px rgba(60,114,215,.18)">🔄 잘라내기 새로 적용</button>
  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px">
   <canvas id="c_trimPreview" width="105" height="120" style="width:98px;max-height:128px;object-fit:contain;background:#101722;border:1px solid #52698c;border-radius:5px"></canvas>
   <div style="flex:1;min-width:135px;font-size:12px;line-height:1.55;color:#bfd0ec">실제 저장 범위 미리보기<br><strong id="c_trimSize" style="color:#b1d1ff">사진 선택 전</strong></div>
@@ -2689,6 +2690,7 @@ window.closeAdmin=()=>{
    <p style="color:#b4c5dc;font-size:12px;margin-top:9px;line-height:1.6">일반 킬로그와 고번 킬로그는 자르는 방식이 다릅니다. 위에서 모드를 고른 뒤, 사진 속 ‘킬 알림’ 막대를 눌러 자동 인식하세요. 추출 결과에서 원본과 비교한 뒤 저장하세요. 정밀 보정에서 살릴 부분과 지울 배경을 칠한 뒤 정밀 재분리를 누를 수 있습니다.</p>
   </div>
   <div class="photo-panel"><div class="panel-head"><strong>추출 결과 · 배경 없는 PNG</strong><span id="kl-count">0개</span></div><div id="kl-results" class="results"><div class="empty">아직 선택된 킬로그가 없습니다.</div></div>
+   <button type="button" id="kl-external-manual" class="photo-button" style="margin:11px 0;width:100%;background:#304c75;color:white;padding:13px">외부 GrabCut · 원본에서 직접 보정</button>
    <button class="all-save" id="kl-save-all" disabled>추출한 킬로그 모두 저장</button>
    <p class="sna-samsung-save-hint" style="display:none;margin:8px 0 0;color:#e9bc85;font-size:12px;line-height:1.5;text-align:center">⚠️ 삼성 기기에서는 모두 저장 시 한 번에 10장까지만 가능합니다. 11장 이상은 나누어 저장해 주세요.</p></div>
  </div>
@@ -3388,6 +3390,40 @@ document.getElementById('c_trimSave').addEventListener('click',()=>{
   clothTrimStatus.textContent='✓ 현재 상·하·좌·우 설정 저장 완료';
  }
 });
+// 페이지를 새로고침하거나 업로드/선택 상태를 지우지 않고,
+// 현재 선택된 모든 사진의 원본 카드에서 자르기만 새 설정으로 다시 생성한다.
+document.getElementById('c_trimApply').addEventListener('click',()=>{
+ const selectedCount=photos.reduce((sum,p)=>sum+(p?.selected?.length||0),0);
+ if(!selectedCount){
+  drawClothTrimPreview();
+  const message='먼저 사진에서 자를 카드를 선택해 주세요.';
+  if(typeof window.uiAlert==='function')window.uiAlert(message);
+  else alert(message);
+  return;
+ }
+ const button=document.getElementById('c_trimApply');
+ button.disabled=true;
+ button.textContent='🔄 새로 적용 중…';
+ try{
+  // c_extractSelected는 기존 결과를 지우고 원본에서 새로 잘라서 교체함.
+  window.c_extractSelected();
+  drawClothTrimPreview();
+  if(clothTrimStatus){
+   clothTrimStatus.textContent='✓ '+selectedCount+'개 카드에 새 설정 적용 완료';
+   clothTrimStatus.style.color='#9ed9b0';
+  }
+ }catch(err){
+  console.error('옷 자르기 다시 적용 실패:',err);
+  if(clothTrimStatus){
+   clothTrimStatus.textContent='다시 적용에 실패했습니다.';
+   clothTrimStatus.style.color='#ffba87';
+  }
+ }finally{
+  button.disabled=false;
+  button.textContent='🔄 잘라내기 새로 적용';
+ }
+});
+
 // 로딩 초기에 저장 값을 복원한다. 사진을 추가하지 않아도 컨트롤은 복원된다.
 restoreClothTrimSettings();
 for(const side of clothTrimIds){
@@ -3881,119 +3917,118 @@ function cardOverlap(a,b){
 // 특별히 이 규칙을 만족하지 않는 화면은 기존 인식기로 되돌린다.
 // 아이템/의상/모자/가방 공통: 실제 색상 카드의 열과 행을 독립적으로 검출한다.
 // 스크린샷 전체 크기나 장비 그림의 외곽선을 격자 좌표에 사용하지 않는다.
+// 여섯 등급 공통: 골드/레드/핑크/보라/파랑/어두운색.
+// 아이템 그림, 사진 전체 크기로 행·열을 추정하지 않고 실제 카드 배경의
+// 연속된 컬러 영역과 카드 사이 밝은 틈을 찾는다.
 function detectRegularItemGrid(){
-  const iw=imageCanvas.width,ih=imageCanvas.height;
+  const iw=imageCanvas.width, ih=imageCanvas.height;
   if(iw<160||ih<120)return null;
-  const ratio=Math.min(1,1400/Math.max(iw,ih));
-  const w=Math.max(1,Math.round(iw*ratio));
-  const h=Math.max(1,Math.round(ih*ratio));
-  const scratch=document.createElement('canvas');
-  scratch.width=w;scratch.height=h;
-  const ctx=scratch.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(image,0,0,w,h);
-  const data=ctx.getImageData(0,0,w,h).data;
-  const colored=new Uint8Array(w*h);
-  const xCounts=new Int32Array(w);
-  // 아이템 형태 대신 자주색/보라색/빨강색 카드의 색상 영역을 판정한다.
-  for(let y=0,p=0,k=0;y<h;y++){
+  const scale=Math.min(1,1400/Math.max(iw,ih));
+  const w=Math.max(1,Math.round(iw*scale)), h=Math.max(1,Math.round(ih*scale));
+  const sample=document.createElement('canvas');
+  sample.width=w;sample.height=h;
+  const sc=sample.getContext('2d',{willReadFrequently:true});
+  sc.drawImage(image,0,0,w,h);
+  const rgba=sc.getImageData(0,0,w,h).data;
+  const hits=new Uint8Array(w*h);
+  const xCounts=new Uint32Array(w);
+  // 배경의 채도가 낮은 골드/파랑, 밝은 연핑크, 채도가 거의 없는
+  // 짙은 남색/검정 카드를 모두 포함한다. 밝은 회색 화면 배경은 제외한다.
+  for(let y=0,k=0,p=0;y<h;y++){
     for(let x=0;x<w;x++,k++,p+=4){
-      const r=data[p],g=data[p+1],b=data[p+2];
-      const hit=(g<155&&(
-        (r>65&&r>g*1.23&&(b>g*1.02||r>b*1.20))||
-        (b>65&&b>g*1.27&&r>g*1.16)
-      ))||(r>130&&g>70&&b<g*.8&&r>g*1.07);
-      if(hit){colored[k]=1;xCounts[x]++;}
+      const r=rgba[p],g=rgba[p+1],b=rgba[p+2];
+      const dark=Math.max(r,g,b)<158;
+      const pink=r-g>14 && b-g>10 && r>65 && g<215;
+      const red=r-g>19 && r-b>14 && r>70;
+      const gold=r-b>25 && g-b>13 && r>90;
+      const blue=b-r>13 && b-g>9 && b>55;
+      if(dark||pink||red||gold||blue){hits[k]=1;xCounts[x]++;}
     }
   }
-  function median(a){
-    const sorted=a.slice().sort((a,b)=>a-b);
-    return sorted.length?sorted[Math.floor(sorted.length/2)]:0;
-  }
-  function runs(counts,denom,threshold,minlen,holes){
-    const active=Array.from(counts,v=>v/Math.max(1,denom)>=threshold);
-    for(let i=0;i<active.length;){
-      if(active[i]){i++;continue;}
-      let j=i+1;while(j<active.length&&!active[j])j++;
-      if(i>0&&j<active.length&&j-i<=holes){for(let k=i;k<j;k++)active[k]=true;}
+  const median=(xs)=>{
+    const a=xs.slice().sort((a,b)=>a-b);
+    return a.length?a[Math.floor(a.length/2)]:0;
+  };
+  const runs=(counts,denominator,minFraction,minLength,maxHole)=>{
+    const mask=Array.from(counts,n=>n/Math.max(1,denominator)>=minFraction);
+    for(let i=0;i<mask.length;){
+      if(mask[i]){i++;continue;}
+      let j=i+1;
+      while(j<mask.length&&!mask[j])j++;
+      if(i>0&&j<mask.length&&j-i<=maxHole)mask.fill(true,i,j);
       i=j;
     }
-    const out=[];
-    for(let i=0;i<active.length;){
-      if(!active[i]){i++;continue;}
-      let j=i+1;while(j<active.length&&active[j])j++;
-      if(j-i>=minlen)out.push({start:i,end:j,width:j-i,center:(i+j)/2});
+    const result=[];
+    for(let i=0;i<mask.length;){
+      if(!mask[i]){i++;continue;}
+      let j=i+1;while(j<mask.length&&mask[j])j++;
+      if(j-i>=minLength)result.push({start:i,end:j,width:j-i,center:(i+j)*.5});
       i=j;
     }
-    return out;
-  }
-  const rawCols=runs(xCounts,h,.17,Math.max(9,Math.round(w*.024)),2);
-  if(rawCols.length<5)return null;
-  const commonW=median(rawCols.map(c=>c.width));
-  const cols=rawCols.filter(c=>c.width>=commonW*.68&&c.width<=commonW*1.34);
-  if(cols.length<5||cols.length>22)return null;
-  const steps=cols.slice(1).map((c,i)=>c.center-cols[i].center);
-  const typicalStep=median(steps);
-  if(typicalStep<commonW*.97||typicalStep>commonW*1.80||
-    steps.some(s=>Math.abs(s-typicalStep)>typicalStep*.19))return null;
-
-  // 이전 코드는 열의 테두리 4개 픽셀만 샘플링했다.
-  // 어두운 카드의 테두리가 검게 보이면 통째로 행이 빠지는 문제를 방지하기 위해
-  // 각 열의 내부 전체에서 3px 간격으로 색상 비율을 취합한다.
-  const probeX=[];
+    return result;
+  };
+  // 컬러가 유지된 세로 띠를 먼저 감지한다. 화면의 우측 메뉴는
+  // 카드보다 훨씬 폭이 좁기 때문에 공통 카드 폭에서 제외한다.
+  const foundCols=runs(xCounts,h,.13,Math.max(12,Math.round(w*.020)),2);
+  if(foundCols.length<5)return null;
+  const commonW=median(foundCols.map(c=>c.width));
+  const cols=foundCols.filter(c=>c.width>=commonW*.74&&c.width<=commonW*1.26);
+  if(cols.length<5||cols.length>20)return null;
+  const distances=cols.slice(1).map((c,i)=>c.center-cols[i].center);
+  const pitch=median(distances);
+  if(pitch<commonW*.98||pitch>commonW*1.85||
+     distances.some(d=>Math.abs(d-pitch)>pitch*.18))return null;
+  // 서로 다른 등급이 한 행 안에 섞일 때도 놓치지 않도록,
+  // 각 카드 내부에서 다수의 샘플 위치를 취합한다.
+  const probe=[];
   for(const col of cols){
-    const inset=Math.max(2,Math.round(col.width*.14));
-    for(let x=col.start+inset;x<col.end-inset;x+=3)probeX.push(x);
+    const pad=Math.max(2,Math.round(col.width*.16));
+    for(let x=col.start+pad;x<col.end-pad;x+=3)probe.push(x);
   }
-  if(probeX.length<20)return null;
-  const yCount=new Int32Array(h);
+  if(probe.length<20)return null;
+  const yCounts=new Uint32Array(h);
   for(let y=0;y<h;y++){
-    const off=y*w;let sum=0;
-    for(const x of probeX)sum+=colored[off+x];
-    yCount[y]=sum;
+    let count=0,offset=y*w;
+    for(const x of probe)count+=hits[offset+x];
+    yCounts[y]=count;
   }
-  // 카드 안 글자/아이템이 많은 줄에서도 충분히 검출되도록 낮은 비율(8%)을 사용한다.
-  // 카드 사이 5~7px의 흰색 틈은 합치지 않는다.
-  const rows=runs(yCount,probeX.length,.08,Math.max(9,Math.round(commonW*.20)),3);
-  if(rows.length<1||rows.length>22)return null;
-  const tall=rows.map(r=>r.width).filter(v=>v>=commonW*.80);
+  const foundRows=runs(yCounts,probe.length,.30,Math.max(10,Math.round(commonW*.18)),2);
+  if(!foundRows.length)return [];
+  const tall=foundRows.map(r=>r.width).filter(v=>v>=commonW*.79&&v<=commonW*1.9);
   if(!tall.length)return [];
-  // 연한 카드의 위쪽 몇 픽셀이 누락될 수 있으므로 충분히 긴 행을 기준으로
-  // 통일된 높이를 산출한다. 카드의 아래 테두리 위치를 앵커로 복구한다.
-  const tallSorted=tall.slice().sort((a,b)=>a-b);
-  const typicalH=tallSorted[tallSorted.length-1];
-  if(typicalH<commonW*.80||typicalH>commonW*1.85)return null;
+  const commonH=median(tall);
+  if(commonH<commonW*.79||commonH>commonW*1.9)return null;
   const fullRows=[];
-  for(const row of rows){
-    // 실제로 잘린 위/아래 카드 줄은 감지 목록에 넣지 않는다.
-    if(row.width<typicalH*.90||row.width>typicalH*1.14)continue;
-    const y0=Math.max(0,row.end-typicalH);
-    if(y0<3||row.end>h-3)continue;
-    // 컬러 영역 바깥에 화면의 밝은 구분선이 존재하는지 재확인한다.
-    const at=(y)=>y>=0&&y<h?yCount[y]/probeX.length:0;
-    let before=0,after=0;
-    for(let k=1;k<=3;k++){before+=at(y0-k);after+=at(row.end-1+k);}
-    // 시작/끝이 검출된 유효한 한 줄인지 확인한다. 일부 행에서 시작이
-    // 늦게 감지되어도 아래 경계를 기준으로 완전한 카드 크기를 복원한다.
-    if(before/3>.30||after/3>.30)continue;
-    fullRows.push({start:y0,end:row.end});
+  for(const row of foundRows){
+    // 위·아래가 화면 밖에서 잘린 카드의 얇은 행은 표시하지 않는다.
+    if(row.width<commonH*.88||row.width>commonH*1.14)continue;
+    if(row.start<3||row.end>h-3)continue;
+    // 카드 사이에는 밝은 간격이 있어야 한다. 실제 색 경계와 분리된
+    // 구간만 완전한 카드로 판단한다.
+    let outsideTop=0,outsideBottom=0;
+    for(let d=1;d<=2;d++){
+      outsideTop+=yCounts[row.start-d]/probe.length;
+      outsideBottom+=yCounts[row.end-1+d]/probe.length;
+    }
+    if(outsideTop/2>.33||outsideBottom/2>.33)continue;
+    fullRows.push(row);
   }
-  // 실제 카드 열이 보이지만 완전한 줄이 없는 경우, 오래된 모양 감지기로
-  // 되돌아가지 않고 빈 배열을 반환한다(부분 카드 오탐 방지).
   if(!fullRows.length)return [];
-  const cardW=Math.round(commonW/ratio);
-  const cardH=Math.round(typicalH/ratio);
-  const out=[];
-  for(let ri=0;ri<fullRows.length;ri++){
-    const row=fullRows[ri];
-    for(let ci=0;ci<cols.length;ci++){
-      const col=cols[ci];
-      const x=Math.round(col.start/ratio),y=Math.round(row.start/ratio);
+  const cardW=Math.round(commonW/scale),cardH=Math.round(commonH/scale);
+  const cardsFound=[];
+  for(let ry=0;ry<fullRows.length;ry++){
+    const row=fullRows[ry];
+    // 세로 방향으로 1~2픽셀 차이가 나더라도 공통 높이로 맞춘다.
+    const y=Math.round((row.start+row.end-commonH)*.5/scale);
+    for(let cx=0;cx<cols.length;cx++){
+      const col=cols[cx],x=Math.round(col.start/scale);
       if(x<0||y<0||x+cardW>iw||y+cardH>ih)continue;
-      out.push({x,y,width:cardW,height:cardH,partial:false,gridColumn:ci,gridRow:ri});
+      cardsFound.push({x,y,width:cardW,height:cardH,partial:false,gridColumn:cx,gridRow:ry});
     }
   }
-  return out;
+  return cardsFound;
 }
+
 
 function detectCards(){
   const regularGrid=detectRegularItemGrid();
@@ -7964,6 +7999,110 @@ async function encodeResult(r){
   left.append(ltitle,original);right.append(rtitle,final);grid.append(left,right);shade.append(title,close,grid);document.body.append(shade);
   shade.addEventListener('click',e=>{if(e.target===shade)shade.remove();});
  }
+ // Render Python + OpenCV GrabCut. The source screenshot is sent to a hosted editor,
+ // the resulting transparent PNG returns directly to the current result card.
+ const SNA_KILL_SERVER_URL=''; // Optional: set to https://YOUR-SERVER.onrender.com for all users.
+ let exLayer=null,exFrame=null,exOrigin='',exPending=null,exTarget=null,exCrop=null,exWorking=false;
+ function exStatus(message){const node=exLayer?.querySelector('#kl-cloud-state');if(node)node.textContent=message;}
+ function exGetServer(){
+  let address=SNA_KILL_SERVER_URL||localStorage.getItem('sna-cloud-grabcut-url')||'';
+  if(!address){address=prompt('외부 킬로그 서버 주소 입력 (Render에서 만든 https://...onrender.com)', '')||'';}
+  if(!address.trim())return '';
+  try{
+   const u=new URL(address.trim());
+   if(u.protocol!=='https:' && !(u.hostname==='127.0.0.1'||u.hostname==='localhost'))throw Error('HTTPS 서버 주소를 입력해 주세요.');
+   address=u.origin;
+   localStorage.setItem('sna-cloud-grabcut-url',address);
+   return address;
+  }catch(e){alert('서버 주소가 올바르지 않아. https://...onrender.com 형태로 입력해.');return '';}
+ }
+ function exModal(){
+  if(exLayer)return;
+  exLayer=document.createElement('div');exLayer.id='sna-kill-cloud-modal';
+  exLayer.style.cssText='display:none;position:fixed;inset:0;z-index:2147483600;background:#070d19;color:#eef6ff;flex-direction:column;font-family:system-ui,-apple-system,sans-serif';
+  exLayer.innerHTML=`<div style="padding:9px;background:#12213b;display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-bottom:1px solid #476080">
+  <strong style="flex:1 1 120px">외부 GrabCut 보정</strong>
+  <button id="kl-cloud-url" type="button" style="padding:10px;background:#304c75;border-radius:8px;color:white">서버 변경</button>
+  <button id="kl-cloud-close" type="button" style="padding:10px;background:#724054;border-radius:8px;color:white">닫기</button>
+  <span id="kl-cloud-state" style="flex:1 1 100%;font-size:12px;color:#adcef3">서버를 여는 중…</span></div>
+  <iframe id="kl-cloud-frame" title="외부 킬로그 GrabCut 편집기" style="width:100%;flex:1;min-height:0;border:0;background:#070d19" allow="clipboard-write"></iframe>`;
+  document.body.append(exLayer);exFrame=exLayer.querySelector('iframe');
+  exLayer.querySelector('#kl-cloud-close').onclick=()=>{exLayer.style.display='none';exFrame.src='about:blank';exOrigin='';exPending=null;exTarget=null;exWorking=false;};
+  exLayer.querySelector('#kl-cloud-url').onclick=()=>{
+   const next=prompt('Render 서버 주소 변경',localStorage.getItem('sna-cloud-grabcut-url')||'');
+   if(next!==null){localStorage.removeItem('sna-cloud-grabcut-url');if(next.trim())localStorage.setItem('sna-cloud-grabcut-url',next.trim());
+    exLayer.querySelector('#kl-cloud-close').click();exOpen(null);}
+  };
+ }
+ async function exOpen(r){
+  const origin=exGetServer();if(!origin)return;
+  const index=r?.photo??active;
+  const photo=photos[index];if(!photo?.image){alert('먼저 원본 사진을 추가해 주세요.');return;}
+  exModal();exTarget=r||null;exOrigin=origin;exWorking=true;exLayer.style.display='flex';exStatus('원본 킬로그 이미지 준비 중…');
+  try{
+   const image=photo.image,W=image.naturalWidth,H=image.naturalHeight;
+   const b=r?.meta?.cloudOrigBounds||r?.bounds;
+   let x=0,y=0,w=W,h=H;
+   if(b&&b.w>0&&b.h>0){
+    const padX=Math.max(170,Math.round(b.w*.65)),padY=Math.max(75,Math.round(b.h*1.3));
+    x=clamp(Math.floor(b.x-padX),0,W-1);y=clamp(Math.floor(b.y-padY),0,H-1);
+    w=clamp(Math.ceil(b.x+b.w+padX),x+1,W)-x;
+    h=clamp(Math.ceil(b.y+b.h+padY),y+1,H)-y;
+   }
+   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+   canvas.getContext('2d').drawImage(image,x,y,w,h,0,0,w,h);
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+   if(!blob)throw Error('원본 이미지 전송 실패');
+   const rect=b?{x:Math.max(0,Math.round(b.x-x-15)),y:Math.max(0,Math.round(b.y-y-10)),w:Math.min(w,Math.round(b.w+30)),h:Math.min(h,Math.round(b.h+20))}:
+    {x:Math.round(w*.28),y:Math.round(h*.12),w:Math.round(w*.46),h:Math.round(h*.14)};
+   exCrop={x,y,w,h,photo:index,originalBounds:b?{...b}:null};
+   exPending={type:'sna-kill:image',data:await blob.arrayBuffer(),rect};
+   // iframe handshake, requests made by the remote editor to its own host (no CORS).
+   exFrame.src=origin+'/?parent='+encodeURIComponent(location.origin);
+   exStatus('서버 연결 중… 무료 서버가 절전 중이면 재시작이 필요할 수 있어.');
+  }catch(err){exStatus('이미지 준비 실패: '+(err.message||err));}
+ }
+ async function exAccept(binary){
+  if(!exCrop||!(binary instanceof ArrayBuffer))throw Error('처리 결과가 없습니다.');
+  const blob=new Blob([binary],{type:'image/png'});
+  const bmp=await createImageBitmap(blob);
+  if(bmp.width!==760||bmp.height!==190){bmp.close?.();throw Error('서버의 출력 크기가 760×190이 아닙니다.');}
+  const master=document.createElement('canvas');master.width=760;master.height=190;
+  const mg=master.getContext('2d',{willReadFrequently:true});mg.drawImage(bmp,0,0);bmp.close?.();
+  const pixels=mg.getImageData(0,0,760,190).data;
+  let l=760,t=190,right=-1,bottom=-1,transparent=0;
+  for(let y=0;y<190;y++)for(let x=0;x<760;x++){
+   const a=pixels[(y*760+x)*4+3];if(a<8){transparent++;continue;}
+   l=Math.min(l,x);right=Math.max(right,x);t=Math.min(t,y);bottom=Math.max(bottom,y);
+  }
+  if(right<l||bottom<t||transparent<190*760*.01)throw Error('투명 PNG를 받지 못했습니다.');
+  let r=exTarget;const newResult=!r;
+  if(!r)r={photo:exCrop.photo,mode:killlogMode,meta:{}};
+  const bb={x:exCrop.x,y:exCrop.y,w:exCrop.w,h:exCrop.h};
+  r.master=master;r.sourceX=0;r.sourceY=0;
+  r.inner={x:l,y:t,w:right-l+1,h:bottom-t+1};r.baseInner={...r.inner};
+  r.meta={...(r.meta||{}),manualRepair:true,externalGrabCut:true,
+    cloudOrigBounds:exCrop.originalBounds||bb};
+  r.bounds={...r.meta.cloudOrigBounds};
+  if(r.url)URL.revokeObjectURL(r.url);
+  r.blob=blob;r.url=URL.createObjectURL(blob);r.outputH=190;r.contentWidth=right-l+1;
+  if(newResult)results.push(r);
+  exLayer.querySelector('#kl-cloud-close').click();
+  updatePhotoCounts();resultView();drawSelections();window.SnaDraft?.queue('kill');
+  status('외부 GrabCut 보정 결과가 적용됐어. 추출 결과에서 미리보기·저장이 가능해.');
+ }
+ window.addEventListener('message',e=>{
+  if(!exFrame||!exOrigin||e.origin!==exOrigin||e.source!==exFrame.contentWindow)return;
+  if(e.data?.type==='sna-kill:ready' && exPending){
+   const payload=exPending;exPending=null;
+   exFrame.contentWindow.postMessage(payload,exOrigin,[payload.data]);
+   exStatus('킬로그 원본을 전달했어. 파란 영역과 살리기·지우기를 확인해.');
+  }else if(e.data?.type==='sna-kill:result' && e.data.data instanceof ArrayBuffer && exWorking){
+   exWorking=false;exStatus('보정 결과 가져오는 중…');
+   exAccept(e.data.data).catch(err=>{exStatus('오류: '+err.message);exWorking=true;});
+  }
+ });
+ $('kl-external-manual').onclick=()=>exOpen(null);
  // Photopea 정밀 보정: 원본 이미지에서 수정 후 해당 결과로 PNG 복귀
  const PP_ORIGIN='https://www.photopea.com';
  let ppLayer=null,ppFrame=null,ppMessage=null,ppResult=null,ppCrop=null,ppReady=false,ppPhase='idle',ppPending=null,ppBusy=false;
@@ -8090,7 +8229,8 @@ async function encodeResult(r){
    const mk=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='photo-button';b.textContent=label;b.style.cssText='flex:1 1 120px;min-width:0;white-space:normal;line-height:1.25;padding:11px 10px';b.onclick=fn;return b;};
    btnRow.append(
     mk('미리보기',()=>showPreview(r,i)),
-    mk('정밀 보정',()=>openMaskEditor(i)),
+    ...(r.meta?.externalGrabCut?[]:[mk('정밀 보정',()=>openMaskEditor(i))]),
+    mk('외부 GrabCut 보정',()=>exOpen(r)),
     mk('Photopea 보정',()=>ppOpenResult(r)),
     mk('개별 저장',()=>saveFiles([r],i)),
     mk('삭제',()=>deleteResult(i))
@@ -11083,7 +11223,7 @@ function detectVerifiedTextRibbon(tx,ty,mode){
     for(const r of album.results.slice(0,35)){
      if(!r.master||!pack.photos[r.photo])continue;
      const master=await new Promise(done=>r.master.toBlob(done,'image/png'));
-     if(master)pack.results.push({master,photo:r.photo,mode:r.mode,sourceX:r.sourceX,sourceY:r.sourceY,inner:r.inner,baseInner:r.baseInner,meta:r.meta});
+     if(master)pack.results.push({master,photo:r.photo,mode:r.mode,sourceX:r.sourceX,sourceY:r.sourceY,inner:r.inner,baseInner:r.baseInner,meta:r.meta,cloudBlob:r.meta?.externalGrabCut?r.blob:null});
     }
     state.albums[type]=pack;
    }
@@ -11100,7 +11240,12 @@ function detectVerifiedTextRibbon(tx,ty,mode){
      if(!dest.photos[item.photo])continue;
      try{const im=await loadImage(item.master);const master=document.createElement('canvas');master.width=im.naturalWidth;master.height=im.naturalHeight;master.getContext('2d').drawImage(im,0,0);
       const r={master,photo:item.photo,mode:type,sourceX:item.sourceX,sourceY:item.sourceY,inner:item.inner,baseInner:item.baseInner,meta:item.meta||{}};
-      if(await encodeResult(r))dest.results.push(r);
+      if(item.cloudBlob && r.meta?.externalGrabCut){
+       r.blob=item.cloudBlob;r.url=URL.createObjectURL(item.cloudBlob);r.outputH=190;
+       r.contentWidth=Math.max(1,item.inner?.w||744);
+       r.bounds=r.meta.cloudOrigBounds||{x:0,y:0,w:im.naturalWidth,h:im.naturalHeight};
+       dest.results.push(r);
+      }else if(await encodeResult(r))dest.results.push(r);
      }catch(e){console.warn(e);}
     }
     dest.active=clamp(Number(rec.active)||0,0,Math.max(0,dest.photos.length-1));dest.editingIndex=-1;
